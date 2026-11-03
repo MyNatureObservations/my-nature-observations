@@ -1,0 +1,2 @@
+# Preserve checksum-pinned upstream legal evidence byte-for-byte.
+app/licensing/evidence/* -text -whitespace

@@ -1,0 +1,32 @@
+import { readFileSync } from 'node:fs';
+import { compile } from 'svelte/compiler';
+import ts from 'typescript';
+const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
+const url = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
+const resolve = (code, modules) => code.replace(/from (["'])([^"']+)\1/g, (_, q, name) => `from ${q}${modules[name] ?? import.meta.resolve(name)}${q}`);
+const transpile = code => ts.transpileModule(code, {compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
+const readerUrl = url('export function createJournalReader(){ return async () => { throw new Error("SSR must not read weather") } }');
+export const weatherUrl = url(resolve(transpile(read('../src/lib/weather.ts')), {'$lib/journal-data':readerUrl}));
+const labelsUrl = url(resolve(transpile(read('../src/lib/weather-labels.ts')), {'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href}));
+export const positionUrl = url(transpile(read('../src/lib/weather-panel.ts')));
+export const formHelpersUrl = url(resolve(transpile(read('../src/lib/weather-form.ts')), {'$lib/weather':weatherUrl}));
+const modules = {'$lib/weather-form':formHelpersUrl,'$lib/weather-panel':positionUrl,'$lib/weather':weatherUrl,'$lib/weather-labels':labelsUrl};
+function component(path) {
+ const compiled = compile(read(path), {filename:path,generate:'server'});
+ if(compiled.warnings.length) throw Error(JSON.stringify(compiled.warnings));
+ return url(resolve(compiled.js.code, modules));
+}
+export const iconUrl = component('../src/lib/components/WeatherIcon.svelte');
+modules['$lib/components/WeatherIcon.svelte'] = iconUrl;
+export const overviewUrl = component('../src/lib/components/WeatherOverview.svelte');
+modules['$lib/components/WeatherOverview.svelte'] = overviewUrl;
+export const detailsUrl = component('../src/lib/components/WeatherDetails.svelte');
+modules['$lib/components/WeatherDetails.svelte'] = detailsUrl;
+export const formUrl = component('../src/lib/components/WeatherForm.svelte');
+modules['$lib/components/WeatherForm.svelte'] = formUrl;
+const invokeUrl = url('export async function invoke(){ throw new Error("SSR must not invoke commands") }');
+modules['$lib/places'] = url(resolve(transpile(read('../src/lib/places.ts')), {'@tauri-apps/api/core':invokeUrl,'$lib/journal-data':readerUrl}));
+modules['$lib/weather-history'] = url(resolve(transpile(read('../src/lib/weather-history.ts')), {'@tauri-apps/api/core':invokeUrl}));
+export const historyUrl = component('../src/lib/components/HistoricalWeather.svelte');
+modules['$lib/components/HistoricalWeather.svelte'] = historyUrl;
+export const tileUrl = component('../src/lib/components/WeatherTile.svelte');

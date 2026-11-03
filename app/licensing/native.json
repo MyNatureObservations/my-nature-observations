@@ -1,0 +1,332 @@
+{
+  "rustVersion": "1.99.1",
+  "rustCommit": "58cf8f9c35b355199727627d07ae34a4e2846d67",
+  "target": "aarch64-apple-darwin",
+  "sourceLock": {
+    "file": "evidence/53d9ccff0c906de434b65af90d5c30063894b940fc839261f1fb06ef2e69e3d3.txt",
+    "sha256": "53d9ccff0c906de434b65af90d5c30063894b940fc839261f1fb06ef2e69e3d3"
+  },
+  "components": [
+    {
+      "name": "Rust standard library \u2014 LICENSE-MIT",
+      "version": "1.99.1",
+      "expression": "MIT",
+      "notices": [
+        {
+          "file": "evidence/b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1.txt",
+          "sha256": "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1",
+          "origin": "https://raw.githubusercontent.com/rust-lang/rust/58cf8f9c35b355199727627d07ae34a4e2846d67/LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "Rust standard library \u2014 LICENSE-APACHE",
+      "version": "1.99.1",
+      "expression": "Apache-2.0",
+      "notices": [
+        {
+          "file": "evidence/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "origin": "https://raw.githubusercontent.com/rust-lang/rust/58cf8f9c35b355199727627d07ae34a4e2846d67/LICENSE-APACHE"
+        }
+      ]
+    },
+    {
+      "name": "Rust standard library \u2014 COPYRIGHT",
+      "version": "1.99.1",
+      "expression": "MIT OR Apache-2.0",
+      "notices": [
+        {
+          "file": "evidence/172020dbfd5b53a226dfde77616190a48dcff519b0bc0e6deb91a8450782c4af.txt",
+          "sha256": "172020dbfd5b53a226dfde77616190a48dcff519b0bc0e6deb91a8450782c4af",
+          "origin": "https://raw.githubusercontent.com/rust-lang/rust/58cf8f9c35b355199727627d07ae34a4e2846d67/COPYRIGHT"
+        }
+      ]
+    },
+    {
+      "name": "Rust standard library copyright inventory",
+      "version": "1.99.1",
+      "expression": "MIT OR Apache-2.0",
+      "notices": [
+        {
+          "file": "evidence/e865f7bd5018634399d00f92f049ccfa84a4c1d60c2483d1a81eb63a5038d659.txt",
+          "sha256": "e865f7bd5018634399d00f92f049ccfa84a4c1d60c2483d1a81eb63a5038d659",
+          "origin": "Installed Rust 1.99.1 COPYRIGHT-library.html; source commit 58cf8f9c35b355199727627d07ae34a4e2846d67"
+        }
+      ]
+    },
+    {
+      "name": "Rust runtime \u2014 library/compiler-builtins/LICENSE.txt",
+      "version": "1.99.1",
+      "expression": "MIT AND Apache-2.0 WITH LLVM-exception",
+      "notices": [
+        {
+          "file": "evidence/ab6eec6caf0fa5775e411c7a8bc6a45c4ef2956b0980b157ab74fc5cd62a928b.txt",
+          "sha256": "ab6eec6caf0fa5775e411c7a8bc6a45c4ef2956b0980b157ab74fc5cd62a928b",
+          "origin": "https://raw.githubusercontent.com/rust-lang/rust/58cf8f9c35b355199727627d07ae34a4e2846d67/library/compiler-builtins/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "name": "Rust runtime \u2014 library/compiler-builtins/libm/LICENSE.txt",
+      "version": "1.99.1",
+      "expression": "MIT",
+      "notices": [
+        {
+          "file": "evidence/3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7.txt",
+          "sha256": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7",
+          "origin": "https://raw.githubusercontent.com/rust-lang/rust/58cf8f9c35b355199727627d07ae34a4e2846d67/library/compiler-builtins/libm/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "name": "Rust Unicode data",
+      "version": "1.99.1",
+      "expression": "Unicode-3.0",
+      "notices": [
+        {
+          "file": "evidence/f5062c9a188d81dfe66b56db4182dcf9e4b17c0d9b0d311a8e20b3a1b075c443.txt",
+          "sha256": "f5062c9a188d81dfe66b56db4182dcf9e4b17c0d9b0d311a8e20b3a1b075c443",
+          "origin": "https://raw.githubusercontent.com/rust-lang/rust/58cf8f9c35b355199727627d07ae34a4e2846d67/LICENSES/Unicode-3.0.txt"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 addr2line",
+      "version": "0.27.1",
+      "expression": "Apache-2.0 OR MIT",
+      "sourceChecksum": "e567177890eb1617b1f774005b66b26b2377afd138a2ca37aae7d8f0c81429d4",
+      "notices": [
+        {
+          "file": "evidence/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://static.crates.io/crates/addr2line/addr2line-0.27.1.crate#LICENSE-APACHE"
+        },
+        {
+          "file": "evidence/e99d88d232bf57d70f0fb87f6b496d44b6653f99f8a63d250a54c61ea4bcde40.txt",
+          "sha256": "e99d88d232bf57d70f0fb87f6b496d44b6653f99f8a63d250a54c61ea4bcde40",
+          "origin": "https://static.crates.io/crates/addr2line/addr2line-0.27.1.crate#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 adler2",
+      "version": "2.0.1",
+      "expression": "0BSD OR MIT OR Apache-2.0",
+      "sourceChecksum": "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa",
+      "notices": [
+        {
+          "file": "evidence/861399f8c21c042b110517e76dc6b63a2b334276c8cf17412fc3c8908ca8dc17.txt",
+          "sha256": "861399f8c21c042b110517e76dc6b63a2b334276c8cf17412fc3c8908ca8dc17",
+          "origin": "https://static.crates.io/crates/adler2/adler2-2.0.1.crate#LICENSE-0BSD"
+        },
+        {
+          "file": "evidence/8ada45cd9f843acf64e4722ae262c622a2b3b3007c7310ef36ac1061a30f6adb.txt",
+          "sha256": "8ada45cd9f843acf64e4722ae262c622a2b3b3007c7310ef36ac1061a30f6adb",
+          "origin": "https://static.crates.io/crates/adler2/adler2-2.0.1.crate#LICENSE-APACHE"
+        },
+        {
+          "file": "evidence/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "origin": "https://static.crates.io/crates/adler2/adler2-2.0.1.crate#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 cfg-if",
+      "version": "1.0.4",
+      "expression": "MIT OR Apache-2.0",
+      "sourceChecksum": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+      "notices": [
+        {
+          "file": "evidence/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://static.crates.io/crates/cfg-if/cfg-if-1.0.4.crate#LICENSE-APACHE"
+        },
+        {
+          "file": "evidence/378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397.txt",
+          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "origin": "https://static.crates.io/crates/cfg-if/cfg-if-1.0.4.crate#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 getopts",
+      "version": "0.2.24",
+      "expression": "MIT OR Apache-2.0",
+      "sourceChecksum": "cfe4fbac503b8d1f88e6676011885f34b7174f46e59956bba534ba83abded4df",
+      "notices": [
+        {
+          "file": "evidence/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://static.crates.io/crates/getopts/getopts-0.2.24.crate#LICENSE-APACHE"
+        },
+        {
+          "file": "evidence/6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb.txt",
+          "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+          "origin": "https://static.crates.io/crates/getopts/getopts-0.2.24.crate#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 gimli",
+      "version": "0.34.0",
+      "expression": "MIT OR Apache-2.0",
+      "sourceChecksum": "1033caf0b349c518623b5396bfb2cf0bddf44f0306d543a250e5743297aafd10",
+      "notices": [
+        {
+          "file": "evidence/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://static.crates.io/crates/gimli/gimli-0.34.0.crate#LICENSE-APACHE"
+        },
+        {
+          "file": "evidence/7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0.txt",
+          "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+          "origin": "https://static.crates.io/crates/gimli/gimli-0.34.0.crate#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 hashbrown",
+      "version": "0.17.1",
+      "expression": "MIT OR Apache-2.0",
+      "sourceChecksum": "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a",
+      "notices": [
+        {
+          "file": "evidence/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://static.crates.io/crates/hashbrown/hashbrown-0.17.1.crate#LICENSE-APACHE"
+        },
+        {
+          "file": "evidence/ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2.txt",
+          "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2",
+          "origin": "https://static.crates.io/crates/hashbrown/hashbrown-0.17.1.crate#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 libc",
+      "version": "0.2.189",
+      "expression": "MIT OR Apache-2.0",
+      "sourceChecksum": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2",
+      "notices": [
+        {
+          "file": "evidence/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "origin": "https://static.crates.io/crates/libc/libc-0.2.189.crate#LICENSE-APACHE"
+        },
+        {
+          "file": "evidence/123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e.txt",
+          "sha256": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+          "origin": "https://static.crates.io/crates/libc/libc-0.2.189.crate#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 memchr",
+      "version": "2.8.3",
+      "expression": "Unlicense OR MIT",
+      "sourceChecksum": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+      "notices": [
+        {
+          "file": "evidence/01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f.txt",
+          "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+          "origin": "https://static.crates.io/crates/memchr/memchr-2.8.3.crate#COPYING"
+        },
+        {
+          "file": "evidence/0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f.txt",
+          "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+          "origin": "https://static.crates.io/crates/memchr/memchr-2.8.3.crate#LICENSE-MIT"
+        },
+        {
+          "file": "evidence/7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c.txt",
+          "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+          "origin": "https://static.crates.io/crates/memchr/memchr-2.8.3.crate#UNLICENSE"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 miniz_oxide",
+      "version": "0.9.1",
+      "expression": "MIT OR Zlib OR Apache-2.0",
+      "sourceChecksum": "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c",
+      "notices": [
+        {
+          "file": "evidence/4108245a1f2df9d4e94df8abed5b4ba0759bb2f9b40a6b939f1be141077ae50b.txt",
+          "sha256": "4108245a1f2df9d4e94df8abed5b4ba0759bb2f9b40a6b939f1be141077ae50b",
+          "origin": "https://static.crates.io/crates/miniz_oxide/miniz_oxide-0.9.1.crate#LICENSE"
+        },
+        {
+          "file": "evidence/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "origin": "https://static.crates.io/crates/miniz_oxide/miniz_oxide-0.9.1.crate#LICENSE-APACHE.md"
+        },
+        {
+          "file": "evidence/799e9ca9d179295ef372f25d3769cdda7d25bb2668add6a6a1e22d1e4c678b8d.txt",
+          "sha256": "799e9ca9d179295ef372f25d3769cdda7d25bb2668add6a6a1e22d1e4c678b8d",
+          "origin": "https://static.crates.io/crates/miniz_oxide/miniz_oxide-0.9.1.crate#LICENSE-MIT.md"
+        },
+        {
+          "file": "evidence/0a54e647fe54104658b5e563c04c6f9edf251710e47bce692e0bd990a4ddaa39.txt",
+          "sha256": "0a54e647fe54104658b5e563c04c6f9edf251710e47bce692e0bd990a4ddaa39",
+          "origin": "https://static.crates.io/crates/miniz_oxide/miniz_oxide-0.9.1.crate#LICENSE-ZLIB.md"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 object",
+      "version": "0.39.1",
+      "expression": "Apache-2.0 OR MIT",
+      "sourceChecksum": "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b",
+      "notices": [
+        {
+          "file": "evidence/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://static.crates.io/crates/object/object-0.39.1.crate#LICENSE-APACHE"
+        },
+        {
+          "file": "evidence/0b74dfa0bcee5c420c6b7f67b4b2658f9ab8388c97b8e733975f2cecbdd668a6.txt",
+          "sha256": "0b74dfa0bcee5c420c6b7f67b4b2658f9ab8388c97b8e733975f2cecbdd668a6",
+          "origin": "https://static.crates.io/crates/object/object-0.39.1.crate#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 rustc-demangle",
+      "version": "0.1.28",
+      "expression": "MIT/Apache-2.0",
+      "sourceChecksum": "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb",
+      "notices": [
+        {
+          "file": "evidence/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://static.crates.io/crates/rustc-demangle/rustc-demangle-0.1.28.crate#LICENSE-APACHE"
+        },
+        {
+          "file": "evidence/378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397.txt",
+          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "origin": "https://static.crates.io/crates/rustc-demangle/rustc-demangle-0.1.28.crate#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "Rust std dependency \u2014 rustc-literal-escaper",
+      "version": "0.0.8",
+      "expression": "Apache-2.0 OR MIT",
+      "sourceChecksum": "bfe6f213fb658c8fb95baabd5420393438cf5a98d707f5dd701d9197c705f71e",
+      "notices": [
+        {
+          "file": "evidence/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "origin": "https://static.crates.io/crates/rustc-literal-escaper/rustc-literal-escaper-0.0.8.crate#LICENSE-APACHE"
+        },
+        {
+          "file": "evidence/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "origin": "https://static.crates.io/crates/rustc-literal-escaper/rustc-literal-escaper-0.0.8.crate#LICENSE-MIT"
+        }
+      ]
+    }
+  ],
+  "scope": "Conservative std/runtime source dependencies present in the macOS toolchain; not a claim that every object survives linking."
+}

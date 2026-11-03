@@ -1,0 +1,170 @@
+{
+  "nodes": {
+    "paragraph": {
+      "content": "inline*",
+      "groups": [
+        "block"
+      ],
+      "attrs": {},
+      "marks": null
+    },
+    "blockquote": {
+      "content": "block+",
+      "groups": [
+        "block"
+      ],
+      "attrs": {},
+      "marks": []
+    },
+    "bulletList": {
+      "content": "listItem+",
+      "groups": [
+        "block",
+        "list"
+      ],
+      "attrs": {},
+      "marks": []
+    },
+    "codeBlock": {
+      "content": "text*",
+      "groups": [
+        "block"
+      ],
+      "attrs": {
+        "language": {
+          "default": null
+        }
+      },
+      "marks": []
+    },
+    "doc": {
+      "content": "block+",
+      "groups": [],
+      "attrs": {},
+      "marks": []
+    },
+    "hardBreak": {
+      "content": "",
+      "groups": [
+        "inline"
+      ],
+      "attrs": {},
+      "marks": []
+    },
+    "heading": {
+      "content": "inline*",
+      "groups": [
+        "block"
+      ],
+      "attrs": {
+        "level": {
+          "default": 1
+        }
+      },
+      "marks": null
+    },
+    "horizontalRule": {
+      "content": "",
+      "groups": [
+        "block"
+      ],
+      "attrs": {},
+      "marks": []
+    },
+    "listItem": {
+      "content": "paragraph block*",
+      "groups": [],
+      "attrs": {},
+      "marks": []
+    },
+    "orderedList": {
+      "content": "listItem+",
+      "groups": [
+        "block",
+        "list"
+      ],
+      "attrs": {
+        "start": {
+          "default": 1
+        },
+        "type": {
+          "default": null
+        }
+      },
+      "marks": []
+    },
+    "text": {
+      "content": "",
+      "groups": [
+        "inline"
+      ],
+      "attrs": {},
+      "marks": []
+    }
+  },
+  "marks": {
+    "link": {
+      "attrs": {
+        "href": {
+          "default": null
+        },
+        "target": {
+          "default": "_blank"
+        },
+        "rel": {
+          "default": "noopener noreferrer nofollow"
+        },
+        "class": {
+          "default": null
+        },
+        "title": {
+          "default": null
+        }
+      },
+      "rank": 0,
+      "excludes": [
+        "link"
+      ]
+    },
+    "bold": {
+      "attrs": {},
+      "rank": 1,
+      "excludes": [
+        "bold"
+      ]
+    },
+    "code": {
+      "attrs": {},
+      "rank": 2,
+      "excludes": [
+        "link",
+        "bold",
+        "code",
+        "italic",
+        "strike",
+        "underline"
+      ]
+    },
+    "italic": {
+      "attrs": {},
+      "rank": 3,
+      "excludes": [
+        "italic"
+      ]
+    },
+    "strike": {
+      "attrs": {},
+      "rank": 4,
+      "excludes": [
+        "strike"
+      ]
+    },
+    "underline": {
+      "attrs": {},
+      "rank": 5,
+      "excludes": [
+        "underline"
+      ]
+    }
+  }
+}

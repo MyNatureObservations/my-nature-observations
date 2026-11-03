@@ -1,0 +1,40 @@
+{
+  "name": "app",
+  "version": "0.1.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/environment.test.mjs tests/journal-image-view.test.mjs tests/journal-photographs.test.mjs tests/journal-image.test.mjs tests/import-ui.test.mjs tests/journal-autosave.test.mjs tests/journal-data.test.mjs tests/journal-empty.test.mjs tests/journal-navigation-links.test.mjs tests/journal-reading.test.mjs tests/manual-backup.test.mjs tests/open-export-ui.test.mjs tests/restore-document-schema.test.mjs tests/restore-ui.test.mjs tests/journal-search.test.mjs tests/journal-history.test.mjs tests/weather-ui.test.mjs tests/place-ui.test.mjs tests/weather-default-place.test.mjs tests/map-panel.test.mjs tests/weather-history.test.mjs tests/weather-new-entry.test.mjs tests/notices.test.mjs tests/settings-about.test.mjs tests/journal-editor-accessibility.test.mjs tests/text-contrast.test.mjs tests/application-zoom.test.mjs",
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "tauri": "node scripts/tauri.mjs",
+    "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy localStorage preferredLanguage baseLocale",
+    "notices:generate": "node scripts/notices/generate.mjs",
+    "notices:validate": "node scripts/notices/validate.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@inlang/paraglide-js": "^2.27.0",
+    "@tauri-apps/api": "^2.12.3",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tiptap/core": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.65.1",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@tauri-apps/cli": "^2",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^26.6.5",
+    "svelte": "^5.56.3",
+    "svelte-check": "^4.6.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16"
+  }
+}

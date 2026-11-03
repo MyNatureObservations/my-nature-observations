@@ -1,0 +1,502 @@
+[
+  {
+    "name": "empty doc",
+    "document": {
+      "type": "doc",
+      "content": []
+    },
+    "empty": true
+  },
+  {
+    "name": "empty paragraph",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": []
+        }
+      ]
+    },
+    "empty": true
+  },
+  {
+    "name": "paragraph without content",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph"
+        }
+      ]
+    },
+    "empty": true
+  },
+  {
+    "name": "spaces breaks and unicode whitespace",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": " \t\r\n ﻿"
+            },
+            {
+              "type": "hardBreak"
+            }
+          ]
+        }
+      ]
+    },
+    "empty": true
+  },
+  {
+    "name": "empty heading",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": []
+        }
+      ]
+    },
+    "empty": true
+  },
+  {
+    "name": "empty formatted text",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": " ",
+              "marks": [
+                {
+                  "type": "bold"
+                },
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "empty": true
+  },
+  {
+    "name": "empty nested lists",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": []
+                },
+                {
+                  "type": "orderedList",
+                  "attrs": {
+                    "start": 1,
+                    "type": null
+                  },
+                  "content": [
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "empty": true
+  },
+  {
+    "name": "empty quote and code",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "blockquote",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": []
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "\n"
+            }
+          ]
+        }
+      ]
+    },
+    "empty": true
+  },
+  {
+    "name": "normal text",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Räv 🦊"
+            }
+          ]
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "formatted text",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "x",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "image",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "image",
+          "attrs": {
+            "src": "photo.jpg"
+          }
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "image in paragraph",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "image",
+              "attrs": {
+                "src": "photo.jpg"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "horizontal rule",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "horizontalRule"
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "unknown node",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "future",
+          "content": []
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "unknown mark",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": " ",
+              "marks": [
+                {
+                  "type": "future"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "link with blank text",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": " ",
+              "marks": [
+                {
+                  "type": "link",
+                  "attrs": {
+                    "href": "https://example.invalid"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "unknown attributes",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "future": "important"
+          },
+          "content": []
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "unexpected node fields",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "data": "important",
+          "content": []
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "invalid JSON object",
+    "document": {},
+    "empty": false
+  },
+  {
+    "name": "null",
+    "document": null,
+    "empty": false
+  },
+  {
+    "name": "non-array content",
+    "document": {
+      "type": "doc",
+      "content": "important"
+    },
+    "empty": false
+  },
+  {
+    "name": "malformed list",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": []
+            }
+          ]
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "malformed text",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text"
+            }
+          ]
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "zero-width space is preserved",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "​"
+            }
+          ]
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "broken JSON",
+    "json": "not JSON",
+    "empty": false
+  },
+  {
+    "name": "malformed mark type array",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": " ",
+              "marks": [
+                {
+                  "type": [
+                    "bold"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "malformed list type attribute",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "orderedList",
+          "attrs": {
+            "type": [
+              "1"
+            ]
+          },
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "empty": false
+  },
+  {
+    "name": "unknown document metadata",
+    "document": {
+      "type": "doc",
+      "content": [],
+      "future": "important"
+    },
+    "empty": false
+  },
+  {
+    "name": "integer heading represented as decimal",
+    "document": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2.0
+          },
+          "content": []
+        }
+      ]
+    },
+    "empty": true
+  }
+]

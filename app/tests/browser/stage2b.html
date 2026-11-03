@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>MNO Stage 2B — synthetic WebKit fixture</title></head>
+<body><h1>Stage 2B — synthetic editor and reader</h1><p>No journal database or original files are accessed. Choose English/Swedish and a prose width. Use the editor below for native caret, selection and keyboard checks.</p>
+<label>Language <select id="locale"><option>en</option><option>sv</option></select></label>
+<label>Prose width <select id="width"><option>760</option><option>640</option><option>639</option><option>360</option><option>1000</option></select></label>
+<button id="run">Run geometry checks</button><pre id="results" role="status">Loading…</pre>
+<button id="insert-empty">Insert into empty entry</button><button id="insert-partial">Insert after existing prose</button><button id="inspect-writing">Inspect writing position</button><pre id="writing" role="status"></pre><button id="trace-clicks">Record options clicks</button><pre id="click-log" hidden></pre><h2>Editor</h2><div id="editor"></div><h2>Reader</h2><div id="reader"></div>
+<script type="module" src="./stage2b.ts"></script></body></html>

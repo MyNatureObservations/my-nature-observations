@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '26.12.1'
+  RUST_VERSION: '1.99.1'
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    name: Tests and checks (macOS)
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Set up Rust and rustfmt
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component rustfmt
+          rustup default "$RUST_VERSION"
+          node --version
+          npm --version
+          rustc --version
+          cargo --version
+
+      - name: Cache Rust dependencies and build artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/src-tauri/target
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Compile translations
+        run: npm run i18n:compile
+
+      - name: Check Svelte and TypeScript
+        run: npm run check
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run Rust library tests
+        working-directory: app/src-tauri
+        run: cargo test --locked --lib
+
+      - name: Run selected Rust integration tests
+        working-directory: app/src-tauri
+        # managed_target_probe is a retained, failing historical model; see testing.md.
+        run: >-
+          cargo test --locked
+          --test database_crash
+          --test database_safety
+          --test descriptor_owner
+          --test recovery_handoff_prototype
+
+      - name: Check Rust formatting
+        working-directory: app/src-tauri
+        run: cargo fmt --all -- --check
+
+      - name: Check whitespace and unchanged tracked files
+        working-directory: .
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            git diff --check "$BASE_SHA" HEAD
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && -n "$BEFORE_SHA" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            git diff --check "$BEFORE_SHA" HEAD
+          else
+            git show --format= --check HEAD
+          fi
+          git diff --check
+          git diff --exit-code
+
+  notices:
+    name: Offline notices (macOS arm64 package)
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Set up reviewed Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          test "$(uname -m)" = arm64
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-about
+            app/src-tauri/target
+          key: notices-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-about-0.9.3-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+      - name: Install pinned notice generator
+        run: |
+          if ! cargo about --version 2>/dev/null | grep -qx 'cargo-about 0.9.3'; then
+            cargo install cargo-about --version 0.9.3 --locked --features cli
+          fi
+          cargo about --version | grep -qx 'cargo-about 0.9.3'
+      - name: Install locked frontend dependencies
+        run: |
+          npm ci
+          npm run i18n:compile
+      - name: Build application and offline notices
+        run: npm run tauri build -- --bundles app
+      - name: Validate packaged notice resources
+        run: npm run notices:validate -- 'src-tauri/target/release/bundle/macos/My Nature Observations.app'
+      - name: Verify macOS minimum version and arm64 code
+        run: |
+          python3 - <<'PYTHON'
+          import json, pathlib, plistlib, re, subprocess
+          expected = json.loads(pathlib.Path('src-tauri/tauri.conf.json').read_text())['bundle']['macOS']['minimumSystemVersion']
+          bundle = pathlib.Path('src-tauri/target/release/bundle/macos/My Nature Observations.app')
+          info = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())
+          assert info['LSMinimumSystemVersion'] == expected, info['LSMinimumSystemVersion']
+          magic = {bytes.fromhex(h) for h in ('feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca')}
+          code = []
+          for path in bundle.rglob('*'):
+              if not path.is_file():
+                  continue
+              with path.open('rb') as stream:
+                  is_code = stream.read(4) in magic
+              if is_code:
+                  code.append(path)
+                  arch = subprocess.check_output(['lipo', '-archs', str(path)], text=True).strip()
+                  assert arch == 'arm64', (str(path), arch)
+                  load = subprocess.check_output(['otool', '-l', str(path)], text=True)
+                  minimum = re.findall(r'^\s*minos\s+(\S+)', load, re.M)
+                  assert minimum == [expected], (str(path), minimum)
+                  print(f'{path}: {arch}, macOS {minimum[0]}')
+          assert bundle / 'Contents/MacOS' / info['CFBundleExecutable'] in code
+          PYTHON

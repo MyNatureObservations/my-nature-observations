@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# SvelteKit och Vite
+.svelte-kit/
+build/
+dist/
+.vite/
+
+# Rust och Tauri
+target/
+*.dmg
+*.app/
+*.msi
+*.exe
+*.AppImage
+
+# Lokala databaser
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+
+# Miljöfiler och hemligheter
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,359 @@
+{
+  "format": 1,
+  "entries": [
+    {
+      "name": "alloc-stdlib",
+      "version": "0.3.0",
+      "commit": "0a81fd6928ea3b33c8cd484aa4575d50ffb98012",
+      "selected": "BSD-3-Clause",
+      "noCopyrightSupplied": false,
+      "reason": "Use verified upstream/package license text instead of a synthesized generic notice.",
+      "notices": [
+        {
+          "file": "evidence/c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae.txt",
+          "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae",
+          "origin": "https://raw.githubusercontent.com/dropbox/rust-alloc-no-stdlib/0a81fd6928ea3b33c8cd484aa4575d50ffb98012/LICENSE"
+        }
+      ],
+      "sourceChecksum": "0b5c1865780388bfa186411ab5f247819487fc4864c6e9c3106611fa347586e1"
+    },
+    {
+      "name": "block2",
+      "version": "0.6.2",
+      "commit": "b4167b582b2f75f9a1be75495c41b765344fd03c",
+      "selected": "MIT",
+      "noCopyrightSupplied": true,
+      "reason": "Pinned upstream supplies MIT terms but no separate copyright notice; preserve its actual licensing statement. Authors are not relabelled as copyright holders.",
+      "notices": [
+        {
+          "file": "evidence/7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54.txt",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "origin": "https://raw.githubusercontent.com/madsmtm/objc2/b4167b582b2f75f9a1be75495c41b765344fd03c/LICENSE.md"
+        },
+        {
+          "file": "evidence/f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d.txt",
+          "sha256": "f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d",
+          "origin": "https://opensource.org/license/mit (permission and warranty terms; no fabricated holder)"
+        }
+      ],
+      "sourceChecksum": "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5"
+    },
+    {
+      "name": "brotli-decompressor",
+      "version": "6.0.1",
+      "commit": "e4f3bf3326256a5dc23e5fa9276d803f6a4ad527",
+      "selected": "BSD-3-Clause",
+      "noCopyrightSupplied": false,
+      "reason": "Use verified upstream/package license text instead of a synthesized generic notice.",
+      "notices": [
+        {
+          "file": "evidence/c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae.txt",
+          "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae",
+          "origin": "https://github.com/dropbox/rust-brotli-decompressor/blob/e4f3bf3326256a5dc23e5fa9276d803f6a4ad527/LICENSE"
+        }
+      ],
+      "sourceChecksum": "941cd9bd4ddab83cb46fa5a2d428f1c857b24ac78cb876cf7beb710840934bd7"
+    },
+    {
+      "name": "cargo_toml",
+      "version": "1.0.1",
+      "commit": "57e06c4f4eb702469db46ef1aa144b9d11e63171",
+      "selected": "Apache-2.0",
+      "noCopyrightSupplied": false,
+      "reason": "Use verified upstream/package license text instead of a synthesized generic notice.",
+      "notices": [
+        {
+          "file": "evidence/ee874098519e956c23a3c5c7e20581f8e9b1d70aa05eb178f983be9775090a2f.txt",
+          "sha256": "ee874098519e956c23a3c5c7e20581f8e9b1d70aa05eb178f983be9775090a2f",
+          "origin": "https://gitlab.com/lib.rs/cargo_toml/tree/57e06c4f4eb702469db46ef1aa144b9d11e63171/LICENSE"
+        }
+      ],
+      "sourceChecksum": "82f4b26e751e711a5302649417f2da046dce6391b2ea30a4820f37462314f0b9"
+    },
+    {
+      "name": "dispatch2",
+      "version": "0.3.1",
+      "commit": "8852b424193ca41602281b3d7540d7c8ed51e49a",
+      "selected": "MIT",
+      "noCopyrightSupplied": true,
+      "reason": "Pinned upstream supplies MIT terms but no separate copyright notice; preserve its actual licensing statement. Authors are not relabelled as copyright holders.",
+      "notices": [
+        {
+          "file": "evidence/7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54.txt",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "origin": "https://raw.githubusercontent.com/madsmtm/objc2/8852b424193ca41602281b3d7540d7c8ed51e49a/LICENSE.md"
+        },
+        {
+          "file": "evidence/f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d.txt",
+          "sha256": "f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d",
+          "origin": "https://opensource.org/license/mit (permission and warranty terms; no fabricated holder)"
+        }
+      ],
+      "sourceChecksum": "1e0e367e4e7da84520dedcac1901e4da967309406d1e51017ae1abfb97adbd38"
+    },
+    {
+      "name": "dpi",
+      "version": "0.1.2",
+      "commit": "587ade844dfb0eada3696ba1cb263c66eea80581",
+      "selected": "MIT",
+      "noCopyrightSupplied": false,
+      "reason": "Use verified upstream/package license text instead of a synthesized generic notice.",
+      "notices": [
+        {
+          "file": "evidence/9eff396a99bafd208e7126602420d6864f6066c08b84485a5b032320a9c01997.txt",
+          "sha256": "9eff396a99bafd208e7126602420d6864f6066c08b84485a5b032320a9c01997",
+          "origin": "https://github.com/rust-windowing/winit/blob/587ade844dfb0eada3696ba1cb263c66eea80581/dpi/LICENSE-LIBM-MIT"
+        }
+      ],
+      "sourceChecksum": "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
+    },
+    {
+      "name": "objc2-app-kit",
+      "version": "0.3.2",
+      "commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "selected": "MIT",
+      "noCopyrightSupplied": true,
+      "reason": "Pinned upstream supplies MIT terms but no separate copyright notice; preserve its actual licensing statement. Authors are not relabelled as copyright holders.",
+      "notices": [
+        {
+          "file": "evidence/7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54.txt",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "origin": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        },
+        {
+          "file": "evidence/f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d.txt",
+          "sha256": "f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d",
+          "origin": "https://opensource.org/license/mit (permission and warranty terms; no fabricated holder)"
+        }
+      ],
+      "sourceChecksum": "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c"
+    },
+    {
+      "name": "objc2-core-foundation",
+      "version": "0.3.2",
+      "commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "selected": "MIT",
+      "noCopyrightSupplied": true,
+      "reason": "Pinned upstream supplies MIT terms but no separate copyright notice; preserve its actual licensing statement. Authors are not relabelled as copyright holders.",
+      "notices": [
+        {
+          "file": "evidence/7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54.txt",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "origin": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        },
+        {
+          "file": "evidence/f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d.txt",
+          "sha256": "f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d",
+          "origin": "https://opensource.org/license/mit (permission and warranty terms; no fabricated holder)"
+        }
+      ],
+      "sourceChecksum": "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536"
+    },
+    {
+      "name": "objc2-encode",
+      "version": "4.1.0",
+      "commit": "8d214f5477365ffcbcbb7de058c86ed9a518efb7",
+      "selected": "MIT",
+      "noCopyrightSupplied": true,
+      "reason": "Pinned upstream supplies MIT terms but no separate copyright notice; preserve its actual licensing statement. Authors are not relabelled as copyright holders.",
+      "notices": [
+        {
+          "file": "evidence/7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54.txt",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "origin": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md"
+        },
+        {
+          "file": "evidence/f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d.txt",
+          "sha256": "f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d",
+          "origin": "https://opensource.org/license/mit (permission and warranty terms; no fabricated holder)"
+        }
+      ],
+      "sourceChecksum": "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33"
+    },
+    {
+      "name": "objc2-exception-helper",
+      "version": "0.1.1",
+      "commit": "8d214f5477365ffcbcbb7de058c86ed9a518efb7",
+      "selected": "MIT",
+      "noCopyrightSupplied": true,
+      "reason": "Pinned upstream supplies MIT terms but no separate copyright notice; preserve its actual licensing statement. Authors are not relabelled as copyright holders.",
+      "notices": [
+        {
+          "file": "evidence/7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54.txt",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "origin": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md"
+        },
+        {
+          "file": "evidence/f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d.txt",
+          "sha256": "f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d",
+          "origin": "https://opensource.org/license/mit (permission and warranty terms; no fabricated holder)"
+        }
+      ],
+      "sourceChecksum": "c7a1c5fbb72d7735b076bb47b578523aedc40f3c439bea6dfd595c089d79d98a"
+    },
+    {
+      "name": "objc2-foundation",
+      "version": "0.3.2",
+      "commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "selected": "MIT",
+      "noCopyrightSupplied": true,
+      "reason": "Pinned upstream supplies MIT terms but no separate copyright notice; preserve its actual licensing statement. Authors are not relabelled as copyright holders.",
+      "notices": [
+        {
+          "file": "evidence/7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54.txt",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "origin": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        },
+        {
+          "file": "evidence/f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d.txt",
+          "sha256": "f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d",
+          "origin": "https://opensource.org/license/mit (permission and warranty terms; no fabricated holder)"
+        }
+      ],
+      "sourceChecksum": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272"
+    },
+    {
+      "name": "objc2-quartz-core",
+      "version": "0.3.2",
+      "commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "selected": "MIT",
+      "noCopyrightSupplied": true,
+      "reason": "Pinned upstream supplies MIT terms but no separate copyright notice; preserve its actual licensing statement. Authors are not relabelled as copyright holders.",
+      "notices": [
+        {
+          "file": "evidence/7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54.txt",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "origin": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        },
+        {
+          "file": "evidence/f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d.txt",
+          "sha256": "f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d",
+          "origin": "https://opensource.org/license/mit (permission and warranty terms; no fabricated holder)"
+        }
+      ],
+      "sourceChecksum": "96c1358452b371bf9f104e21ec536d37a650eb10f7ee379fff67d2e08d537f1f"
+    },
+    {
+      "name": "objc2-web-kit",
+      "version": "0.3.2",
+      "commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "selected": "MIT",
+      "noCopyrightSupplied": true,
+      "reason": "Pinned upstream supplies MIT terms but no separate copyright notice; preserve its actual licensing statement. Authors are not relabelled as copyright holders.",
+      "notices": [
+        {
+          "file": "evidence/7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54.txt",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "origin": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        },
+        {
+          "file": "evidence/f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d.txt",
+          "sha256": "f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d",
+          "origin": "https://opensource.org/license/mit (permission and warranty terms; no fabricated holder)"
+        }
+      ],
+      "sourceChecksum": "b2e5aaab980c433cf470df9d7af96a7b46a9d892d521a2cbbb2f8a4c16751e7f"
+    },
+    {
+      "name": "objc2",
+      "version": "0.6.5",
+      "commit": "d7d2fa23ceaa5e6096c923b081040e5d81b3b9df",
+      "selected": "MIT",
+      "noCopyrightSupplied": true,
+      "reason": "Pinned upstream supplies MIT terms but no separate copyright notice; preserve its actual licensing statement. Authors are not relabelled as copyright holders.",
+      "notices": [
+        {
+          "file": "evidence/7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54.txt",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "origin": "https://raw.githubusercontent.com/madsmtm/objc2/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/LICENSE.md"
+        },
+        {
+          "file": "evidence/f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d.txt",
+          "sha256": "f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d",
+          "origin": "https://opensource.org/license/mit (permission and warranty terms; no fabricated holder)"
+        }
+      ],
+      "sourceChecksum": "08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8"
+    },
+    {
+      "name": "tauri-plugin-dialog",
+      "version": "2.8.3",
+      "commit": "44293a5722efcaf27060504e63b17aeba721b40f",
+      "selected": "MIT",
+      "noCopyrightSupplied": false,
+      "reason": "Use verified upstream/package license text instead of a synthesized generic notice.",
+      "notices": [
+        {
+          "file": "evidence/89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607.txt",
+          "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607",
+          "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/44293a5722efcaf27060504e63b17aeba721b40f/LICENSE_MIT"
+        }
+      ],
+      "sourceChecksum": "b7461aaacf1901915ea7b9f5cd74f8224a351ed96af0a62c07fce934003cb34b"
+    },
+    {
+      "name": "tauri-plugin-fs",
+      "version": "2.7.1",
+      "commit": "44293a5722efcaf27060504e63b17aeba721b40f",
+      "selected": "MIT",
+      "noCopyrightSupplied": false,
+      "reason": "Use verified upstream/package license text instead of a synthesized generic notice.",
+      "notices": [
+        {
+          "file": "evidence/89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607.txt",
+          "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607",
+          "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/44293a5722efcaf27060504e63b17aeba721b40f/LICENSE_MIT"
+        }
+      ],
+      "sourceChecksum": "5d58eb1d4984e535f47a642ffec09a2da6f5c18a12b5902d12126cb7626d628b"
+    },
+    {
+      "name": "tauri-plugin-opener",
+      "version": "2.7.1",
+      "commit": "6bbd44d4ef254d835a12c6d7bdf2a8a61778031a",
+      "selected": "MIT",
+      "noCopyrightSupplied": false,
+      "reason": "Use verified upstream/package license text instead of a synthesized generic notice.",
+      "notices": [
+        {
+          "file": "evidence/89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607.txt",
+          "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607",
+          "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/6bbd44d4ef254d835a12c6d7bdf2a8a61778031a/LICENSE_MIT"
+        }
+      ],
+      "sourceChecksum": "85dead674ee41937d042ee855d785f07ee67206f19402200c12b9255964d5ac8"
+    },
+    {
+      "name": "tauri-plugin-single-instance",
+      "version": "2.5.4",
+      "commit": "44293a5722efcaf27060504e63b17aeba721b40f",
+      "selected": "MIT",
+      "noCopyrightSupplied": false,
+      "reason": "Use verified upstream/package license text instead of a synthesized generic notice.",
+      "notices": [
+        {
+          "file": "evidence/89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607.txt",
+          "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607",
+          "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/44293a5722efcaf27060504e63b17aeba721b40f/LICENSE_MIT"
+        }
+      ],
+      "sourceChecksum": "561cd99484561bc39c954768e7b41a66cebbe1ac3d9d081c34361f740c489e2c"
+    },
+    {
+      "name": "tauri-plugin",
+      "version": "2.7.1",
+      "commit": "30da1fd6e17de6107ecc850c95dfb16b5729f2dd",
+      "selected": "MIT",
+      "noCopyrightSupplied": false,
+      "reason": "Use verified upstream/package license text instead of a synthesized generic notice.",
+      "notices": [
+        {
+          "file": "evidence/9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d.txt",
+          "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+          "origin": "https://raw.githubusercontent.com/tauri-apps/tauri/30da1fd6e17de6107ecc850c95dfb16b5729f2dd/LICENSE-MIT"
+        }
+      ],
+      "sourceChecksum": "1140cf34a3b3b836a13103dcab17f18831d5cc3534cbd435dc01a5c6daa65aa2"
+    }
+  ]
+}
