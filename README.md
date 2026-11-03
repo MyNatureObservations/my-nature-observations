@@ -74,6 +74,14 @@ MNO retains a safety backup of the previous journal. Follow the app's restoratio
 Quit/reopen and verification instructions until the journal is available again.
 Do not manually remove recovery files or the journal data directory.
 
+## Feedback & Support
+
+MNO is preparing its first public preview, and constructive feedback is welcome.
+Use [GitHub Issues](https://github.com/MyNatureObservations/my-nature-observations/issues)
+for bug reports and concrete improvement proposals that need tracking. Use
+[GitHub Discussions](https://github.com/MyNatureObservations/my-nature-observations/discussions)
+for questions, ideas and general conversation.
+
 ## Principles
 
 - Local-first and offline-capable
