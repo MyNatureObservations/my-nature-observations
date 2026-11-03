@@ -69,3 +69,19 @@ Remaining before public release:
 - Windows and Linux packaging and their native/license inventories are **not validated**. Review actual WebView/runtime distribution (e.g. Windows WebView2 installation policy), Linux system-vs-bundled libraries, target dependency differences and final resources before enabling their notice generation. The generator checks Tauri’s requested target triple and rejects other hosts/targets rather than shipping a macOS-only inventory as universal.
 - Future dependency/toolchain updates require regenerating and reviewing changes, including new NOTICE files, assets, source obligations and version-specific exceptions. This process is not a general legal certification or signing/notarization approval.
 - Manual acceptance: copy the packaged `notices/` folder to an offline location, open HTML, inspect representative MIT/Apache, Leaflet BSD, ring, CDLA and compiler-builtins entries, and expand an MPL source archive. Verify future About navigation separately.
+
+## Open-Meteo weather data attribution
+
+Open-Meteo is an external data service, not bundled API server code. Its weather
+API data are attributed separately from MNO's MIT code and bundled component
+notices: [Open-Meteo](https://open-meteo.com/) and
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Saved weather summaries in journal editing/reading and the entry list show both
+links next to fetched data. Weather details, fetch previews and replacement
+comparisons retain their source/model and license links. Manual observations
+are not attributed to Open-Meteo. Labels reuse the existing Swedish/English
+weather source translations.
+
+Data attribution does not settle API service-use limits or distribution terms;
+keep the outstanding provider clarification separate. See the
+[provider's license guidance](https://open-meteo.com/en/licence).

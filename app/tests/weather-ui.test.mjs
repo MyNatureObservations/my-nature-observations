@@ -437,3 +437,26 @@ test('ERA5 subtitle is shared by preview and stored weather',()=>{
  const history=readFileSync(new URL('../src/lib/components/HistoricalWeather.svelte',import.meta.url),'utf8');
  assert.ok(history.includes('<WeatherDetails part={existing}'));assert.ok(history.includes('<WeatherDetails part={preview.fetched}'));
 });
+
+test('saved fetched summaries link Open-Meteo and CC BY in both languages outside the weather button', () => {
+  for (const locale of ['sv', 'en']) {
+    const historical = {period:{kind:'day',date:'2026-10-25'},temperatureMeanC:4,source:{...currentPart.source,product:'historical-weather',model:'ERA5'}};
+    for (const fetched of [historical, currentPart]) for (const editing of [false, true]) {
+      const html = show({kind:'ready',data:{manual:null,fetched,revision:'1'}},locale,editing);
+      assert.match(html, /href="https:\/\/open-meteo\.com\/"/);
+      assert.match(html, /href="https:\/\/creativecommons\.org\/licenses\/by\/4\.0\/"/);
+      assert.match(html, locale==='sv' ? /Väderdata/ : /Weather data/);
+      assert.doesNotMatch(html.match(/<button[\s\S]*?<\/button>/)?.[0] ?? '', /<a /);
+    }
+    const manual = show({kind:'ready',data:{manual:part,fetched:null,revision:'1'}},locale);
+    assert.doesNotMatch(manual, /href="https:\/\/open-meteo/);
+    const detail = render(Details,{props:{part:currentPart,locale}}).body;
+    assert.match(detail, /href="https:\/\/open-meteo\.com\/"/);
+    assert.match(detail, /href="https:\/\/creativecommons\.org\/licenses\/by\/4\.0\/"/);
+  }
+});
+
+test('entry list places fetched-weather attribution outside the entry navigation link', () => {
+  const source=readFileSync(new URL('../src/routes/journal/entries/+page.svelte',import.meta.url),'utf8');
+  assert.match(source, /<\/a>\s*<WeatherAttribution part=\{weather\[entry.id\]\?\.fetched\}/);
+});

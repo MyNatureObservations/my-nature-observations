@@ -29,4 +29,6 @@ modules['$lib/places'] = url(resolve(transpile(read('../src/lib/places.ts')), {'
 modules['$lib/weather-history'] = url(resolve(transpile(read('../src/lib/weather-history.ts')), {'@tauri-apps/api/core':invokeUrl}));
 export const historyUrl = component('../src/lib/components/HistoricalWeather.svelte');
 modules['$lib/components/HistoricalWeather.svelte'] = historyUrl;
+export const attributionUrl = component('../src/lib/components/WeatherAttribution.svelte');
+modules['$lib/components/WeatherAttribution.svelte'] = attributionUrl;
 export const tileUrl = component('../src/lib/components/WeatherTile.svelte');

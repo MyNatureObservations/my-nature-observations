@@ -1,5 +1,6 @@
 <script lang="ts">
   import WeatherIcon from "$lib/components/WeatherIcon.svelte";
+  import WeatherAttribution from "$lib/components/WeatherAttribution.svelte";
   import WeatherOverview from "$lib/components/WeatherOverview.svelte";
   import WeatherForm from "$lib/components/WeatherForm.svelte";
   import HistoricalWeather from "$lib/components/HistoricalWeather.svelte";
@@ -106,6 +107,7 @@
 </script>
 <svelte:window onpointerdown={outside} onkeydown={keydown} onresize={() => { if(open) void reposition(); }} onscroll={() => { if (!form || !dirty) close(); }} />
 {#if !empty || editing || showEmpty}
+<span class="tile-summary">
 <button bind:this={trigger} class="weather-tile" class:compact={empty} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? `${uid}-panel` : undefined} onclick={toggle}>
   {#if unverified}
     <span class="summary">{label('form_unverifiedShort')}</span>
@@ -117,6 +119,8 @@
     {:else}<span class="heading">{label('heading')}</span><span class="summary">{label(status.kind)}</span>{/if}
   {/if}
 </button>
+{#if status.kind === "ready"}<WeatherAttribution part={status.data.fetched} {locale} />{/if}
+</span>
 {#if open}
   <div bind:this={panel} id={`${uid}-panel`} class="weather-panel" style:visibility={positioned ? "visible" : "hidden"} role="dialog" aria-modal="false" aria-labelledby={`${uid}-title`} style:left={`${left}px`} style:top={`${top}px`} style:max-height={`calc(100vh - ${top + 16}px)`} onfocusout={focusout} tabindex="-1">
     <header><h2 id={`${uid}-title`}>{label('heading')}</h2><button class="close" aria-label={label('close')} onclick={() => close(true)}>×</button></header>
@@ -159,6 +163,7 @@
 {/if}
 {/if}
 <style>
+  .tile-summary { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 100%; }
   .weather-tile, .weather-tile.compact { display:inline-flex;align-items:center;gap:6px;width:auto;height:auto;margin:0;padding:4px 6px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--accent,#435b47);font:12px/1.4 system-ui,sans-serif;cursor:pointer; }
   .weather-tile:hover { border-color: #788e7b; }
   button:focus-visible { outline: 2px solid #435b47; outline-offset: 3px; }

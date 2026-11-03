@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createJournalReader } from "$lib/journal-data";
+  import WeatherAttribution from "$lib/components/WeatherAttribution.svelte";
   import WeatherOverview from "$lib/components/WeatherOverview.svelte";
   import {createWeatherReader,type WeatherView} from "$lib/weather";
   import { onMount } from "svelte";
@@ -95,10 +96,13 @@
     {:else}
       <div class="entry-list">
         {#each entries as entry (entry.id)}
-          <a href={`/journal/entries/${entry.id}`} class="entry-item">
-            <div class="entry-date">{formatDate(entry.entryDate)} {#if weather[entry.id]?.manual || weather[entry.id]?.fetched}<WeatherOverview data={weather[entry.id]} locale={language.current} compact />{/if}</div>
-            <h2>{entry.title}</h2>
-          </a>
+          <div class="entry-list-item">
+            <a href={`/journal/entries/${entry.id}`} class="entry-item">
+              <div class="entry-date">{formatDate(entry.entryDate)} {#if weather[entry.id]?.manual || weather[entry.id]?.fetched}<WeatherOverview data={weather[entry.id]} locale={language.current} compact />{/if}</div>
+              <h2>{entry.title}</h2>
+            </a>
+            <WeatherAttribution part={weather[entry.id]?.fetched} locale={language.current} />
+          </div>
         {/each}
       </div>
     {/if}
@@ -171,10 +175,12 @@
     font-style: italic;
   }
 
+  .entry-list-item { border-bottom: 1px solid #d9d8d1; }
+  .entry-list-item > :global(.attribution) { padding-bottom: 8px; }
+
   .entry-item {
     display: block;
     padding: 28px 0;
-    border-bottom: 1px solid #d9d8d1;
     color: inherit;
     text-decoration: none;
     transition: padding-left 0.2s ease;
