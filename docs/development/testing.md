@@ -104,3 +104,43 @@ For exact paths, isolated-profile rules and manual acceptance steps, see
 [Development and Production environments](MNO_Development_Production_Environments.md).
 Do not use a debug build with the Production identifier, even with a test override;
 it now fails before plugin or database startup.
+
+## Cross-platform Stage A1: compile/test visibility
+
+The additional CI matrix uses `ubuntu-24.04` and `windows-2022`, retaining the
+existing macOS jobs unchanged. It uses the same pinned Rust toolchain and
+`Cargo.lock`. Linux installs WebKitGTK 4.1 and native build dependencies; Windows
+uses the runner's MSVC tools. No Tauri app is launched.
+
+Cargo is invoked directly, without the Tauri build/package hook or the macOS-only
+notice generator:
+
+```sh
+cargo check --locked --all-targets
+cargo test --locked --lib
+cargo test --locked --test database_crash --test database_safety --test descriptor_owner --test recovery_handoff_prototype
+```
+
+`--all-targets` checks host package targets, not other operating-system triples.
+It compiles the historical managed-target probe but does not run that excluded
+model. Library and integration test steps are attempted independently after
+successful environment/toolchain setup, even if a preceding Cargo step fails.
+Failures are not masked. The job summary separates step outcomes; use the actual
+compiler diagnostic or failing assertion to classify the cause. A test-compilation
+failure means the tests did not execute. macOS-only tests, including the entire
+`descriptor_owner` target, remain gated; zero tests, ignored tests and skipped
+steps do not establish platform coverage.
+
+Frontend tests remain in the existing macOS job; they are not duplicated here.
+These jobs do not enable Restore/Import/Recovery, change durability guarantees,
+or generate Linux/Windows release packages. A1 may expose existing compilation
+or test failures; report exact errors before authorizing a separate fix.
+
+The hosted baselines are separate from manual acceptance environments:
+macOS Apple Silicon, Ubuntu 26.04.1 LTS x86_64 and Fedora KDE 44 x86_64 in Proxmox,
+and a physical Windows 11 laptop. No manual compatibility acceptance is implied.
+
+For a branch without a pull request, maintainers can start the existing CI
+workflow with `workflow_dispatch` targeting that branch. A branch push alone
+retains the current main-only push trigger. Do not start a second run or poll
+for completion when handing the first run over for review.
