@@ -163,7 +163,8 @@
 {/if}
 {/if}
 <style>
-  .tile-summary { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 100%; }
+  .tile-summary { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; max-width: 100%; }
+  .tile-summary > :global(.attribution) { min-width: 0; max-width: 100%; }
   .weather-tile, .weather-tile.compact { display:inline-flex;align-items:center;gap:6px;width:auto;height:auto;margin:0;padding:4px 6px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--accent,#435b47);font:12px/1.4 system-ui,sans-serif;cursor:pointer; }
   .weather-tile:hover { border-color: #788e7b; }
   button:focus-visible { outline: 2px solid #435b47; outline-offset: 3px; }
