@@ -406,3 +406,7 @@ mod tests;
 // Deliberately absent from all production and development app builds.
 #[cfg(test)]
 mod isolated_copy;
+
+// Isolated C5a persistence probe, never compiled into application builds.
+#[cfg(test)]
+mod windows_initialization_probe;

@@ -6,6 +6,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Checks to run (full CI remains the default)
+        type: choice
+        required: true
+        default: full
+        options:
+          - full
+          - windows-initialization-probe
 
 permissions:
   contents: read
@@ -21,6 +30,7 @@ env:
 
 jobs:
   quality:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope != 'windows-initialization-probe' }}
     name: Tests and checks (macOS)
     runs-on: macos-15
     timeout-minutes: 30
@@ -110,6 +120,7 @@ jobs:
           git diff --exit-code
 
   notices:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope != 'windows-initialization-probe' }}
     name: Offline notices (macOS arm64 package)
     runs-on: macos-15
     timeout-minutes: 45
@@ -178,6 +189,7 @@ jobs:
           PYTHON
 
   cross-platform:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope != 'windows-initialization-probe' }}
     name: Rust visibility (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -266,4 +278,46 @@ jobs:
           A zero-test target, ignored test or skipped step is not passing coverage.
           Restore/Import/Recovery support and release packaging are outside A1.
           These hosted runners do not replace manual OS acceptance.
+          SUMMARY
+
+  windows-initialization-probe:
+    name: C5a Windows initialization probe (not production readiness)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scope == 'windows-initialization-probe' }}
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: app/src-tauri
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up reviewed Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustc -vV
+          cargo --version
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/src-tauri/target
+          key: cross-platform-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+      - name: Run isolated schema and Windows persistence probes
+        run: cargo test --locked --lib windows_initialization_probe -- --nocapture
+      - name: Verify production Windows initialization remains fail-closed
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --lib startup::unsupported_initialization_tests
+      - name: Explain focused scope
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          C5a runs only isolated initialization probes and existing Windows guard tests.
+          No frontend checks, packaging or production startup enablement.
+          Read the probe log for NTFS directory open/flush observations.
+          API/process-exit success does not establish power-loss durability.
+          Directory persistence remains explicitly unestablished, even if tests pass.
+          The 12 known Windows full-library failures are not exercised by this focused
+          run; default full CI and all existing test assertions remain unchanged.
           SUMMARY

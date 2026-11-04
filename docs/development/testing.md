@@ -347,3 +347,62 @@ or identity work. Windows real directory durability remains Unsupported; modeled
 are not persistence evidence. Subprocess exits are not power-loss tests. Existing limits
 on path substitution, private-root establishment, WAL/hot-journal reopening, production
 validators, legacy adoption and recovery UX remain. APFS/ext4/NTFS acceptance is separate.
+
+## C5a: isolated Windows initialization persistence probe
+
+`backup::windows_initialization_probe` is compiled ONLY under `cfg(test)`. It reuses
+the production current-schema constructor, read-only schema/content validation,
+checked SQLite close and existing private-directory ACL helper. It never enables
+startup or returns Ready: successful file operations yield the explicit observation
+`FilesVerifiedDirectoryPersistenceUnestablished`.
+
+The portable test checks current schema, synthetic content, no-clobber construction
+and independent reopening. Windows tests require NTFS (checked through
+`GetVolumeInformationByHandleW`) and use only private temporary directories.
+They examine writable-handle `File::sync_all` / `FlushFileBuffers`, read-only flush
+rejection, concurrent exclusive creation, and marker publication using
+`MoveFileExW(MOVEFILE_WRITE_THROUGH)` WITHOUT replacement/copy flags. No delete-then-
+rename fallback exists. Temporary marker handles close before publication. Ordinary
+failure cleans only owned temporaries; sharing-denied cleanup can leave evidence.
+Published markers, incomplete databases and interrupted temporary evidence block
+probe reinitialization. Production `database_initialization_durability_unsupported`
+and its existing negative tests remain unchanged.
+
+Coverage includes late destination creation, source delete-sharing denial, injected
+write/flush/permission errors, process exit before/after marker publication and schema
+creation, repeated read-only reopening, missing/zero-length established DB, retained
+sidecars/backups, and a synthetic directory junction rejected as a reparse point.
+Junction creation uses standard Windows `mklink /J`; failure is a test failure, not a
+skip. The subprocess checks are bounded and do not establish physical power-loss safety.
+Injection before a write/flush is not a real storage-device failure test.
+
+For nested private directories the probe prints actual write-capable directory-open
+and `sync_all` outcomes at EACH ancestor within that private root. Both success and
+denial are observations, not an approved directory-persistence primitive. No volume
+handles, administrator privileges, driver or global flush are used. The existing
+application-data ancestors outside the private root are not covered by these tests.
+
+Documented API facts: FlushFileBuffers requires GENERIC_WRITE; CreateDirectoryW
+creates one directory level, and directory handles use FILE_FLAG_BACKUP_SEMANTICS.
+MOVEFILE_WRITE_THROUGH has documented completion semantics, but this probe does not
+infer a complete nested-directory/power-loss guarantee from rename success. NTFS
+namespace persistence and ordering remain a production blocker until a justified
+platform contract and acceptance evidence exist.
+
+References:
+- [FlushFileBuffers](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers)
+- [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
+- [CreateDirectoryW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createdirectoryw)
+
+Local portable command:
+
+```sh
+cargo test --manifest-path app/src-tauri/Cargo.toml --locked --lib windows_initialization_probe
+```
+
+The existing CI workflow has an opt-in manual `scope=windows-initialization-probe`.
+It runs ONLY the Windows probe (`--nocapture` records diagnostics) and existing
+unsupported-initialization tests, using the normal Rust pin/cache. Default full CI,
+push/PR behavior and the 12 known Windows library failures remain unchanged. A focused
+green run is not full-suite coverage or production Windows readiness. Use full CI at
+major integration boundaries, not for this isolated probe.
