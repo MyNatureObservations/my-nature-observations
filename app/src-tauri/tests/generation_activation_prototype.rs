@@ -592,3 +592,6 @@ fn inventory_preserves_exclusive_lease_and_includes_empty_lock_file() {
     // Positive control: exclusion ends only when the owner actually closes.
     let _next = Lease::open(root.path()).unwrap();
 }
+
+#[path = "generation_activation_prototype/admission.rs"]
+mod admission;

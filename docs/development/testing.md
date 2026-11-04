@@ -224,3 +224,52 @@ while its exclusive byte range is locked. Windows correctly rejects that read
 with error 33. All other file reads remain strict. A regression test checks snapshot
 contents, lease exclusion before/after inventory, the Windows read rejection, and
 successful reacquisition only after the owning lease closes. No lock is relaxed.
+
+## C3: admission versus mutable startup (isolated extension)
+
+`tests/generation_activation_prototype/admission.rs` extends the existing C2 test
+target without replacing or weakening its tests. C2's chain-only startup remains
+a historical model; only C3's entry points exercise the authoritative-head contract.
+There is no production API or startup integration.
+
+C1 owns a prepared immutable candidate. C3 validates its original digest before
+publishing intent and again before first admission. A single versioned
+`authority.json` binds the exact latest selection record hash/sequence and either
+`awaiting_admission` or `admitted`. Intent is published BEFORE the append-only C2
+selection, so interruption may deliberately leave an authority/record mismatch:
+startup blocks; it never infers authority from the older valid chain prefix.
+Missing/corrupt authority, missing latest records, gaps and conflicting hashes block.
+The authority is replaced using `tempfile::persist` with explicit file/root barriers;
+this atomic replacement is not a substitute for durability.
+
+An awaiting candidate is reverified against its original activation digest and
+returned only as `AwaitingAdmission`, never as a mutable journal. Explicit admission
+rechecks that digest and publishes the admitted head; no mutable path is returned
+until required barriers succeed. Once admitted, ordinary startup verifies CURRENT
+synthetic SQLite integrity/standalone-file state rather than the original digest.
+Legitimate edits and checked closure do not rewrite authority or selection records.
+C1's complete MNO content validation is still required for a production integration.
+
+The admission publication is the logical commit point, distinct from acknowledgement.
+If a process exits after admitted-head publication but before acknowledgement, a new
+startup can recognize admitted state only after fresh verification and successful
+barriers. An intent with a matching selected record remains awaiting admission.
+Missing records or leftover authority/selection temporaries remain blocked across
+repeated startups; no automatic repair, rollback, empty DB creation or old-generation
+cleanup occurs. Previous databases and sidecars remain untouched, even if damaged.
+
+Tests cover checked edit/restart, strict rejection of edits BEFORE admission,
+missing/truncated/conflicting state, authority sync failures, bounded subprocess
+interruptions at intent/selection/admission boundaries and real Unix barriers.
+Windows protocol tests explicitly model barriers; real directory synchronization
+continues to return Unsupported. A Windows-only sharing test checks that an open
+head without delete sharing prevents replacement without damaging the prior state.
+All tests run through the existing selected-integration matrix target.
+
+Limits: one local authoritative file detects partial history loss; it cannot detect
+a coherent rollback/replay of BOTH authority and history, nor prove the latest
+acknowledged head survived physical power loss. Atomic replacement, directory
+persistence and NTFS durability still need platform-specific acceptance. Lease/path
+identity, hostile substitution, WAL/hot-journal ordinary startup, durable root setup,
+legacy adoption and explicit repair UX remain outside this prototype. The existing
+100-record bound remains experimental. Process exits are not power-loss tests.
