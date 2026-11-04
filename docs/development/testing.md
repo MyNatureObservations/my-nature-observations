@@ -493,7 +493,8 @@ SDK or CLI changes require review; a missing license/provenance check fails the
 build. These checks are an internal packaging boundary, not a new legal certification.
 
 The job extracts the NSIS archive with 7-Zip without executing it, verifies the
-packaged application SHA-256 against the x86_64 build, metadata and notice tree,
+packaged application against the x86_64 build with only the exact Tauri NSIS
+bundle-token patch allowed, plus metadata and the notice tree,
 and uploads `mno-windows-x86_64-nsis-test-<full commit SHA>` (14-day retention).
 Open the successful run's **Artifacts**, download that artifact and extract its
 ZIP. It contains the `.exe`, `SHA256SUMS.txt` and `BUILD-INFO.json`. A failed job
@@ -523,3 +524,23 @@ separation remains unchanged; this package does not use the DEV identity.
 Do not exercise Restore/Recovery, historical migration or experimental generation
 activation. Successful hosted packaging does not establish unelevated Windows 11
 runtime acceptance or physical power-loss durability. Do not change published v0.1.0.
+
+### C6b: NSIS executable integrity comparison
+
+Tauri CLI 2.12.2 (bundler 2.10.2) patches the first
+`__TAURI_BUNDLE_TYPE_VAR_UNK` token to `__TAURI_BUNDLE_TYPE_VAR_NSS` before NSIS
+packs `app.exe`, then restores the unpatched release executable. Source:
+[the pinned bundler implementation](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.12.2/crates/tauri-bundler/src/bundle.rs).
+C6a's raw comparison across these stages therefore rejected the intended patch.
+The failed run logged that patch, but did not upload binaries or per-file hashes;
+the complete byte-level explanation must be confirmed by the next packaging run.
+
+`verify-nsis-executable.mjs` constructs the exact expected NSIS bytes in memory
+from the original release binary. It requires full byte equality with exactly one
+extracted `app.exe`; no PE headers, signatures, code or resource regions are ignored.
+Missing tokens, unexpected edits and size changes fail. Source files are never
+rewritten. Both paths, sizes, original/expected/packaged SHA-256 and patch offset
+are logged and included in successful artifact build metadata. Packaged PE product
+metadata is also checked; existing architecture, icon and notices checks remain.
+Focused synthetic-buffer tests run locally and in the packaging job. They test
+comparison behavior, not actual Windows executable production or runtime acceptance.
