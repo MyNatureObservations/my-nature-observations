@@ -544,3 +544,36 @@ are logged and included in successful artifact build metadata. Packaged PE produ
 metadata is also checked; existing architecture, icon and notices checks remain.
 Focused synthetic-buffer tests run locally and in the packaging job. They test
 comparison behavior, not actual Windows executable production or runtime acceptance.
+
+## C6 manual Windows 11 acceptance
+
+**Accepted within the intended C6 scope**, based on the user's manual report using
+an unsigned NSIS test installer from
+[CI run 41913220191](https://github.com/MyNatureObservations/my-nature-observations/actions/runs/41913220191),
+source commit `7308677c9951c33f0f837b3ca6037c557328dc32`. The completed packaging
+run was independently checked once and reports success; its automated artifact
+verification is separate from the following manual observations.
+
+- NSIS installation succeeded after moving the installer to a shorter filesystem
+  path. This records a practical path-related observation, not a proven cause or
+  complete installer path/long-path compatibility result.
+- The application launched successfully on a real Windows 11 machine.
+- A new journal entry could be created and saved.
+- The saved entry remained accessible after closing and restarting the application.
+- Attempting another launch did not open a second independent session. This checks
+  the observed single-instance behavior only, not every filesystem lock, concurrent
+  initializer, multiple-user/session or abnormal-termination scenario.
+- A backup file was successfully created and saved. This does not independently
+  prove successful restore, all backup content or every backup failure path.
+
+Restore, Recovery, historical database migration, experimental generation activation
+and power-loss durability remain outside C6 acceptance. No exhaustive filesystem,
+installation, security-warning or Windows compatibility claim follows. Account
+isolation, elevation status and filesystem details were not newly specified in
+this acceptance report; do not infer them from application success. The separate
+ordinary-account/synthetic-data procedure above remains required for future tests.
+C5b.1's unelevated directory-operation evidence remains distinct from C6 observations.
+
+C6 is closed as a stage, not as a claim of complete Windows platform support.
+[C7 architecture review and proposed stages](MNO_C7_Generation_Recovery_Review.md)
+are documentation only; no C7 production behavior has been implemented.
