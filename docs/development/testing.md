@@ -171,3 +171,49 @@ fixture uses the existing database constructor directly, not application startup
 Windows initialization/durability rejection and the known Windows baseline failures
 remain unchanged. Cross-platform success must be confirmed from CI; these tests do
 not enable Restore/Import/Recovery or establish power-loss durability.
+
+## C2: isolated generation-selection prototype
+
+`tests/generation_activation_prototype.rs` is a standalone exploratory protocol,
+not production startup, recovery, a journal-generation format or Ready authority.
+It uses the existing `fs2` OS-lock primitive and `tempfile` no-clobber publication,
+plus synthetic SQLite files. Private production `DirectoryLease` and state/proof
+APIs are not exposed or copied into this test. C1 production content validation
+would remain required; the prototype's integrity check is not its replacement.
+
+The pre-created private root contains `generations/<uuid>/journal.sqlite`, an
+existing lease file and append-only `selections/select-NNNNNNNN.json` records.
+Version-1 prototype records bind a generation digest and the previous record's
+hash. An explicit first selection is permitted; startup without a selection never
+creates a journal. Startup validates a contiguous bounded chain (100 records),
+then only the selected candidate, so damage to an older generation does not block
+restoration. No generation, old sidecar or published record is deleted. The cap
+is a prototype bound, not a proposed product retention policy.
+
+Candidate checks and file/directory barriers precede publication; a verified record
+is published with `persist_noclobber`, followed by selection/root directory barriers.
+Publication errors never mean success or imply that the old selection survived.
+Restart revalidates and repeats barriers before selecting. A process exit before
+publication leaves an unknown `pending-*` record: startup blocks without cleanup.
+An exit after publication can select the new generation after verification/barriers,
+even if the original request never returned success. User intervention for ambiguous
+states is intentionally not implemented. No fallback to an arbitrary older record.
+
+```sh
+cargo test --manifest-path app/src-tauri/Cargo.toml --locked --test generation_activation_prototype
+```
+
+Both existing selected-integration steps include this target. Protocol-only tests
+explicitly use modeled barriers; they do not prove persistence. Real Unix tests use
+macOS file `F_FULLFSYNC` / Linux `sync_all`, and directory `sync_all`. Windows real
+barriers remain fail-closed (including unsupported directory synchronization);
+the Windows-only sharing test exercises append-only selection while old files are
+held without delete sharing. It does not establish Windows flush durability.
+
+Subprocess tests exit at before/after-publication boundaries with bounded waits.
+They prove process-interruption behavior only, not power-loss/torn-write safety.
+Sync-failure injection covers required file/directory points. Root establishment,
+C1 handoff, application-wide checked closure, active same-user path substitution,
+filesystem identity/ACL hardening, physical power loss, and generation cleanup UI
+remain outside this prototype. Production integration needs those separate proofs
+and manual APFS/ext4/NTFS acceptance; no platform guard or production policy changes.

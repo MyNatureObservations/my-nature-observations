@@ -87,6 +87,7 @@ jobs:
           --test database_safety
           --test descriptor_owner
           --test recovery_handoff_prototype
+          --test generation_activation_prototype
 
       - name: Check Rust formatting
         working-directory: app/src-tauri
@@ -240,6 +241,7 @@ jobs:
           --test database_safety
           --test descriptor_owner
           --test recovery_handoff_prototype
+          --test generation_activation_prototype
 
       - name: Summarize Stage A1 visibility
         if: always()
