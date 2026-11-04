@@ -217,3 +217,10 @@ C1 handoff, application-wide checked closure, active same-user path substitution
 filesystem identity/ACL hardening, physical power loss, and generation cleanup UI
 remain outside this prototype. Production integration needs those separate proofs
 and manual APFS/ext4/NTFS acceptance; no platform guard or production policy changes.
+
+C2a inventory snapshots include the fixture's empty lease file by asserting its
+regular-file type and zero length, rather than reading it through a second handle
+while its exclusive byte range is locked. Windows correctly rejects that read
+with error 33. All other file reads remain strict. A regression test checks snapshot
+contents, lease exclusion before/after inventory, the Windows read rejection, and
+successful reacquisition only after the owning lease closes. No lock is relaxed.

@@ -253,18 +253,31 @@ fn generation(root: &Path) -> (String, String, PathBuf) {
     (id, hash(&fs::read(&path).unwrap()), path)
 }
 fn inventory(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
-    let mut result = Vec::new();
-    for e in fs::read_dir(root).unwrap() {
-        let p = e.unwrap().path();
-        if p.is_dir() {
-            result.extend(inventory(&p));
-        } else {
-            result.push((p.clone(), fs::read(p).unwrap()));
+    fn collect(root: &Path, lease_path: &Path, result: &mut Vec<(PathBuf, Vec<u8>)>) {
+        for e in fs::read_dir(root).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                collect(&p, lease_path, result);
+            } else if p == lease_path {
+                // The fixture's lease has no payload. Windows denies reads through
+                // another handle while LockFileEx holds its exclusive byte range.
+                // Assert exact empty content through metadata; never unlock, omit
+                // the file, or turn a failed read of any other file into success.
+                plain(&p, false).unwrap();
+                assert_eq!(fs::metadata(&p).unwrap().len(), 0, "nonempty fixture lease");
+                result.push((p, Vec::new()));
+            } else {
+                let bytes = fs::read(&p).unwrap();
+                result.push((p, bytes));
+            }
         }
     }
+    let mut result = Vec::new();
+    collect(root, &root.join("lease"), &mut result);
     result.sort();
     result
 }
+
 #[test]
 fn initial_selection_restart_retention_and_damaged_previous_generation() {
     let root = fixture();
@@ -547,4 +560,35 @@ fn lease_exclusion_and_corrupt_chain_fail_closed() {
     fs::write(&path, original).unwrap();
     fs::remove_file(root.path().join("selections/select-00000001.json")).unwrap();
     assert!(lease.startup(&mut modeled_barrier).is_err());
+}
+
+#[test]
+fn inventory_preserves_exclusive_lease_and_includes_empty_lock_file() {
+    let root = fixture();
+    generation(root.path());
+    let before = inventory(root.path());
+    let lease = Lease::open(root.path()).unwrap();
+    assert!(Lease::open(root.path()).is_err());
+    #[cfg(windows)]
+    assert_eq!(
+        fs::read(root.path().join("lease"))
+            .unwrap_err()
+            .raw_os_error(),
+        Some(33)
+    );
+    assert_eq!(inventory(root.path()), before);
+    assert!(
+        before
+            .iter()
+            .any(|(p, bytes)| p == &root.path().join("lease") && bytes.is_empty())
+    );
+    assert!(Lease::open(root.path()).is_err());
+    drop(lease);
+    assert_eq!(
+        fs::read(root.path().join("lease")).unwrap(),
+        Vec::<u8>::new()
+    );
+    assert_eq!(inventory(root.path()), before);
+    // Positive control: exclusion ends only when the owner actually closes.
+    let _next = Lease::open(root.path()).unwrap();
 }
