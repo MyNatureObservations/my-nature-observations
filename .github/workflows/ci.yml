@@ -306,15 +306,15 @@ jobs:
           key: cross-platform-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-${{ hashFiles('app/src-tauri/Cargo.lock') }}
       - name: Run isolated schema and Windows persistence probes
         run: cargo test --locked --lib windows_initialization_probe -- --nocapture
-      - name: Verify production Windows initialization remains fail-closed
+      - name: Run production Windows startup safety regressions
         if: ${{ !cancelled() }}
-        run: cargo test --locked --lib startup::unsupported_initialization_tests
+        run: cargo test --locked --lib startup::windows_tests
       - name: Explain focused scope
         if: always()
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
-          C5a runs only isolated initialization probes and existing Windows guard tests.
-          No frontend checks, packaging or production startup enablement.
+          C5a runs only isolated initialization probes and current Windows startup safety tests.
+          No frontend checks or packaging. C5c production safety tests exercise only local NTFS.
           Read the probe log for NTFS directory open/flush observations.
           API/process-exit success does not establish power-loss durability.
           Directory persistence remains explicitly unestablished, even if tests pass.

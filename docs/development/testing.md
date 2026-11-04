@@ -365,8 +365,9 @@ rejection, concurrent exclusive creation, and marker publication using
 rename fallback exists. Temporary marker handles close before publication. Ordinary
 failure cleans only owned temporaries; sharing-denied cleanup can leave evidence.
 Published markers, incomplete databases and interrupted temporary evidence block
-probe reinitialization. Production `database_initialization_durability_unsupported`
-and its existing negative tests remain unchanged.
+probe reinitialization. At C5a, production initialization remained unsupported.
+C5c below supersedes that restriction only for checked local-NTFS establishment;
+the isolated probe observation still does not itself grant production Ready.
 
 Coverage includes late destination creation, source delete-sharing denial, injected
 write/flush/permission errors, process exit before/after marker publication and schema
@@ -401,8 +402,64 @@ cargo test --manifest-path app/src-tauri/Cargo.toml --locked --lib windows_initi
 ```
 
 The existing CI workflow has an opt-in manual `scope=windows-initialization-probe`.
-It runs ONLY the Windows probe (`--nocapture` records diagnostics) and existing
-unsupported-initialization tests, using the normal Rust pin/cache. Default full CI,
-push/PR behavior and the 12 known Windows library failures remain unchanged. A focused
+It runs ONLY the Windows probe (`--nocapture` records diagnostics) and production
+Windows startup safety tests, using the normal Rust pin/cache. Default full CI,
+push/PR behavior remains unchanged; the historical 12-failure baseline must be compared
+with the new full run. A focused
 green run is not full-suite coverage or production Windows readiness. Use full CI at
 major integration boundaries, not for this isolated probe.
+
+## C5c: production Windows establishment on local NTFS
+
+Windows ordinary startup now uses `startup/established/windows.rs`. Existing Unix
+establishment functions and their ordering are unchanged. Historical statements
+above about Windows initialization rejection describe earlier stage baselines.
+Migration, Restore/Recovery, retained recovery-marker support and generation
+activation guards are NOT enabled by C5c.
+
+Before creating directories, Windows captures the nearest existing containing
+ancestor. It validates local-drive/NTFS support and retains a write-capable,
+no-delete-sharing directory handle. After creation it retains checked handles
+for each new level through that ancestor. For an existing application root the
+boundary is its containing directory. Synchronization goes deepest-first and
+stops at that boundary, never blindly at the drive root/system ancestors. Handle
+identity and reparse checks stay mandatory. Unavailable permissions, unsupported
+filesystems/remote paths and synchronization failures are errors, not fallbacks.
+
+All newly created directory edges are flushed BEFORE publishing initialization
+evidence. Marker bytes/version stay unchanged. A flushed same-directory temporary
+is closed and published using MoveFileExW(MOVEFILE_WRITE_THROUGH), without replace
+or copy flags. Published evidence is retained if subsequent barriers fail.
+Marker confirmation and new-database flushes use checked write-capable handles.
+No deletion/rename fallback, privileged volume flush or automatic sidecar cleanup.
+After exclusive file reservation, transactional schema creation, checked SQLite
+closure and persistence barriers, Windows independently invokes the current
+read-only schema/content validator before returning Ready.
+
+Windows startup tests cover nested boundary limits, first/repeated startup,
+conflicting owners, no-clobber destination races, corrupt/missing marker/database,
+retained sidecars/recovery artifacts/backups, injected write/file/directory failures,
+post-publication failure, real sharing denial, reparse and nonlocal paths, subprocess
+interruptions, final database-flush denial and invalid new content rejected at the
+independent-validation boundary. Existing Unix startup tests remain unchanged.
+
+Targeted commands (repository root):
+
+```sh
+cargo test --manifest-path app/src-tauri/Cargo.toml --locked --lib startup::windows_tests
+cargo test --manifest-path app/src-tauri/Cargo.toml --locked --lib startup::tests
+```
+
+Run full macOS/Linux/Windows CI for this production integration boundary. Do not
+skip historical failing Windows tests: initialization-dependent fixtures may now
+advance to separate schema/migration restrictions. Classify exact CI diagnostics
+rather than assuming all 12 prior failures disappear. The unrelated compiler-fixture
+and weather-timeout issues are not changed here.
+
+The practical persistence contract relies on checked OS flush/publication calls,
+local NTFS and storage honoring flushes; it is not an absolute power-loss guarantee.
+C5b.1 manually verified unelevated Windows 11/Roaming AppData directory operations,
+not application acceptance. After CI, use an isolated Windows user/test environment:
+first launch, save/close/reopen synthetic entries, second-instance exclusion,
+restart/error behavior and retained backup/sidecar evidence. Do not use real journal
+data or delete it to trigger a first launch. C2-C4 remain test-only reference models.

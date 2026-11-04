@@ -102,6 +102,8 @@ pub(crate) struct DirectoryLease {
     root: PathBuf,
     new_lock: bool,
     new_directory: bool,
+    #[cfg(windows)]
+    boundary: established::windows::Boundary,
 }
 impl DirectoryLease {
     fn acquire(path: &Path) -> Result<Self, String> {
@@ -112,6 +114,8 @@ impl DirectoryLease {
         Self::acquire_with(path, false)
     }
     fn acquire_with(path: &Path, create: bool) -> Result<Self, String> {
+        #[cfg(windows)]
+        let mut boundary = established::windows::Boundary::capture(path).map_err(failure)?;
         let (root, new_directory) = if create {
             directory(path).map_err(failure)?
         } else {
@@ -121,6 +125,8 @@ impl DirectoryLease {
             }
             (path.canonicalize().map_err(failure)?, false)
         };
+        #[cfg(windows)]
+        boundary.attach(&root).map_err(failure)?;
         let directory = open_directory(&root).map_err(failure)?;
         let mut options = OpenOptions::new();
         options.read(true).write(create).create_new(create);
@@ -168,6 +174,8 @@ impl DirectoryLease {
             root,
             new_lock,
             new_directory,
+            #[cfg(windows)]
+            boundary,
         };
         guard.ensure_current()?;
         Ok(guard)
@@ -411,11 +419,17 @@ fn begin_with(
         }
     }
     if !initialized {
+        #[cfg(not(windows))]
         established::publish(&lock.root)?;
+        #[cfg(windows)]
+        established::windows::publish(&lock.root, &lock.boundary)?;
     } else {
         // A previous publication may have failed AFTER the final name appeared.
         // Reconfirm mandatory barriers before trusting it on a later attempt.
+        #[cfg(not(windows))]
         established::confirm(&lock.root)?;
+        #[cfg(windows)]
+        established::windows::confirm(&lock.root, &lock.boundary)?;
     }
     // Repeat immediately before BOTH startup open paths, after filesystem work.
     lock.ensure_current()?;
@@ -444,7 +458,13 @@ fn begin_with(
     lock.ensure_current()?;
     initialize(&path, !exists)?;
     if !exists {
+        #[cfg(not(windows))]
         established::sync_created_database(&path, &lock.root)?;
+        #[cfg(windows)]
+        {
+            established::windows::sync_created_database(&path, &lock.boundary)?;
+            database::initialize_database(&path)?;
+        }
     }
     lock.ensure_current()?;
     Ok(StartupOutcome::Ready(StartupReady { lock: Some(lock) }))
@@ -454,7 +474,7 @@ mod tests;
 
 pub(crate) mod established;
 
-#[cfg(all(test, not(any(target_os = "macos", target_os = "linux"))))]
+#[cfg(all(test, not(any(target_os = "macos", target_os = "linux", windows))))]
 mod unsupported_initialization_tests {
     use super::*;
     #[test]
@@ -536,3 +556,6 @@ pub(crate) mod migration_probe {
         action()
     }
 }
+
+#[cfg(all(test, windows))]
+mod windows_tests;

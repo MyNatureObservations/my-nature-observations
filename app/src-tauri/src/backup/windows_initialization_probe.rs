@@ -211,7 +211,7 @@ mod windows {
         Ok(Observation::FilesVerifiedDirectoryPersistenceUnestablished)
     }
     #[test]
-    fn creation_flush_reopen_and_production_guard_remain_separate() {
+    fn creation_flush_reopen_and_production_establishment_remain_separate() {
         let (_parent, root) = private_root();
         assert_eq!(
             initialize(root.path(), &mut no_hook).unwrap(),
@@ -228,12 +228,10 @@ mod windows {
         assert_eq!(fs::read(root.path().join("mno.sqlite")).unwrap(), before);
         let state = crate::database_state::DatabaseState::default();
         let untouched = root.path().join("production-guard");
-        assert_eq!(
-            state.initialize_startup(&untouched).unwrap_err(),
-            "database_initialization_durability_unsupported"
-        );
-        assert!(!untouched.join("mno.sqlite").exists());
-        assert!(state.operation(None).is_err());
+        let production_path = state.initialize_startup(&untouched).unwrap();
+        database::initialize_database(&production_path).unwrap();
+        assert!(production_path.exists());
+        assert!(state.operation(None).is_ok());
     }
     #[test]
     fn publication_is_no_clobber_even_when_destination_appears_at_boundary() {

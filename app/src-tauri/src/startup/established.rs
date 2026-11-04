@@ -53,9 +53,11 @@ pub(super) enum Point {
     BeforePublish,
     AfterPublish,
 }
+#[cfg(not(windows))]
 pub(super) fn publish(root: &Path) -> Result<(), String> {
     publish_with(root, |_| Ok(()))
 }
+#[cfg(not(windows))]
 pub(super) fn publish_with(
     root: &Path,
     mut hook: impl FnMut(Point) -> io::Result<()>,
@@ -81,6 +83,7 @@ pub(super) fn publish_with(
     sync_file(&published).map_err(failure)?;
     Ok(())
 }
+#[cfg(not(windows))]
 fn require_supported() -> Result<(), String> {
     if cfg!(any(target_os = "macos", target_os = "linux")) {
         Ok(())
@@ -88,6 +91,7 @@ fn require_supported() -> Result<(), String> {
         Err("database_initialization_durability_unsupported".into())
     }
 }
+#[cfg(not(windows))]
 fn sync_file(file: &File) -> io::Result<()> {
     #[cfg(target_os = "macos")]
     {
@@ -107,6 +111,7 @@ fn sync_file(file: &File) -> io::Result<()> {
         file.sync_all()
     }
 }
+#[cfg(not(windows))]
 fn sync_directory(root: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
@@ -132,6 +137,7 @@ fn sync_directory(root: &Path) -> io::Result<()> {
         Err(io::Error::from(io::ErrorKind::Unsupported))
     }
 }
+#[cfg(not(windows))]
 pub(super) fn confirm(root: &Path) -> Result<(), String> {
     require_supported()?;
     let file = File::open(root.join(NAME)).map_err(failure)?;
@@ -141,6 +147,7 @@ pub(super) fn confirm(root: &Path) -> Result<(), String> {
     }
     sync_file(&file).map_err(failure)
 }
+#[cfg(not(windows))]
 pub(super) fn sync_created_database(path: &Path, root: &Path) -> Result<(), String> {
     require_supported()?;
     let file = File::open(path).map_err(failure)?;
@@ -270,3 +277,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(windows)]
+pub(super) mod windows;
