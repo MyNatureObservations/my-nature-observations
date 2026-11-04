@@ -46,6 +46,16 @@ struct Lease {
     root: PathBuf,
     _file: File,
 }
+impl Drop for Lease {
+    fn drop(&mut self) {
+        // Logical ownership ends here, not when the last descriptor inherited
+        // by an unrelated fork/exec child eventually closes. Never delegate it.
+        if let Err(error) = FileExt::unlock(&self._file) {
+            eprintln!("prototype lease unlock failed: {error}");
+            std::process::abort();
+        }
+    }
+}
 impl Lease {
     fn open(root: &Path) -> Result<Self> {
         plain(root, true)?;
@@ -55,12 +65,15 @@ impl Lease {
             .write(true)
             .open(root.join("lease"))?;
         file.try_lock_exclusive()?;
-        plain(&root.join("generations"), true)?;
-        plain(&root.join("selections"), true)?;
-        Ok(Self {
+        // Establish the RAII owner immediately: validation errors after locking
+        // must follow the same explicit-unlock path as successful operations.
+        let lease = Self {
             root: root.into(),
             _file: file,
-        })
+        };
+        plain(&root.join("generations"), true)?;
+        plain(&root.join("selections"), true)?;
+        Ok(lease)
     }
     fn candidate(&self, id: &str) -> Result<PathBuf> {
         if uuid::Uuid::parse_str(id)?.to_string() != id {
@@ -595,3 +608,7 @@ fn inventory_preserves_exclusive_lease_and_includes_empty_lock_file() {
 
 #[path = "generation_activation_prototype/admission.rs"]
 mod admission;
+
+#[cfg(unix)]
+#[path = "generation_activation_prototype/lease_lifecycle.rs"]
+mod lease_lifecycle;

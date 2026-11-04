@@ -273,3 +273,24 @@ persistence and NTFS durability still need platform-specific acceptance. Lease/p
 identity, hostile substitution, WAL/hot-journal ordinary startup, durable root setup,
 legacy adoption and explicit repair UX remain outside this prototype. The existing
 100-record bound remains experimental. Process exits are not power-loss tests.
+
+### C3a: lease owner lifetime across Unix process spawning
+
+The prototype now explicitly unlocks in `Lease::drop`, matching the release
+pattern already used by production `startup::DirectoryLease` (unchanged).
+`fs2` uses Unix `flock`: a forked child's inherited open-file description can
+retain the lock after the parent's descriptor closes, until exec closes it or the
+child exits. Close-on-exec alone does not cover that transient pre-exec window.
+This caused a prototype owner-release/liveness defect, not overlapping admission
+or a failed exclusive-lock check. The prototype aborts on unlock error; it never
+silently reports release. An acquired lease gets its RAII owner before subsequent
+validation so error exits follow the same release rule.
+
+The Unix-only `lease_lifecycle` regression uses a controlled fork and bounded
+socket handshakes. The child performs only async-signal-safe syscalls and `_exit`.
+A negative control proves plain descriptor closure retains the inherited flock;
+lease drop must allow a single immediate acquisition while that child is alive.
+Competing owners remain excluded before and after transfer. No sleeps or lock
+retries are added. Child termination/reaping is guarded on test failures. Windows
+continues to run all applicable C2/C3 lock-exclusion and sharing tests; fork-specific
+coverage applies only to Unix. Existing identity/durability limitations remain.
