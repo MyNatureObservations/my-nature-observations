@@ -5,9 +5,11 @@ import { digest, validateBundle } from './policy.mjs';
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const generated = resolve(app, 'src-tauri/notices');
 validateBundle(generated);
-const bundle = process.argv[2];
+const resources = process.argv[2] === '--resources';
+const bundle = resources ? process.argv[3] : process.argv[2];
 if (bundle) {
-  const packaged = resolve(bundle, 'Contents/Resources/notices');
+  const packaged = resources ? resolve(bundle) : resolve(bundle, 'Contents/Resources/notices');
+  if (resources && validateBundle(packaged).target !== 'x86_64-pc-windows-msvc') throw Error('Packaged Windows target mismatch');
   validateBundle(packaged);
   function compare(directory = '') {
     for (const entry of readdirSync(resolve(generated, directory), { withFileTypes: true })) {

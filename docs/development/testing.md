@@ -463,3 +463,63 @@ not application acceptance. After CI, use an isolated Windows user/test environm
 first launch, save/close/reopen synthetic entries, second-instance exclusion,
 restart/error behavior and retained backup/sidecar evidence. Do not use real journal
 data or delete it to trigger a first launch. C2-C4 remain test-only reference models.
+
+
+## C6a: internal Windows NSIS test packaging
+
+Manually dispatch `CI` on `codex/cross-platform-ci` with
+`scope=windows-test-package`. This runs only the Windows packaging job, not full
+CI. It uses windows-2022, the existing Node/Rust pins, cargo-about 0.9.3 and locked
+npm/Cargo dependencies. Existing full CI and focused initialization scope remain
+available. C5c's Windows baseline is 353 library tests passed, four known failures
+and two ignored; packaging neither reruns nor resolves those failures.
+
+The production name, identifier and version remain unchanged. The explicit
+`app/src-tauri/tauri.windows-test.conf.json` overlay selects current-user NSIS and
+zlib compression. The ordinary macOS config is unchanged. The application is
+unsigned; SmartScreen or organizational policy can warn or block it. WebView2
+uses Tauri's existing Evergreen bootstrapper behavior and may require a download.
+No application or installer is launched during CI.
+
+Notices use a separately reviewed `native.windows.json` and the actual
+`x86_64-pc-windows-msvc` Cargo graph, not the macOS target inventory. Shared Rust
+source/runtime license evidence is target-independent and conservatively includes
+source components that may not survive linking. Windows-specific crate exceptions
+pin package checksum and VCS revision. The WebView2 static loader is byte-matched
+to Microsoft SDK 1.0.3800.47 and its BSD notice is included. MSVC 14.x/Visual Studio
+2022 runtime terms remain separate from MNO's MIT license and are displayed by the
+installer. Native NSIS zlib-stub and Tauri helper notices are included. Toolchain,
+SDK or CLI changes require review; a missing license/provenance check fails the
+build. These checks are an internal packaging boundary, not a new legal certification.
+
+The job extracts the NSIS archive with 7-Zip without executing it, verifies the
+packaged application SHA-256 against the x86_64 build, metadata and notice tree,
+and uploads `mno-windows-x86_64-nsis-test-<full commit SHA>` (14-day retention).
+Open the successful run's **Artifacts**, download that artifact and extract its
+ZIP. It contains the `.exe`, `SHA256SUMS.txt` and `BUILD-INFO.json`. A failed job
+must not be treated as producing an accepted installer. No Release/tag is created.
+
+### Mandatory isolation and first-launch acceptance
+
+This build uses `%APPDATA%\org.mynatureobservations.app`, the **production data
+location for that Windows user**, and ignores test-data overrides. Use a separate
+ordinary Windows test account, local NTFS/Roaming AppData, and synthetic data only.
+Do not install/run it under an account containing a real MNO journal. DEV data
+separation remains unchanged; this package does not use the DEV identity.
+
+1. In the separate account, confirm the production data directory is absent; if
+   present, stop rather than delete it to force first launch.
+2. Download/extract the artifact; compare `Get-FileHash -Algorithm SHA256` for the
+   installer with `SHA256SUMS.txt`. Record Windows/SmartScreen warnings; do not
+   disable security protections or elevate to bypass a failure.
+3. Install for the current user, without administrator elevation where supported.
+4. Start normally. Confirm no startup error, create/save synthetic entries, close
+   normally, restart and verify their contents.
+5. Attempt a second launch: it should focus the existing window rather than start
+   a competing journal owner. Close/reopen again and verify entries remain intact.
+6. Record any startup/application error or unexpected data deletion/replacement.
+   Keep failed-state evidence; do not remove markers or sidecars to force startup.
+
+Do not exercise Restore/Recovery, historical migration or experimental generation
+activation. Successful hosted packaging does not establish unelevated Windows 11
+runtime acceptance or physical power-loss durability. Do not change published v0.1.0.

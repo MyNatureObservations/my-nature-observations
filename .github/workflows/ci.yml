@@ -15,6 +15,7 @@ on:
         options:
           - full
           - windows-initialization-probe
+          - windows-test-package
 
 permissions:
   contents: read
@@ -30,7 +31,7 @@ env:
 
 jobs:
   quality:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope != 'windows-initialization-probe' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope == 'full' }}
     name: Tests and checks (macOS)
     runs-on: macos-15
     timeout-minutes: 30
@@ -120,7 +121,7 @@ jobs:
           git diff --exit-code
 
   notices:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope != 'windows-initialization-probe' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope == 'full' }}
     name: Offline notices (macOS arm64 package)
     runs-on: macos-15
     timeout-minutes: 45
@@ -189,7 +190,7 @@ jobs:
           PYTHON
 
   cross-platform:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope != 'windows-initialization-probe' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope == 'full' }}
     name: Rust visibility (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -318,6 +319,117 @@ jobs:
           Read the probe log for NTFS directory open/flush observations.
           API/process-exit success does not establish power-loss durability.
           Directory persistence remains explicitly unestablished, even if tests pass.
-          The 12 known Windows full-library failures are not exercised by this focused
+          The four known Windows full-library failures are not exercised by this focused
           run; default full CI and all existing test assertions remain unchanged.
+          SUMMARY
+
+  windows-test-package:
+    name: C6a internal Windows x86_64 NSIS test installer
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scope == 'windows-test-package' }}
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Set up reviewed Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustc -vV
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-about.exe
+            app/src-tauri/target
+          key: windows-nsis-${{ runner.arch }}-${{ env.RUST_VERSION }}-about-0.9.3-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+      - name: Verify native build environment
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'Reviewed Visual Studio 2022 MSVC tools required' }
+          $version = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt").Trim()
+          if ($version -notmatch '^14\.') { throw "Unreviewed MSVC toolset: $version" }
+          "MNO_MSVC_VERSION=$version" >> $env:GITHUB_ENV
+          Write-Output "MSVC $version (Visual Studio 2022)"
+      - name: Install pinned notice generator
+        run: |
+          if ! cargo about --version 2>/dev/null | grep -qx 'cargo-about 0.9.3'; then
+            cargo install cargo-about --version 0.9.3 --locked --features cli
+          fi
+      - name: Prepare frontend and run focused notices tests
+        run: |
+          npm ci
+          npm run i18n:compile
+          node --test tests/notices.test.mjs
+      - name: Build internal current-user NSIS installer
+        run: npm run tauri build -- --ci --no-sign --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.windows-test.conf.json -- --locked
+      - name: Verify installer resources without installation or launch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = 'src-tauri/target/x86_64-pc-windows-msvc/release'
+          $installers = @(Get-ChildItem "$release/bundle/nsis/*.exe")
+          if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
+          $installer = $installers[0]
+          $unpacked = Join-Path $env:RUNNER_TEMP 'mno-c6a-unpacked'
+          & 7z x $installer.FullName "-o$unpacked" -y
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS archive extraction failed' }
+          $notices = @(Get-ChildItem $unpacked -Recurse -Filter THIRD-PARTY-NOTICES.html)
+          if ($notices.Count -ne 1) { throw 'Expected one packaged notices directory' }
+          node scripts/notices/validate.mjs --resources $notices[0].DirectoryName
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged notices validation failed' }
+          $binary = Join-Path $release 'app.exe'
+          $bytes = [IO.File]::ReadAllBytes($binary)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3c)
+          if ([BitConverter]::ToUInt16($bytes, $pe + 4) -ne 0x8664) { throw 'Expected x86_64 PE binary' }
+          $version = (Get-Item $binary).VersionInfo
+          if ($version.ProductVersion -notmatch '^0\.1\.0(?:\.|$)' -or $version.ProductName -ne 'My Nature Observations') { throw 'Unexpected executable metadata' }
+          $binaryHash = (Get-FileHash $binary -Algorithm SHA256).Hash
+          $packagedBinary = @(Get-ChildItem $unpacked -Recurse -Filter '*.exe' | Where-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash -eq $binaryHash })
+          if ($packagedBinary.Count -ne 1) { throw 'Packaged application executable differs from build output' }
+          $icon = [BitConverter]::ToString([IO.File]::ReadAllBytes('src-tauri/icons/icon.ico')[0..3])
+          if ($icon -ne '00-00-01-00') { throw 'Windows icon missing or invalid' }
+          $script = Get-Content "$release/nsis/x64/installer.nsi" -Raw
+          if (!$script.Contains('org.mynatureobservations.app')) { throw 'Application identifier missing from installer script' }
+          New-Item -ItemType Directory -Path 'src-tauri/target/windows-test-artifact' | Out-Null
+          $out = 'src-tauri/target/windows-test-artifact'
+          Copy-Item $installer.FullName $out
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content "$out/SHA256SUMS.txt" -Encoding utf8
+          @{
+            sourceCommit = '${{ github.sha }}'; productName = $version.ProductName; version = $version.ProductVersion
+            identifier = 'org.mynatureobservations.app'; target = 'x86_64-pc-windows-msvc'; msvc = $env:MNO_MSVC_VERSION
+            installer = $installer.Name; sha256 = $hash; signed = $false
+            dataDirectory = '%APPDATA%\org.mynatureobservations.app'
+            acceptance = 'Use a separate ordinary Windows test account and synthetic data only. Do not test Restore/Recovery or migration.'
+            testBaseline = 'C5c: 353 library tests passed, 4 known failures, 2 ignored. Packaging does not rerun or resolve these failures.'
+          } | ConvertTo-Json | Set-Content "$out/BUILD-INFO.json" -Encoding utf8
+          Remove-Item $unpacked -Recurse -Force
+      - name: Upload internal test installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: mno-windows-x86_64-nsis-test-${{ github.sha }}
+          path: app/src-tauri/target/windows-test-artifact/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Explain acceptance boundary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          Internal, unsigned Windows x86_64 NSIS test build; not a release.
+          Current-user installer. Data: %APPDATA%\org.mynatureobservations.app.
+          Use a SEPARATE ordinary Windows test account with synthetic data.
+          No app installation or launch occurs in this job. Four known Windows
+          library failures remain documented; this packaging job does not run them.
+          Restore/Recovery, historical migration and generation activation remain restricted.
           SUMMARY
