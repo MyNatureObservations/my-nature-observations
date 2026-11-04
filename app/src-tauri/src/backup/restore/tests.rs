@@ -1045,3 +1045,5 @@ fn versioning_restore_keeps_schema_one_rejected_with_the_same_error_and_cleanup(
         assert_eq!(fs::read(&archive).unwrap(), archive_before);
     }
 }
+
+mod candidate_builder;

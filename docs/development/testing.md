@@ -144,3 +144,30 @@ For a branch without a pull request, maintainers can start the existing CI
 workflow with `workflow_dispatch` targeting that branch. A branch push alone
 retains the current main-only push trigger. Do not start a second run or poll
 for completion when handing the first run over for review.
+
+## C1: isolated restore candidate construction
+
+The existing `backup::restore::prepare_candidate` / `prepare_in` boundary validates
+an MNO backup and extracts a separate private, verified SQLite snapshot. It does
+not accept an active-journal location or grant activation/startup authority.
+`try_close` retains the private files after checked SQLite closure; dropping that
+owner cleans staging. This is temporary candidate ownership, not a durable
+journal-generation protocol or a migration to the current schema.
+
+Run the focused contract tests from the repository root:
+
+```sh
+cargo test --manifest-path app/src-tauri/Cargo.toml --locked --lib candidate_builder
+```
+
+These ungated library tests run in the existing macOS/Linux/Windows jobs. They
+cover schema-4/backup-v5 content (stored image, manual/fetched weather, places and
+default place), repeated construction, checked close/read-only reopening, unchanged
+inputs and a separate damaged journal with sidecars, truncation and injected
+mid-extraction disk/permission errors. Existing restore tests cover tampering,
+unsupported schemas/documents, cancellation, resource limits and WAL-source backup.
+Injected errors do not establish real filesystem/ACL failure coverage. The current
+fixture uses the existing database constructor directly, not application startup;
+Windows initialization/durability rejection and the known Windows baseline failures
+remain unchanged. Cross-platform success must be confirmed from CI; these tests do
+not enable Restore/Import/Recovery or establish power-loss durability.
