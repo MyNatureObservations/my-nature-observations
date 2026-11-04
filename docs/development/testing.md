@@ -294,3 +294,56 @@ Competing owners remain excluded before and after transfer. No sleeps or lock
 retries are added. Child termination/reaping is guarded on test failures. Windows
 continues to run all applicable C2/C3 lock-exclusion and sharing tests; fork-specific
 coverage applies only to Unix. Existing identity/durability limitations remain.
+
+## C4: single-record comparison prototype
+
+`tests/generation_activation_prototype/single_record.rs` is an isolated alternative
+in the same integration target. C2/C3 implementations/tests remain unchanged. It
+reuses their native lease/explicit unlock, strict candidate verifier, SQLite integrity
+and checked-close checks, synthetic fixtures, barriers and injection hooks.
+
+One `single-selection.json` contains format/version, generation UUID, pending/admitted
+phase and original candidate digest. There is no history, sequence chain or independent
+authority witness. Selection validates/synchronizes a standalone candidate, then
+publishes a pending record. Explicit admission revalidates the ORIGINAL digest and
+publishes admitted state. Ordinary admitted startup validates CURRENT synthetic SQLite
+integrity without comparing the original digest or rewriting the record after saves.
+C1's real backup/content validation is not replaced by these synthetic integrity checks.
+
+Publication uses a same-root temporary, file barrier, `tempfile::persist` replacement
+and directory barrier. A leftover `single-pending-*` temporary blocks startup even if
+an old record remains valid. Missing, malformed, truncated, duplicate-field, unsupported
+or unresolved records block; startup never guesses from generation directories or
+creates a DB. Missing/invalid selected generations or unaccounted sidecars also block.
+A record published before acknowledgement can survive a failed operation: restart
+reverifies/reconfirms barriers and honors its pending/admitted phase, never presumes
+the previous record survived. Permission/sharing failures remain errors.
+
+**Approved limitation:** the replay test restores an older internally valid admitted
+record and explicitly confirms that the older generation is selected. Without independent
+freshness evidence the protocol cannot detect this rollback. This is not corruption
+recovery or permission to fall back automatically when selection is missing/invalid.
+All generation files remain preserved; no deletion UI or cleanup policy is implemented.
+
+| Comparison | C2/C3 | C4 |
+| --- | --- | --- |
+| Persistent selection metadata | N history records + authority | One record |
+| Logical phases | Awaiting admission / admitted | Pending / admitted |
+| Publications per completed selection/admission | Pending authority + history + admitted authority | Pending record + admitted record |
+| Startup dependencies | Authority, full valid chain, selected DB | Record, selected DB |
+| Extra inconsistency cases | Gaps, head/history mismatch, 100-record cap | No cross-file metadata relationship |
+| Freshness limitation | Coherent authority/history rollback undetected | Valid older record replay undetected |
+
+The existing fixture's empty `selections/` directory is unused by C4; tests assert no
+history/authority files are written. Tests cover edits/restarts, strict pending digest,
+record/generation faults, preserved damaged old generations/sidecars, injected permission
+and sync failures, admission failures, subprocess exits before/after publication and
+admission acknowledgement, real Unix barriers and Windows delete-sharing denial.
+A synthetic backup sentinel is untouched because C4 does not open archives; C1 remains
+the actual .mno-backup preservation/validation test coverage.
+
+This meaningfully simplifies metadata handling and failure cases, NOT platform durability
+or identity work. Windows real directory durability remains Unsupported; modeled barriers
+are not persistence evidence. Subprocess exits are not power-loss tests. Existing limits
+on path substitution, private-root establishment, WAL/hot-journal reopening, production
+validators, legacy adoption and recovery UX remain. APFS/ext4/NTFS acceptance is separate.

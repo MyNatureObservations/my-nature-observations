@@ -612,3 +612,6 @@ mod admission;
 #[cfg(unix)]
 #[path = "generation_activation_prototype/lease_lifecycle.rs"]
 mod lease_lifecycle;
+
+#[path = "generation_activation_prototype/single_record.rs"]
+mod single_record;
