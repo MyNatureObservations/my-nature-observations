@@ -19,7 +19,7 @@ pub(super) struct Record {
     format: String,
     version: u32,
     pub(super) generation: String,
-    phase: Phase,
+    pub(super) phase: Phase,
     pub(super) candidate_sha256: String,
 }
 

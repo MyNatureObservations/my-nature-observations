@@ -20,15 +20,17 @@ impl DataLocation {
         Self(path)
     }
 }
-pub fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub fn database_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     app.try_state::<DataLocation>()
         .map(|location| location.0.clone())
         .ok_or_else(|| "database_startup_blocked".into())
 }
-pub fn open_database(app: &tauri::AppHandle) -> Result<Connection, String> {
-    let connection =
-        Connection::open_with_flags(database_path(app)?, OpenFlags::SQLITE_OPEN_READ_WRITE)
-            .map_err(|e| e.to_string())?;
+pub fn open_database<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Connection, String> {
+    open_existing(&database_path(app)?)
+}
+pub(crate) fn open_existing(path: &Path) -> Result<Connection, String> {
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
+        .map_err(|e| e.to_string())?;
     connection
         .pragma_update(None, "foreign_keys", true)
         .map_err(|e| e.to_string())?;

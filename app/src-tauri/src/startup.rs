@@ -267,6 +267,8 @@ impl Drop for DirectoryLease {
 pub(crate) struct StartupReady {
     #[cfg(windows)]
     database_pin: Option<File>,
+    #[cfg(windows)]
+    _generation_directories: Option<[File; 2]>,
     lock: Option<DirectoryLease>,
     path: PathBuf,
 }
@@ -302,6 +304,8 @@ impl StartupReady {
             path: PathBuf::new(),
             #[cfg(windows)]
             database_pin: None,
+            #[cfg(windows)]
+            _generation_directories: None,
         }
     }
 }
@@ -390,8 +394,16 @@ fn begin_with(
 ) -> Result<StartupOutcome, String> {
     let lock = DirectoryLease::acquire(root)?;
     #[cfg(windows)]
-    established::windows::managed_layout::require_legacy(&lock)
-        .map_err(|reason| reason.code().to_owned())?;
+    if let Some(admitted) = established::windows::managed_layout::resolve(&lock)
+        .map_err(|reason| reason.code().to_owned())?
+    {
+        return Ok(StartupOutcome::Ready(StartupReady {
+            path: admitted.path,
+            database_pin: Some(admitted.database),
+            _generation_directories: Some(admitted.directories),
+            lock: Some(lock),
+        }));
+    }
     let recovery = match checkpoint(&lock.root, &mut metadata) {
         Ok(present) => present,
         Err(reason) => {
@@ -504,6 +516,8 @@ fn begin_with(
         path,
         #[cfg(windows)]
         database_pin,
+        #[cfg(windows)]
+        _generation_directories: None,
     }))
 }
 #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]

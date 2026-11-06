@@ -1,8 +1,8 @@
-//! Presence and identity checks only. Managed startup cannot grant SQLite access.
+//! Resolve and verify admitted Windows journals under the startup lease.
 use super::*;
 use crate::startup::{
     DirectoryLease,
-    generation_selection::{LIMIT, Record},
+    generation_selection::{LIMIT, Phase, Record},
     windows_file_information,
 };
 
@@ -16,7 +16,8 @@ const DATABASE: &str = "journal.sqlite";
 pub(in crate::startup) enum Block {
     Invalid,
     Interrupted,
-    Disabled,
+    Pending,
+    Verification,
 }
 
 impl Block {
@@ -24,7 +25,8 @@ impl Block {
         match self {
             Self::Invalid => "database_managed_layout_invalid",
             Self::Interrupted => "database_managed_publication_incomplete",
-            Self::Disabled => "database_managed_startup_disabled",
+            Self::Pending => "database_managed_pending_admission_disabled",
+            Self::Verification => "database_managed_verification_failed",
         }
     }
 }
@@ -78,11 +80,17 @@ pub(in crate::startup) fn check_database_pin(path: &Path, pin: &File) -> Result<
     Ok(())
 }
 
-pub(in crate::startup) fn require_legacy(lease: &DirectoryLease) -> Result<(), Block> {
+pub(in crate::startup) struct Admitted {
+    pub(in crate::startup) path: PathBuf,
+    pub(in crate::startup) database: File,
+    pub(in crate::startup) directories: [File; 2],
+}
+
+pub(in crate::startup) fn resolve(lease: &DirectoryLease) -> Result<Option<Admitted>, Block> {
     inspect(lease).map_err(|_| Block::Invalid)?
 }
 
-fn inspect(lease: &DirectoryLease) -> io::Result<Result<(), Block>> {
+fn inspect(lease: &DirectoryLease) -> io::Result<Result<Option<Admitted>, Block>> {
     lease.boundary.check()?;
     let root = &lease.root;
     if canonical_entry(root, INTENT)? || canonical_entry(root, STAGED)? {
@@ -91,7 +99,7 @@ fn inspect(lease: &DirectoryLease) -> io::Result<Result<(), Block>> {
     let head = canonical_entry(root, HEAD)?;
     let generations = canonical_entry(root, GENERATIONS)?;
     if !head && !generations {
-        return Ok(Ok(()));
+        return Ok(Ok(None));
     }
     if !head
         || !generations
@@ -103,8 +111,10 @@ fn inspect(lease: &DirectoryLease) -> io::Result<Result<(), Block>> {
     }
 
     let mut bytes = Vec::new();
-    let record = open_single_file(&root.join(HEAD), 1)?;
-    (&record).take((LIMIT + 1) as u64).read_to_end(&mut bytes)?;
+    let record_pin = open_single_file(&root.join(HEAD), 1)?;
+    (&record_pin)
+        .take((LIMIT + 1) as u64)
+        .read_to_end(&mut bytes)?;
     let record = Record::decode(&bytes)?;
     let generations = root.join(GENERATIONS);
     let parent = directory_handle(&generations)?;
@@ -121,12 +131,52 @@ fn inspect(lease: &DirectoryLease) -> io::Result<Result<(), Block>> {
     let path = selected.join(DATABASE);
     let database = open_single_file(&path, 1)?;
     let volume = identity(&lease.directory)?.0;
-    if [parent, directory, database]
+    if [&parent, &directory, &database]
         .iter()
         .any(|file| identity(file).map_or(true, |id| id.0 != volume))
         || crate::startup::sidecars::check(&path, &mut |p| fs::symlink_metadata(p)).is_err()
     {
         return Ok(Err(Block::Invalid));
     }
-    Ok(Err(Block::Disabled))
+    if record.phase == Phase::Pending {
+        return Ok(Err(Block::Pending));
+    }
+    let mut header = [0u8; 20];
+    (&database).read_exact(&mut header)?;
+    if &header[..16] != b"SQLite format 3\0" || header[18..20] != [1, 1] {
+        return Ok(Err(Block::Verification));
+    }
+    if confirm(root, &lease.boundary).is_err()
+        || crate::database::initialize_database(&path).is_err()
+    {
+        return Ok(Err(Block::Verification));
+    }
+    let bridge = open_single_file(&path, 3)?;
+    if identity(&bridge)? != identity(&database)?
+        || crate::startup::sidecars::check(&path, &mut |p| fs::symlink_metadata(p)).is_err()
+    {
+        return Ok(Err(Block::Invalid));
+    }
+    lease.ensure_current().map_err(io::Error::other)?;
+    lease.boundary.check()?;
+    drop(database);
+    // Confirm a usable mutable open before exposing Ready. The bridge holds
+    // identity across both opens and does not request any SQLite byte locks.
+    let writable = match crate::database::open_existing(&path) {
+        Ok(connection) => connection,
+        Err(_) => return Ok(Err(Block::Verification)),
+    };
+    let readonly = writable.is_readonly(rusqlite::MAIN_DB);
+    if writable.close().is_err() || !matches!(readonly, Ok(false)) {
+        return Ok(Err(Block::Verification));
+    }
+    check_database_pin(&path, &bridge).map_err(io::Error::other)?;
+    if crate::startup::sidecars::check(&path, &mut |p| fs::symlink_metadata(p)).is_err() {
+        return Ok(Err(Block::Invalid));
+    }
+    Ok(Ok(Some(Admitted {
+        path,
+        database: bridge,
+        directories: [directory, parent],
+    })))
 }

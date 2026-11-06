@@ -438,3 +438,36 @@ bytes and grants no operation. Existing fresh and legacy tests run in
 the same Windows scope. Local macOS startup tests passed. Native Windows
 and Linux evidence awaits the full CI run. The accepted cooperating-writer
 and total-managed-artifact-loss limits still apply.
+
+### C7.3b admitted Windows startup
+
+The locked SQLite Windows VFS uses read/write sharing for ordinary database
+opens. The native C7.2 probe demonstrated the compatible overlapping read
+pins and ordinary SQLite writes. C7.3b reuses this handoff inside the existing
+startup lease. The resolver protects the selection while resolving its exact
+UUID and checking the retained directory and database handles.
+
+An admitted database must have a standalone rollback-format header and no
+unexpected sidecars. A restrictive read pin denies writes and deletion during
+current schema, integrity and stored-content verification. Startup reconfirms
+the existing establishment marker. An overlapping read pin allows compatible
+writes while denying deletion. File identity must match before releasing the
+restrictive pin. The existing read-write opener then checks that SQLite can
+actually open the database for writes without CREATE and closes it before Ready.
+Ready retains the database and directory pins. Normal SQLite operations use
+the selected path and retain their existing locking and transaction behavior.
+An admitted restart checks current data independently of the original digest.
+
+Pending and unsafe managed layouts return blocked startup errors. Neither the
+presence of a legacy journal nor evidence in an unselected generation changes
+the selected path. The native tests exercise the same DataLocation installer
+used by production Tauri setup through Tauri's mock runtime. They open the
+selected database through the production opener, edit it, drop the app state,
+then start again and read the edit. The tests check the selection and legacy
+bytes, preserve an old WAL, and exercise conflicting handles, lease exclusion,
+rename denial and rejected managed layouts. This verifies managed Tauri state
+without requiring a Windows desktop window or launching an installer.
+
+Windows execution of these new tests remains pending CI. The existing
+cooperating-writer model, older valid record replay and total managed evidence
+loss limits apply. Power-loss durability is outside this startup check.

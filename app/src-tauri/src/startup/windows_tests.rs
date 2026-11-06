@@ -375,11 +375,12 @@ fn independently_reopened_invalid_new_content_is_not_admitted() {
 }
 
 #[test]
-fn managed_layout_never_opens_sqlite_or_falls_back_to_legacy() {
+fn unsafe_or_pending_managed_layout_never_falls_back_to_legacy() {
     use super::generation_selection::{Phase, Record};
     for case in [
         "pending",
         "admitted",
+        "wrong_schema",
         "missing",
         "corrupt",
         "version",
@@ -418,11 +419,17 @@ fn managed_layout_never_opens_sqlite_or_falls_back_to_legacy() {
         match case {
             "hardlink" => fs::hard_link(&legacy, &candidate).unwrap(),
             "missing_database" | "junction" => (),
+            "wrong_schema" => {
+                database::create_current_database(&candidate).unwrap();
+                let db = database::open_existing(&candidate).unwrap();
+                db.pragma_update(None, "user_version", 3).unwrap();
+                db.close().unwrap();
+            }
             _ => fs::write(&candidate, b"opaque fixture: SQLite must never open this").unwrap(),
         }
         let record = Record::new(
             generation,
-            if case == "admitted" {
+            if matches!(case, "admitted" | "wrong_schema") {
                 Phase::Admitted
             } else {
                 Phase::Pending
@@ -458,7 +465,8 @@ fn managed_layout_never_opens_sqlite_or_falls_back_to_legacy() {
         let state = DatabaseState::default();
         let error = state.initialize_startup(&root).unwrap_err();
         let expected = match case {
-            "pending" | "admitted" => "database_managed_startup_disabled",
+            "pending" => "database_managed_pending_admission_disabled",
+            "admitted" | "wrong_schema" => "database_managed_verification_failed",
             "interrupted" => "database_managed_publication_incomplete",
             _ => "database_managed_layout_invalid",
         };
@@ -493,4 +501,80 @@ fn legacy_ready_uses_one_path_and_rejects_hardlinked_database() {
     assert!(blocked.ready_database_path().is_err());
     assert_eq!(fs::read(path).unwrap(), original);
     assert_eq!(fs::read(alias).unwrap(), original);
+}
+
+#[test]
+fn admitted_generation_installs_tauri_location_and_reopens_after_edits() {
+    use super::generation_selection::{Phase, Record};
+    use tauri::{
+        Manager,
+        test::{mock_builder, mock_context, noop_assets},
+    };
+
+    let (_temp, root) = created();
+    let legacy = root.join("mno.sqlite");
+    let legacy_before = fs::read(&legacy).unwrap();
+    let legacy_sidecar = root.join("mno.sqlite-wal");
+    fs::write(&legacy_sidecar, b"previous journal evidence").unwrap();
+
+    let generation = uuid::Uuid::new_v4();
+    let directory = root.join("generations").join(generation.to_string());
+    fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("journal.sqlite");
+    database::create_current_database(&path).unwrap();
+    let db = database::open_existing(&path).unwrap();
+    db.execute(
+        "INSERT INTO journal_entries VALUES ('entry','2026-10-25','Before',?1,2,'created','updated')",
+        [r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Synthetic entry"}]}]}"#],
+    ).unwrap();
+    db.close().unwrap();
+    let original = fs::read(&path).unwrap();
+    use sha2::{Digest, Sha256};
+    let digest = format!("{:x}", Sha256::digest(&original));
+    let selection = Record::new(generation, Phase::Admitted, digest)
+        .encode()
+        .unwrap();
+    let head = root.join("generation-selection.json");
+    fs::write(&head, &selection).unwrap();
+
+    let writer = OpenOptions::new().write(true).open(&path).unwrap();
+    let blocked = DatabaseState::default();
+    assert!(blocked.initialize_startup(&root).is_err());
+    assert!(blocked.ready_database_path().is_err());
+    drop(writer);
+
+    for (expected, edit) in [("Before", true), ("After", false)] {
+        let app = mock_builder()
+            .manage(DatabaseState::default())
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        crate::install_journal_location(app.handle(), &root).unwrap();
+        let resolved = path.canonicalize().unwrap();
+        let state = app.state::<DatabaseState>();
+        assert_eq!(state.ready_database_path().unwrap(), resolved);
+        assert_eq!(database::database_path(app.handle()).unwrap(), resolved);
+        assert!(DatabaseState::default().initialize_startup(&root).is_err());
+        assert!(fs::rename(&directory, directory.with_extension("moved")).is_err());
+        assert!(fs::rename(&path, path.with_extension("moved")).is_err());
+
+        let _operation = state.operation(None).unwrap();
+        let db = database::open_database(app.handle()).unwrap();
+        let title: String = db
+            .query_row("SELECT title FROM journal_entries", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(title, expected);
+        if edit {
+            db.execute("UPDATE journal_entries SET title='After'", [])
+                .unwrap();
+        }
+        db.close().unwrap();
+    }
+
+    assert_ne!(fs::read(path).unwrap(), original);
+    assert_eq!(fs::read(head).unwrap(), selection);
+    assert_eq!(fs::read(legacy).unwrap(), legacy_before);
+    assert_eq!(
+        fs::read(legacy_sidecar).unwrap(),
+        b"previous journal evidence"
+    );
 }
