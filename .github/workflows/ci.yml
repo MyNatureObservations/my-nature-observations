@@ -16,6 +16,7 @@ on:
           - full
           - windows-initialization-probe
           - windows-test-package
+          - windows-loader-diagnostic
 
 permissions:
   contents: read
@@ -283,7 +284,7 @@ jobs:
 
   windows-initialization-probe:
     name: C5a Windows initialization probe (not production readiness)
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scope == 'windows-initialization-probe' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.scope == 'windows-initialization-probe' || inputs.scope == 'windows-loader-diagnostic') }}
     runs-on: windows-2022
     timeout-minutes: 30
     defaults:
@@ -292,6 +293,8 @@ jobs:
         working-directory: app/src-tauri
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Set up reviewed Rust toolchain
         run: |
           rustup toolchain install "$RUST_VERSION" --profile minimal
@@ -305,21 +308,27 @@ jobs:
             ~/.cargo/git
             app/src-tauri/target
           key: cross-platform-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+      - name: Compare Windows library executable imports and loader behavior
+        if: inputs.scope == 'windows-loader-diagnostic'
+        shell: pwsh
+        working-directory: .
+        run: ./.github/scripts/windows-loader-diagnostic.ps1
       - name: Run isolated schema and Windows persistence probes
+        if: inputs.scope == 'windows-initialization-probe'
         run: cargo test --locked --lib windows_initialization_probe -- --nocapture
       - name: Run production Windows startup safety regressions
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && inputs.scope == 'windows-initialization-probe' }}
         run: cargo test --locked --lib startup::windows_tests
       - name: Run isolated C7.1 selection and NTFS replacement checks
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && inputs.scope == 'windows-initialization-probe' }}
         run: |
           cargo test --locked --lib startup::generation_selection
           cargo test --locked --lib selection_probe
       - name: Run isolated C1 and C7.2 candidate checks
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && inputs.scope == 'windows-initialization-probe' }}
         run: cargo test --locked --lib candidate_builder
       - name: Explain focused scope
-        if: always()
+        if: ${{ always() && inputs.scope == 'windows-initialization-probe' }}
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
           This scope runs Windows initialization, startup safety, selection and candidate checks.

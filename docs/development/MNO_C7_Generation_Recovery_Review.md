@@ -471,3 +471,27 @@ without requiring a Windows desktop window or launching an installer.
 Windows execution of these new tests remains pending CI. The existing
 cooperating-writer model, older valid record replay and total managed evidence
 loss limits apply. Power-loss durability is outside this startup check.
+
+### C7.3b.1 Windows loader investigation
+
+[Run 42183716412](https://github.com/MyNatureObservations/my-nature-observations/actions/runs/42183716412)
+compiled the Windows library test executable, which exited with
+0xC0000139 before printing a harness header. The selected integration
+executables ran 37 tests successfully. The library log contains neither
+the entry point nor the DLL and cannot distinguish a direct import failure
+from one in a dependent DLL or initializer. No library test result can
+be compared with the C5c four-failure baseline from this run.
+
+The C7.3b lockfile matches C7.3a. The new Windows-only Tauri test feature
+and the mock runtime call can change the test executable's linked imports.
+The managed startup changes reuse the existing file-information, handle,
+sharing and persistence APIs. The available evidence does not identify
+which binary or DLL requested the unresolved symbol.
+
+The opt-in windows-loader-diagnostic scope builds both library executables
+on Windows Server 2022, prints their import differences, checks direct
+imports against DLL exports and attempts to list tests. If Windows SDK
+debugging tools are installed, it also captures loader snaps for the failing
+executable. The export check runs in PowerShell and the executable launch
+and loader traces provide the process-specific evidence. No application
+changes are included in this investigation.
