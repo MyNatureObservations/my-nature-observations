@@ -288,3 +288,6 @@ pub(in crate::startup) fn with_fault<T>(point: Fault, action: impl FnOnce() -> T
 #[cfg(test)]
 #[path = "selection_probe.rs"]
 mod selection_probe;
+
+#[path = "managed_layout.rs"]
+pub(in crate::startup) mod managed_layout;

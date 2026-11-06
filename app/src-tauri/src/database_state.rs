@@ -120,7 +120,13 @@ impl DatabaseState {
     }
     pub(crate) fn ready_database_path(&self) -> Result<std::path::PathBuf, String> {
         let _operation = self.operation(None)?;
-        Ok(self.lease()?.database_path())
+        match self.directory.get().ok_or("database_startup_blocked")? {
+            crate::startup::StartupOutcome::Ready(ready) => {
+                ready.lease()?;
+                Ok(ready.database_path())
+            }
+            crate::startup::StartupOutcome::Recovery(gate) => Ok(gate.lease()?.database_path()),
+        }
     }
     fn lease(&self) -> Result<&crate::startup::DirectoryLease, String> {
         match self.directory.get().ok_or("database_startup_blocked")? {

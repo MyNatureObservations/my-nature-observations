@@ -1,4 +1,4 @@
-//! C7.1 record contract. This module is compiled only for tests.
+//! Strict generation selection record and isolated layout contract.
 use serde::{Deserialize, Serialize};
 use std::io;
 use uuid::Uuid;
@@ -31,6 +31,7 @@ pub(super) fn invalid() -> io::Error {
 }
 
 impl Record {
+    #[cfg(test)]
     pub(super) fn new(generation: Uuid, phase: Phase, digest: String) -> Self {
         Self {
             format: FORMAT.into(),
@@ -61,13 +62,14 @@ impl Record {
         Ok(record)
     }
 
+    #[cfg(test)]
     pub(super) fn encode(&self) -> io::Result<Vec<u8>> {
         let bytes = serde_json::to_vec(self).map_err(io::Error::other)?;
         Self::decode(&bytes)?;
         Ok(bytes)
     }
 
-    #[cfg(windows)]
+    #[cfg(all(windows, test))]
     pub(super) fn follows(&self, previous: Option<&Self>) -> bool {
         match (self.phase, previous) {
             (Phase::Pending, None) => true,
@@ -86,6 +88,7 @@ impl Record {
 
 // Supplied by the owning startup protocol in a future stage. A missing
 // record cannot prove freshness, legacy establishment or absence of history.
+#[cfg(test)]
 #[derive(Clone, Copy)]
 pub(super) enum LayoutEvidence {
     Fresh,
@@ -94,6 +97,7 @@ pub(super) enum LayoutEvidence {
     Uncertain,
 }
 
+#[cfg(test)]
 #[derive(Debug, Eq, PartialEq)]
 pub(super) enum Selection {
     Fresh,
@@ -101,6 +105,7 @@ pub(super) enum Selection {
     Managed(Record),
 }
 
+#[cfg(test)]
 pub(super) fn classify(
     evidence: LayoutEvidence,
     record: Option<&[u8]>,
@@ -117,6 +122,7 @@ pub(super) fn classify(
     }
 }
 
+#[cfg(test)]
 #[test]
 fn strict_codec_and_layout_classification() {
     use LayoutEvidence::*;

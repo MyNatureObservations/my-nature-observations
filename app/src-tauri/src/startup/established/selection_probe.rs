@@ -13,9 +13,7 @@ use windows_sys::Win32::{
     },
 };
 
-const HEAD: &str = "generation-selection.json";
-const STAGED: &str = ".generation-selection-staged";
-const INTENT: &str = ".generation-selection-in-progress";
+use super::managed_layout::{HEAD, INTENT, STAGED};
 
 fn present(path: &Path) -> io::Result<bool> {
     match fs::symlink_metadata(path) {

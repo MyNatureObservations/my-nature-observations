@@ -61,6 +61,16 @@ fn identity(file: &File) -> io::Result<(u64, u64)> {
 }
 #[cfg(windows)]
 fn identity(file: &File) -> io::Result<(u64, u64)> {
+    let info = windows_file_information(file)?;
+    Ok((
+        info.dwVolumeSerialNumber as u64,
+        ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
+    ))
+}
+#[cfg(windows)]
+fn windows_file_information(
+    file: &File,
+) -> io::Result<windows_sys::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION> {
     use std::{mem::zeroed, os::windows::io::AsRawHandle};
     use windows_sys::Win32::Storage::FileSystem::{
         BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
@@ -69,10 +79,7 @@ fn identity(file: &File) -> io::Result<(u64, u64)> {
     if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok((
-        info.dwVolumeSerialNumber as u64,
-        ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
-    ))
+    Ok(info)
 }
 #[cfg(not(any(unix, windows)))]
 fn identity(_: &File) -> io::Result<(u64, u64)> {
@@ -258,7 +265,10 @@ impl Drop for DirectoryLease {
 // The lockfile is never unlinked: file existence is not the lock. Closing the
 // OS handle (also at process death) releases flock/LockFileEx automatically.
 pub(crate) struct StartupReady {
+    #[cfg(windows)]
+    database_pin: Option<File>,
     lock: Option<DirectoryLease>,
+    path: PathBuf,
 }
 impl StartupReady {
     pub(crate) fn lease(&self) -> Result<&DirectoryLease, String> {
@@ -267,17 +277,18 @@ impl StartupReady {
         Ok(lease)
     }
     pub(crate) fn database_path(&self) -> PathBuf {
-        database::expected_database_path(
-            &self
-                .lock
-                .as_ref()
-                .expect("production startup owns lock")
-                .root,
-        )
+        self.path.clone()
     }
     pub(crate) fn ensure_current(&self) -> Result<(), String> {
         match &self.lock {
-            Some(lock) => lock.ensure_current(),
+            Some(lock) => {
+                lock.ensure_current()?;
+                #[cfg(windows)]
+                if let Some(pin) = &self.database_pin {
+                    established::windows::managed_layout::check_database_pin(&self.path, pin)?;
+                }
+                Ok(())
+            }
             #[cfg(test)]
             None => Ok(()),
             #[cfg(not(test))]
@@ -286,7 +297,12 @@ impl StartupReady {
     }
     #[cfg(test)]
     pub(crate) fn for_test() -> Self {
-        Self { lock: None }
+        Self {
+            lock: None,
+            path: PathBuf::new(),
+            #[cfg(windows)]
+            database_pin: None,
+        }
     }
 }
 // No constructor outside startup. Stored by DatabaseState even when startup is
@@ -373,6 +389,9 @@ fn begin_with(
     initialize: impl FnOnce(&Path, bool) -> Result<(), String>,
 ) -> Result<StartupOutcome, String> {
     let lock = DirectoryLease::acquire(root)?;
+    #[cfg(windows)]
+    established::windows::managed_layout::require_legacy(&lock)
+        .map_err(|reason| reason.code().to_owned())?;
     let recovery = match checkpoint(&lock.root, &mut metadata) {
         Ok(present) => present,
         Err(reason) => {
@@ -418,6 +437,15 @@ fn begin_with(
             }
         }
     }
+    #[cfg(windows)]
+    let mut database_pin = if exists {
+        Some(established::windows::managed_layout::pin_database(
+            &path,
+            &lock.directory,
+        )?)
+    } else {
+        None
+    };
     if !initialized {
         #[cfg(not(windows))]
         established::publish(&lock.root)?;
@@ -463,11 +491,20 @@ fn begin_with(
         #[cfg(windows)]
         {
             established::windows::sync_created_database(&path, &lock.boundary)?;
+            database_pin = Some(established::windows::managed_layout::pin_database(
+                &path,
+                &lock.directory,
+            )?);
             database::initialize_database(&path)?;
         }
     }
     lock.ensure_current()?;
-    Ok(StartupOutcome::Ready(StartupReady { lock: Some(lock) }))
+    Ok(StartupOutcome::Ready(StartupReady {
+        lock: Some(lock),
+        path,
+        #[cfg(windows)]
+        database_pin,
+    }))
 }
 #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
 mod tests;
@@ -560,5 +597,5 @@ pub(crate) mod migration_probe {
 #[cfg(all(test, windows))]
 mod windows_tests;
 
-#[cfg(test)]
+#[cfg(any(test, windows))]
 mod generation_selection;

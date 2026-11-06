@@ -398,3 +398,43 @@ claims are outside this integration. Before implementation, confirm that
 retained namespace evidence and the cooperating-writer model are the
 intended limits. C7.4 must establish and persist that namespace before
 publishing its first selection.
+
+### C7.3a production layout and path ownership
+
+Under the existing Windows directory lease, the
+[layout resolver](../../app/src-tauri/src/startup/established/managed_layout.rs)
+recognizes the reserved selection, staging, interruption and generations
+names before the legacy path is derived. Any surviving managed evidence
+prevents legacy fallback. The resolver rejects noncanonical case aliases,
+missing or invalid metadata, incomplete publication and conflicts with
+legacy recovery artifacts. A managed root requires existing establishment
+evidence. Absence of managed evidence allows the existing legacy path,
+including its separate first-creation checks.
+
+For a valid record the resolver inspects only the selected UUID directory
+and its fixed journal filename. It checks local NTFS, volume and file
+metadata through retained handles, rejects reparse points and multiple
+links, and checks for SQLite sidecars by presence. Both phases end in
+the typed disabled outcome. The resolver never invokes SQLite for a
+managed journal. Its file checks establish the current layout and object
+type. Pending digest and cross-restart admission validation belong to
+later slices. A plain substituted file still cannot receive Ready.
+
+StartupReady owns the resolved path and lease, with a retained Windows
+database pin on successful legacy startup. The pin allows compatible
+SQLite access while denying delete sharing. Windows validates the legacy
+database's volume, link count and type before Ready, and the operation
+gate checks the named identity against the pin. The startup result and
+ready_database_path both read the Ready path. Existing app setup installs
+that same result as DataLocation. The old lease-derived path remains
+limited to the existing legacy recovery gate. macOS and Linux continue
+using their existing startup checks and paths.
+
+The native Windows tests exercise both managed phases, missing and
+malformed state, an unsupported version, conflicting legacy evidence,
+interruption, sidecars, hard links, a junction and a missing database.
+They check that rejected startup preserves the legacy and candidate
+bytes and grants no operation. Existing fresh and legacy tests run in
+the same Windows scope. Local macOS startup tests passed. Native Windows
+and Linux evidence awaits the full CI run. The accepted cooperating-writer
+and total-managed-artifact-loss limits still apply.

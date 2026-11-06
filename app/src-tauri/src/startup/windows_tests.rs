@@ -373,3 +373,124 @@ fn independently_reopened_invalid_new_content_is_not_admitted() {
     assert!(state.operation(None).is_err());
     assert_eq!(bytes(&root), before);
 }
+
+#[test]
+fn managed_layout_never_opens_sqlite_or_falls_back_to_legacy() {
+    use super::generation_selection::{Phase, Record};
+    for case in [
+        "pending",
+        "admitted",
+        "missing",
+        "corrupt",
+        "version",
+        "conflict",
+        "interrupted",
+        "sidecar",
+        "hardlink",
+        "missing_database",
+        "junction",
+    ] {
+        let (temp, root) = created();
+        let legacy = root.join("mno.sqlite");
+        let original = fs::read(&legacy).unwrap();
+        let generation = uuid::Uuid::new_v4();
+        let generations = root.join("generations");
+        fs::create_dir(&generations).unwrap();
+        let selected = generations.join(generation.to_string());
+        if case == "junction" {
+            let target = temp.path().join("external");
+            fs::create_dir(&target).unwrap();
+            fs::write(target.join("journal.sqlite"), b"external sentinel").unwrap();
+            assert!(
+                Command::new("cmd")
+                    .args(["/D", "/C", "mklink", "/J"])
+                    .arg(&selected)
+                    .arg(&target)
+                    .output()
+                    .unwrap()
+                    .status
+                    .success()
+            );
+        } else {
+            fs::create_dir(&selected).unwrap();
+        }
+        let candidate = selected.join("journal.sqlite");
+        match case {
+            "hardlink" => fs::hard_link(&legacy, &candidate).unwrap(),
+            "missing_database" | "junction" => (),
+            _ => fs::write(&candidate, b"opaque fixture: SQLite must never open this").unwrap(),
+        }
+        let record = Record::new(
+            generation,
+            if case == "admitted" {
+                Phase::Admitted
+            } else {
+                Phase::Pending
+            },
+            "a".repeat(64),
+        );
+        let mut bytes = record.encode().unwrap();
+        match case {
+            "corrupt" => bytes.truncate(4),
+            "version" => {
+                bytes = String::from_utf8(bytes)
+                    .unwrap()
+                    .replace("\"version\":1", "\"version\":2")
+                    .into_bytes()
+            }
+            _ => (),
+        }
+        let head = root.join("generation-selection.json");
+        if case != "missing" {
+            fs::write(&head, &bytes).unwrap();
+        }
+        if case == "interrupted" {
+            fs::write(root.join(".generation-selection-in-progress"), b"intent").unwrap();
+        }
+        if case == "conflict" {
+            fs::write(root.join("pending-restore.json"), b"legacy evidence").unwrap();
+        }
+        let sidecar = selected.join("journal.sqlite-wal");
+        if case == "sidecar" {
+            fs::write(&sidecar, b"preserve WAL").unwrap();
+        }
+        let before_candidate = fs::read(&candidate).ok();
+        let state = DatabaseState::default();
+        let error = state.initialize_startup(&root).unwrap_err();
+        let expected = match case {
+            "pending" | "admitted" => "database_managed_startup_disabled",
+            "interrupted" => "database_managed_publication_incomplete",
+            _ => "database_managed_layout_invalid",
+        };
+        assert_eq!(error, expected, "{case}");
+        assert!(state.ready_database_path().is_err());
+        assert!(state.operation(None).is_err());
+        assert_eq!(fs::read(&legacy).unwrap(), original);
+        assert_eq!(fs::read(&candidate).ok(), before_candidate);
+        if case != "missing" {
+            assert_eq!(fs::read(head).unwrap(), bytes);
+        }
+        if case == "sidecar" {
+            assert_eq!(fs::read(sidecar).unwrap(), b"preserve WAL");
+        }
+    }
+}
+
+#[test]
+fn legacy_ready_uses_one_path_and_rejects_hardlinked_database() {
+    let (_temp, root) = created();
+    let state = DatabaseState::default();
+    let path = state.initialize_startup(&root).unwrap();
+    assert_eq!(path, root.canonicalize().unwrap().join("mno.sqlite"));
+    assert_eq!(state.ready_database_path().unwrap(), path);
+    assert!(fs::rename(&path, root.join("substitute.sqlite")).is_err());
+    let original = fs::read(&path).unwrap();
+    drop(state);
+    let alias = root.join("alias.sqlite");
+    fs::hard_link(&path, &alias).unwrap();
+    let blocked = DatabaseState::default();
+    assert!(blocked.initialize_startup(&root).is_err());
+    assert!(blocked.ready_database_path().is_err());
+    assert_eq!(fs::read(path).unwrap(), original);
+    assert_eq!(fs::read(alias).unwrap(), original);
+}
