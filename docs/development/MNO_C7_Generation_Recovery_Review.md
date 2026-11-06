@@ -495,3 +495,36 @@ debugging tools are installed, it also captures loader snaps for the failing
 executable. The export check runs in PowerShell and the executable launch
 and loader traces provide the process-specific evidence. No application
 changes are included in this investigation.
+
+### C7.3b.2 confirmed loader failure and test boundary
+
+[Native diagnostic run 42185653450](https://github.com/MyNatureObservations/my-nature-observations/actions/runs/42185653450)
+found a new direct import from the C7.3b library test executable,
+comctl32.dll!TaskDialogIndirect. The working C7.3a executable lacked that
+import and listed tests successfully on the same runner. Loader snaps
+identify the failed name lookup in Common Controls 5.82.20348.5139.
+The subsequent userenv.dll message reports the process-wide initialization
+failure. The missing export belongs to Common Controls and requires
+[version 6](https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-taskdialogindirect).
+
+The mock-runtime test instantiated the generic app setup helper, including
+its native startup error branch. That branch links tauri-plugin-dialog
+and its rfd 0.16 common-controls-v6 backend, which directly references
+TaskDialogIndirect. The Windows-only Tauri test feature enabled the mock
+runtime. The logs identify the linked import, and the source identifies
+the dialog call chain. A feature-only build was not separately measured.
+
+The lifecycle test now calls the same startup-to-DataLocation installer
+as app setup with a capture callback. Production supplies app.manage
+and handles native dialogs outside that shared boundary. The test uses
+the captured path with the production SQLite opener, checks path agreement
+and verifies edits across a second startup. The test also checks that
+blocked startup never invokes the installer. This supersedes the mock
+runtime described above. Actual Tauri state registration, lookup and
+desktop startup remain outside this test's coverage.
+
+The focused windows-startup-baseline scope lists library tests, runs native
+startup regressions and runs the full Windows library suite for comparison
+with the four known failures. Native verification of the correction awaits
+that run. Local macOS all-target compilation and eight startup-error tests
+passed.

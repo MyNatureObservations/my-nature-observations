@@ -504,13 +504,8 @@ fn legacy_ready_uses_one_path_and_rejects_hardlinked_database() {
 }
 
 #[test]
-fn admitted_generation_installs_tauri_location_and_reopens_after_edits() {
+fn admitted_generation_supplies_startup_location_and_reopens_after_edits() {
     use super::generation_selection::{Phase, Record};
-    use tauri::{
-        Manager,
-        test::{mock_builder, mock_context, noop_assets},
-    };
-
     let (_temp, root) = created();
     let legacy = root.join("mno.sqlite");
     let legacy_before = fs::read(&legacy).unwrap();
@@ -539,26 +534,35 @@ fn admitted_generation_installs_tauri_location_and_reopens_after_edits() {
 
     let writer = OpenOptions::new().write(true).open(&path).unwrap();
     let blocked = DatabaseState::default();
-    assert!(blocked.initialize_startup(&root).is_err());
+    assert!(
+        crate::install_journal_location(&blocked, &root, |_| {
+            panic!("blocked startup must not install DataLocation")
+        })
+        .is_err()
+    );
     assert!(blocked.ready_database_path().is_err());
     drop(writer);
 
     for (expected, edit) in [("Before", true), ("After", false)] {
-        let app = mock_builder()
-            .manage(DatabaseState::default())
-            .build(mock_context(noop_assets()))
-            .unwrap();
-        crate::install_journal_location(app.handle(), &root).unwrap();
+        let state = DatabaseState::default();
+        let mut location = None;
+        assert!(
+            crate::install_journal_location(&state, &root, |value| {
+                location = Some(value);
+                true
+            })
+            .unwrap()
+        );
         let resolved = path.canonicalize().unwrap();
-        let state = app.state::<DatabaseState>();
+        let location = location.unwrap();
         assert_eq!(state.ready_database_path().unwrap(), resolved);
-        assert_eq!(database::database_path(app.handle()).unwrap(), resolved);
+        assert_eq!(location.path(), resolved);
         assert!(DatabaseState::default().initialize_startup(&root).is_err());
         assert!(fs::rename(&directory, directory.with_extension("moved")).is_err());
         assert!(fs::rename(&path, path.with_extension("moved")).is_err());
 
         let _operation = state.operation(None).unwrap();
-        let db = database::open_database(app.handle()).unwrap();
+        let db = database::open_existing(location.path()).unwrap();
         let title: String = db
             .query_row("SELECT title FROM journal_entries", [], |row| row.get(0))
             .unwrap();

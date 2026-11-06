@@ -19,13 +19,16 @@ impl DataLocation {
     pub(crate) fn new(path: PathBuf) -> Self {
         Self(path)
     }
+    pub(crate) fn path(&self) -> &Path {
+        &self.0
+    }
 }
-pub fn database_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
+pub fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.try_state::<DataLocation>()
-        .map(|location| location.0.clone())
+        .map(|location| location.path().to_owned())
         .ok_or_else(|| "database_startup_blocked".into())
 }
-pub fn open_database<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Connection, String> {
+pub fn open_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     open_existing(&database_path(app)?)
 }
 pub(crate) fn open_existing(path: &Path) -> Result<Connection, String> {

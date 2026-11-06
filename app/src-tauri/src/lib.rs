@@ -95,7 +95,14 @@ pub fn run() {
                 #[cfg(debug_assertions)]
                 eprintln!("MNO DEV data directory: {}", directory.display());
             }
-            install_journal_location(app.handle(), &directory)?;
+            let state = app.state::<database_state::DatabaseState>();
+            match install_journal_location(&state, &directory, |location| app.manage(location)) {
+                Ok(true) => (),
+                Ok(false) => {
+                    return Err(std::io::Error::other("database_location_already_installed").into());
+                }
+                Err(failure) => startup_error::show(app.handle(), failure),
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -170,26 +177,14 @@ mod schema_v1;
 
 mod storage_content;
 
-fn install_journal_location<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
+// Shared startup-to-state boundary. Only app setup supplies Tauri's state installer.
+fn install_journal_location(
+    state: &database_state::DatabaseState,
     directory: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use tauri::Manager;
-    let state = app.state::<database_state::DatabaseState>();
-    match startup_error::initialize(&state, directory) {
-        Ok(Some(path)) => {
-            if !app.manage(database::DataLocation::new(path)) {
-                return Err(std::io::Error::other("database_location_already_installed").into());
-            }
-        }
-        Ok(None) => {
-            // Keep the same lease/gate. No DataLocation and no journal access.
-        }
-        Err(failure) => {
-            startup_error::show(app, failure);
-            return Ok(());
-        }
+    install: impl FnOnce(database::DataLocation) -> bool,
+) -> Result<bool, startup_error::Failure> {
+    match startup_error::initialize(state, directory)? {
+        Some(path) => Ok(install(database::DataLocation::new(path))),
+        None => Ok(true),
     }
-
-    Ok(())
 }

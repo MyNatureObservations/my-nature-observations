@@ -17,6 +17,7 @@ on:
           - windows-initialization-probe
           - windows-test-package
           - windows-loader-diagnostic
+          - windows-startup-baseline
 
 permissions:
   contents: read
@@ -284,7 +285,7 @@ jobs:
 
   windows-initialization-probe:
     name: C5a Windows initialization probe (not production readiness)
-    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.scope == 'windows-initialization-probe' || inputs.scope == 'windows-loader-diagnostic') }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.scope == 'windows-initialization-probe' || inputs.scope == 'windows-loader-diagnostic' || inputs.scope == 'windows-startup-baseline') }}
     runs-on: windows-2022
     timeout-minutes: 30
     defaults:
@@ -313,6 +314,14 @@ jobs:
         shell: pwsh
         working-directory: .
         run: ./.github/scripts/windows-loader-diagnostic.ps1
+      - name: List library tests and run Windows startup regressions
+        if: inputs.scope == 'windows-startup-baseline'
+        run: |
+          cargo test --locked --lib -- --list
+          cargo test --locked --lib startup::windows_tests
+      - name: Compare the Windows library failure baseline
+        if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
+        run: cargo test --locked --lib
       - name: Run isolated schema and Windows persistence probes
         if: inputs.scope == 'windows-initialization-probe'
         run: cargo test --locked --lib windows_initialization_probe -- --nocapture

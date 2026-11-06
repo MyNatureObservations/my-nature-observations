@@ -51,7 +51,7 @@ pub(crate) fn initialize(
     }
 }
 
-pub(crate) fn show<R: tauri::Runtime>(app: &tauri::AppHandle<R>, failure: Failure) {
+pub(crate) fn show(app: &tauri::AppHandle, failure: Failure) {
     // No DataLocation is installed. Keep the normal journal window inaccessible.
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
