@@ -47,6 +47,8 @@ pub(crate) fn initialize(
     match state.initialize_startup(directory) {
         Ok(path) => Ok(Some(path)),
         Err(_) if state.startup_recovery_pending() => Ok(None),
+        #[cfg(windows)]
+        Err(_) if state.windows_recovery_available() => Ok(None),
         Err(error) => Err(Failure::from_error(&error)),
     }
 }

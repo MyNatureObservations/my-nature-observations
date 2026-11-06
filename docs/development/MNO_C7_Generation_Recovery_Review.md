@@ -910,3 +910,21 @@ Once a private installer is available and desktop testing is approved:
 This desktop plan exercises Tauri state registration and lookup, WebView
 rendering, picker and command IPC, actual Quit and relaunch, admission and
 writable SQLite reopening. It does not establish power-loss durability.
+
+### C7.5b.1 desktop startup routing
+
+The Windows 11 acceptance build blocked the empty managed namespace
+correctly, but Tauri setup treated the managed startup error as fatal.
+The startup adapter allowed only the older Recovery phase to proceed
+without installing DataLocation. Windows managed Recovery uses Blocked
+with a retained lease and separate eligibility. The native error path
+hid the main window and offered Exit before the frontend could route it.
+
+The desktop adapter now uses the same Windows eligibility check as
+`database_mode` and leaves the WebView available without installing
+DataLocation. Unsupported failures still use the native dialog.
+The regression exercises the setup adapter with a normal journal,
+the empty generations fixture, and an unsupported namespace object.
+Native CI covers the adapter and real filesystem operations. A fresh
+local Windows installer and manual retest are still required for
+desktop acceptance.

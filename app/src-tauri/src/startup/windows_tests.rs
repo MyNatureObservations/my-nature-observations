@@ -548,11 +548,11 @@ fn managed_lifecycle(initial_phase: super::generation_selection::Phase) {
 
     let writer = OpenOptions::new().write(true).open(&path).unwrap();
     let blocked = DatabaseState::default();
-    assert!(
+    assert_eq!(
         crate::install_journal_location(&blocked, &root, |_| {
             panic!("blocked startup must not install DataLocation")
-        })
-        .is_err()
+        }),
+        Ok(true)
     );
     assert!(blocked.ready_database_path().is_err());
     drop(writer);
@@ -649,11 +649,11 @@ fn pending_admission_interruption_matrix_preserves_evidence_and_gates_ready() {
 
         let state = DatabaseState::default();
         with_admission_fault(point, || {
-            assert!(
+            assert_eq!(
                 crate::install_journal_location(&state, &root, |_| {
                     panic!("interrupted admission must not install DataLocation")
-                })
-                .is_err(),
+                }),
+                Ok(true),
                 "{point:?}"
             );
         });
@@ -991,4 +991,54 @@ fn recovery_rejects_shared_or_hardlinked_staging_evidence() {
     for path in [staged, alias] {
         assert_eq!(fs::read(path).unwrap(), b"original staging evidence");
     }
+}
+
+#[test]
+fn desktop_startup_routes_missing_selection_to_recovery_without_installing_journal() {
+    let (_parent, root) = created();
+    let legacy = root.join("mno.sqlite");
+    let original = fs::read(&legacy).unwrap();
+
+    let ready = DatabaseState::default();
+    let mut installed = None;
+    assert_eq!(
+        crate::install_journal_location(&ready, &root, |location| {
+            installed = Some(location);
+            true
+        }),
+        Ok(true)
+    );
+    assert_eq!(installed.unwrap().path(), legacy.canonicalize().unwrap());
+    assert!(!ready.windows_recovery_available());
+    drop(ready);
+
+    let generations = root.join("generations");
+    fs::create_dir(&generations).unwrap();
+    let blocked = DatabaseState::default();
+    assert_eq!(
+        crate::install_journal_location(&blocked, &root, |_| {
+            panic!("Recovery must not install DataLocation")
+        }),
+        Ok(true)
+    );
+    assert!(blocked.windows_recovery_available());
+    assert!(blocked.operation(None).is_err());
+    assert!(DirectoryLease::acquire(&root).is_err());
+    assert_eq!(fs::read(&legacy).unwrap(), original);
+    assert_eq!(fs::read_dir(&generations).unwrap().count(), 0);
+    drop(blocked);
+
+    // A file at the managed namespace path cannot support Recovery.
+    fs::remove_dir(&generations).unwrap();
+    fs::write(&generations, b"unsupported layout").unwrap();
+    let unsupported = DatabaseState::default();
+    assert_eq!(
+        crate::install_journal_location(&unsupported, &root, |_| {
+            panic!("unsupported startup must not install DataLocation")
+        }),
+        Err(crate::startup_error::Failure::Unavailable)
+    );
+    assert!(!unsupported.windows_recovery_available());
+    assert!(unsupported.operation(None).is_err());
+    assert_eq!(fs::read(&legacy).unwrap(), original);
 }
