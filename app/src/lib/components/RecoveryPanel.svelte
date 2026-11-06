@@ -64,6 +64,48 @@
       : replacement.target === "old" ? m.replacement_continue_previous({}, options) : m.replacement_continue_imported({}, options);
     return action === "finish_new" ? m.restore_finish({}, options) : action === "continue" ? m.restore_continue({}, options) : m.restore_keep({}, options);
   }
+  let backupToken = $state<string | null>(null);
+  let windowsPhase = $state<"idle" | "checking" | "confirmed" | "publishing" | "pending">("idle");
+  let windowsError = $state<"invalid" | "unavailable" | "publication" | null>(null);
+
+  function windowsFailure(error: unknown) {
+    windowsError = error === "invalid_backup" || error === "changed" ? "invalid"
+      : error === "unsupported" || error === "busy" ? "unavailable" : "publication";
+    windowsPhase = "idle";
+  }
+
+  async function chooseBackup() {
+    if (mode !== "windows_recovery" || busy || windowsPhase !== "idle") return;
+    busy = true;
+    windowsError = null;
+    windowsPhase = "checking";
+    try {
+      const selection = await invoke<{ token: string } | null>("choose_recovery_backup", {
+        dialogTitle: m.restore_open({}, { locale: language.current })
+      });
+      if (!disposed) {
+        backupToken = selection?.token ?? null;
+        windowsPhase = backupToken ? "confirmed" : "idle";
+      }
+    } catch (error) {
+      if (!disposed) windowsFailure(error);
+    } finally { if (!disposed) busy = false; }
+  }
+
+  async function confirmBackup() {
+    if (mode !== "windows_recovery" || busy || windowsPhase !== "confirmed" || !backupToken) return;
+    const token = backupToken;
+    backupToken = null;
+    busy = true;
+    windowsPhase = "publishing";
+    try {
+      await invoke("confirm_recovery_backup", { token });
+      if (!disposed) windowsPhase = "pending";
+    } catch (error) {
+      if (!disposed) windowsFailure(error);
+    } finally { if (!disposed) busy = false; }
+  }
+
   async function quit() {
     if (busy) return;
     busy = true; quitFailed = false;
@@ -72,7 +114,27 @@
 </script>
 <main aria-live="polite">
   <h1>{replacement ? m.replacement_recovery_title({}, { locale: language.current }) : m.restore_recovery_title({}, { locale: language.current })}</h1>
-  {#if !(mode === "blocked" && prepared) && (!replacement || failed || loading)}<p>{m.database_recovery_blocked({}, { locale: language.current })}</p>{/if}
+  {#if !(mode === "blocked" && prepared) && (!replacement || failed || loading) && mode !== "windows_recovery"}<p>{m.database_recovery_blocked({}, { locale: language.current })}</p>{/if}
+  {#if mode === "windows_recovery"}
+    {#if windowsPhase === "pending"}
+      <p role="status">{m.restore_reopen_instructions({}, { locale: language.current })}</p>
+    {:else if windowsPhase === "confirmed"}
+      <p>{m.windows_recovery_confirm({}, { locale: language.current })}</p>
+      <button onclick={confirmBackup}>{m.windows_recovery_confirm_button({}, { locale: language.current })}</button>
+      <button onclick={() => { backupToken = null; windowsPhase = "idle"; }}>{m.restore_cancel({}, { locale: language.current })}</button>
+    {:else if windowsPhase === "checking" || windowsPhase === "publishing"}
+      <p role="status">{windowsPhase === "checking" ? m.restore_checking({}, { locale: language.current }) : m.restore_working({}, { locale: language.current })}</p>
+    {:else}
+      <p>{m.database_recovery_blocked({}, { locale: language.current })}</p>
+      <button disabled={busy} onclick={chooseBackup}>{m.restore_choose({}, { locale: language.current })}</button>
+    {/if}
+    {#if windowsError}
+      <p role="alert">{windowsError === "invalid" ? m.windows_recovery_invalid({}, { locale: language.current })
+        : windowsError === "unavailable" ? m.windows_recovery_unavailable({}, { locale: language.current })
+        : m.windows_recovery_failed({}, { locale: language.current })}</p>
+    {/if}
+    <button disabled={busy} onclick={quit}>{m.restore_quit({}, { locale: language.current })}</button>
+  {/if}
   {#if loading}<p>{m.restore_checking({}, { locale: language.current })}</p>{/if}
   {#if replacement && !failed && !loading}
     <p>{m.replacement_previous_count({ count: replacement.existing_entry_count }, { locale: language.current })}<br />{m.import_incoming_count({ count: replacement.imported_entry_count }, { locale: language.current })}</p>

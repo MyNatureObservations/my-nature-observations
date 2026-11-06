@@ -18,9 +18,15 @@ pub(crate) enum Mode {
     Ready,
     Recovery,
     Blocked,
+    #[cfg(windows)]
+    WindowsRecovery,
 }
 #[tauri::command]
 pub(crate) fn database_mode(state: tauri::State<'_, DatabaseState>) -> Mode {
+    #[cfg(windows)]
+    if state.windows_recovery_available() {
+        return Mode::WindowsRecovery;
+    }
     if state.startup_recovery_pending() {
         Mode::Recovery
     } else if state.ready_database_path().is_ok() {

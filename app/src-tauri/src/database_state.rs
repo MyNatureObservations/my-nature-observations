@@ -113,9 +113,17 @@ impl DatabaseState {
         self.phase.store(phase as u8, Ordering::Release);
         path.ok_or(blocked_reason)
     }
-    // Internal backend boundary. No Tauri command exposes Windows Recovery.
     #[cfg(windows)]
-    #[allow(dead_code)]
+    pub(crate) fn windows_recovery_available(&self) -> bool {
+        !self.recovery_required.load(Ordering::Acquire)
+            && matches!(
+                self.directory.get(),
+                Some(crate::startup::StartupOutcome::Recovery(gate)) if gate.windows_recovery_available()
+            )
+    }
+
+    // The desktop boundary supplies the digest from its one-use selection.
+    #[cfg(windows)]
     pub(crate) fn confirm_windows_recovery(
         &self,
         archive: &std::path::Path,

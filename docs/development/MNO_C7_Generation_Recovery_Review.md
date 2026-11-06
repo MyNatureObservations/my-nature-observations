@@ -834,3 +834,26 @@ inside its availability condition. The test fixtures now account for
 the lifecycle hook and verify the conditional native link with both
 availability responses. Production startup and the availability gate
 are unchanged.
+
+### C7.4c.2 Windows Recovery shell integration
+
+The existing Recovery panel now offers Windows backup recovery when
+managed startup is blocked, the startup lease remains valid and the
+established local NTFS layout and evidence pass preflight. Ready,
+unsupported and lease-less states cannot use the Windows commands.
+Ordinary Windows Restore remains gated. macOS uses its existing actions.
+
+The shared native picker selects a backup and verifies it before the
+panel offers confirmation. The backend retains its digest behind a
+one-use token, revalidates the archive on confirmation and runs the
+existing supersession and protected Pending publication. Cancellation
+or rejection does not report success. After acknowledgement the shell
+asks the user to quit and reopen MNO. Startup admission remains the
+only route to writable Ready.
+
+Frontend tests model picker replies, changed-archive retry, publication,
+localization and the explicit Quit request. Windows tests exercise
+state eligibility and token consumption alongside the existing native
+supersession tests. Actual Windows desktop IPC, picker and Quit/relaunch
+remain subject to desktop acceptance. Existing filesystem and
+power-loss limitations still apply.

@@ -375,3 +375,58 @@ test('prepared replacement shows concise instructions without generic blocked-st
     }
   }
 });
+
+test('Windows Recovery confirms a selected backup, retries errors and waits for explicit Quit', async () => {
+  const h = recoveryHarness('windows_recovery');
+  assert.equal(h.calls.length, 0);
+  await h.run('confirmBackup()');
+  assert.equal(h.calls.length, 0);
+  const first = h.run('chooseBackup()');
+  assert.equal(h.calls[0].name, 'choose_recovery_backup');
+  h.calls[0].resolve({ token: 'first' });
+  await first;
+  assert.equal(h.run('windowsPhase'), 'confirmed');
+  const rejected = h.run('confirmBackup()');
+  assert.equal(h.calls[1].name, 'confirm_recovery_backup');
+  assert.equal(h.calls[1].args.token, 'first');
+  h.calls[1].reject('changed');
+  await rejected;
+  assert.equal(h.run('windowsError'), 'invalid');
+  assert.equal(h.run('backupToken'), null);
+  const second = h.run('chooseBackup()');
+  h.calls[2].resolve({ token: 'second' });
+  await second;
+  const publish = h.run('confirmBackup()');
+  assert.equal(h.run('windowsPhase'), 'publishing');
+  await h.run('quit()');
+  assert.equal(h.calls.length, 4);
+  h.calls[3].resolve();
+  await publish;
+  assert.equal(h.run('windowsPhase'), 'pending');
+  assert.deepEqual(h.finished, []);
+  const quit = h.run('quit()');
+  assert.equal(h.calls[4].name, 'quit_after_restore');
+  h.calls[4].resolve();
+  await quit;
+});
+
+test('layout routes managed Windows startup into Recovery without rendering the journal', async () => {
+  const h = layoutHarness();
+  await settle();
+  h.calls[0].resolve('windows_recovery');
+  await settle();
+  assert.equal(h.run('mode'), 'windows_recovery');
+  assert.equal(h.run('mode === "ready"'), false);
+  for (const mode of ['ready', 'blocked', 'recovery']) {
+    const panel = recoveryHarness(mode);
+    const count = panel.calls.length;
+    await panel.run('chooseBackup()');
+    assert.equal(panel.calls.length, count);
+  }
+  for (const locale of ['sv', 'en']) {
+    const messages = JSON.parse(readFileSync(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8'));
+    for (const key of ['confirm', 'confirm_button', 'invalid', 'unavailable', 'failed']) {
+      assert.ok(messages[`windows_recovery_${key}`]);
+    }
+  }
+});

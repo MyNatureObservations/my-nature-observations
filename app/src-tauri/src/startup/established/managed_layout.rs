@@ -341,14 +341,7 @@ pub(in crate::startup) fn publish_restore(
     Ok(())
 }
 
-// The existing intent stays protected until the new Pending record has passed
-// the same acknowledgement barriers as ordinary publication.
-pub(in crate::startup) fn supersede(
-    lease: &DirectoryLease,
-    candidate: &crate::backup::restore::WindowsCandidate,
-) -> io::Result<()> {
-    use super::selection_publication::{acknowledge, open_intent, publish_with_intent};
-    use crate::backup::restore::WindowsCandidate;
+pub(in crate::startup) fn recovery_layout(lease: &DirectoryLease) -> io::Result<()> {
     let root = &lease.root;
     lease.ensure_current().map_err(io::Error::other)?;
     lease.boundary.check()?;
@@ -359,6 +352,33 @@ pub(in crate::startup) fn supersede(
     {
         return Err(invalid());
     }
+    let generations = root.join(GENERATIONS);
+    let directory = directory_handle(&generations)?;
+    require_ntfs(&generations, &directory)?;
+    if identity(&directory)?.0 != identity(&lease.directory)?.0 {
+        return Err(invalid());
+    }
+    for name in [HEAD, STAGED, INTENT] {
+        if canonical_entry(root, name)? {
+            let file = open_single_file(&root.join(name), 1, false)?;
+            if file.metadata()?.len() > LIMIT as u64 {
+                return Err(invalid());
+            }
+        }
+    }
+    Ok(())
+}
+
+// The existing intent stays protected until the new Pending record has passed
+// the same acknowledgement barriers as ordinary publication.
+pub(in crate::startup) fn supersede(
+    lease: &DirectoryLease,
+    candidate: &crate::backup::restore::WindowsCandidate,
+) -> io::Result<()> {
+    use super::selection_publication::{acknowledge, open_intent, publish_with_intent};
+    use crate::backup::restore::WindowsCandidate;
+    let root = &lease.root;
+    recovery_layout(lease)?;
     let head = canonical_entry(root, HEAD)?
         .then(|| open_single_file(&root.join(HEAD), 1, false))
         .transpose()?;

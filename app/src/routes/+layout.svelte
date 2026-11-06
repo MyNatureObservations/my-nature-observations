@@ -32,7 +32,7 @@
     result = imported ? "imported" : restored ? "restored" : "previous";
     await goto(operation === "import" ? "/" : "/journal");
   }
-  let mode = $state<"checking" | "ready" | "recovery" | "blocked">("checking");
+  let mode = $state<"checking" | "ready" | "recovery" | "blocked" | "windows_recovery">("checking");
   let locallyBlocked = false;
   let replacementPrepared = $state(false);
   let request = 0;
@@ -50,7 +50,7 @@
       if (locallyBlocked) return;
       const current = ++request;
       try {
-        const next = await invoke<"ready" | "recovery" | "blocked">("database_mode");
+        const next = await invoke<"ready" | "recovery" | "blocked" | "windows_recovery">("database_mode");
         if (!disposed && !locallyBlocked && current === request) {
           if (next === "blocked") blockJournal();
           else mode = next;

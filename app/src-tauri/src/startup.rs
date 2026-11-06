@@ -338,6 +338,14 @@ impl RecoveryGate {
     }
 
     #[cfg(windows)]
+    pub(crate) fn windows_recovery_available(&self) -> bool {
+        self.managed_windows()
+            && self.lease().is_ok_and(|lease| {
+                established::windows::managed_layout::recovery_layout(lease).is_ok()
+            })
+    }
+
+    #[cfg(windows)]
     pub(crate) fn supersede_windows(
         &self,
         candidate: &crate::backup::restore::WindowsCandidate,
