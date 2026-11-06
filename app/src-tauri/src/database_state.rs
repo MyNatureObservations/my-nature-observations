@@ -32,6 +32,8 @@ pub(crate) struct DatabaseState {
     generation: RwLock<u32>,
     maintenance: AtomicBool,
     recovery_required: AtomicBool,
+    #[cfg(windows)]
+    windows_restore_acknowledged: AtomicBool,
     #[cfg(test)]
     legacy_protocol_fixture: AtomicBool,
     #[cfg(test)]
@@ -48,6 +50,8 @@ impl Default for DatabaseState {
             generation: RwLock::new(1),
             maintenance: AtomicBool::new(false),
             recovery_required: AtomicBool::new(false),
+            #[cfg(windows)]
+            windows_restore_acknowledged: AtomicBool::new(false),
             #[cfg(test)]
             legacy_protocol_fixture: AtomicBool::new(false),
             #[cfg(test)]
@@ -145,6 +149,15 @@ impl DatabaseState {
         gate.supersede_windows(&candidate)?;
         self.recovery_required.store(true, Ordering::Release);
         Ok(())
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn windows_restore_outcome(&self) -> Option<bool> {
+        (matches!(
+            self.directory.get(),
+            Some(crate::startup::StartupOutcome::Ready(_))
+        ) && self.recovery_required.load(Ordering::Acquire))
+        .then(|| self.windows_restore_acknowledged.load(Ordering::Acquire))
     }
 
     // Shell status only; neither method changes phase or grants admission.
@@ -388,7 +401,11 @@ impl<'s> Maintenance<'s> {
         let Some(crate::startup::StartupOutcome::Ready(ready)) = self.state.directory.get() else {
             return Err("database_startup_blocked".into());
         };
-        ready.publish_windows_restore(candidate, || self.require_recovery())
+        ready.publish_windows_restore(candidate, || self.require_recovery())?;
+        self.state
+            .windows_restore_acknowledged
+            .store(true, Ordering::Release);
+        Ok(())
     }
 
     pub(crate) fn operation_id(&self) -> uuid::Uuid {

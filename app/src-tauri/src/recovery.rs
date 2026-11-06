@@ -20,9 +20,21 @@ pub(crate) enum Mode {
     Blocked,
     #[cfg(windows)]
     WindowsRecovery,
+    #[cfg(windows)]
+    WindowsRestorePending,
+    #[cfg(windows)]
+    WindowsRestoreUncertain,
 }
 #[tauri::command]
 pub(crate) fn database_mode(state: tauri::State<'_, DatabaseState>) -> Mode {
+    #[cfg(windows)]
+    if let Some(acknowledged) = state.windows_restore_outcome() {
+        return if acknowledged {
+            Mode::WindowsRestorePending
+        } else {
+            Mode::WindowsRestoreUncertain
+        };
+    }
     #[cfg(windows)]
     if state.windows_recovery_available() {
         return Mode::WindowsRecovery;

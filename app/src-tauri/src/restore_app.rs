@@ -46,6 +46,8 @@ impl RestoreState {
 pub(crate) enum Error {
     Busy,
     InvalidBackup,
+    #[cfg(windows)]
+    PreparationFailed,
     Changed,
     Failed,
     #[cfg(not(target_os = "macos"))]
@@ -54,6 +56,8 @@ pub(crate) enum Error {
 #[derive(Serialize)]
 pub(crate) struct Selection {
     token: String,
+    #[cfg(windows)]
+    preserves_previous: bool,
 }
 #[cfg(target_os = "macos")]
 fn validate_selection(state: &DatabaseState, path: PathBuf) -> Result<Choice, Error> {
@@ -138,8 +142,7 @@ fn activate_selection(state: &DatabaseState, choice: Choice) -> Result<(), Error
 
 #[tauri::command]
 pub(crate) fn restore_available() -> bool {
-    // Windows stays unavailable in every build until blocked-startup Recovery is accepted.
-    cfg!(target_os = "macos")
+    cfg!(target_os = "macos") || cfg!(all(windows, feature = "windows-restore-acceptance"))
 }
 
 fn require_restore_available() -> Result<(), Error> {
@@ -204,7 +207,10 @@ pub(crate) async fn choose_recovery_backup(
             path,
             digest,
         });
-        Ok(Some(Selection { token }))
+        Ok(Some(Selection {
+            token,
+            preserves_previous: true,
+        }))
     })
     .await
     .map_err(|_| Error::Failed)?
@@ -274,12 +280,18 @@ pub(crate) async fn choose_restore_backup(
         *shared.selected.lock().map_err(|_| Error::Failed)? = None;
         #[cfg(any(target_os = "macos", windows))]
         {
+            #[cfg(windows)]
+            app.state::<DatabaseState>()
+                .ready_database_path()
+                .map_err(|_| Error::Busy)?;
             let Some(path) = pick_backup(&app, &window, &dialog_title)? else {
                 return Ok(None);
             };
             let choice = validate_selection(&app.state::<DatabaseState>(), path)?;
             let result = Selection {
                 token: choice.token.clone(),
+                #[cfg(windows)]
+                preserves_previous: true,
             };
             *shared.selected.lock().map_err(|_| Error::Failed)? = Some(choice);
             Ok(Some(result))
@@ -311,10 +323,23 @@ pub(crate) async fn restore_selected_backup(
         if choice.token != token {
             return Err(Error::Changed);
         }
-        #[cfg(any(target_os = "macos", windows))]
+        #[cfg(target_os = "macos")]
         let result = activate_selection(&app.state::<DatabaseState>(), choice);
+        #[cfg(windows)]
+        let result = {
+            let state = app.state::<DatabaseState>();
+            activate_selection(&state, choice).map_err(|error| {
+                if state.windows_restore_outcome().is_none() {
+                    Error::PreparationFailed
+                } else {
+                    error
+                }
+            })
+        };
         #[cfg(not(any(target_os = "macos", windows)))]
         let result = Err(Error::Unsupported);
+        #[cfg(windows)]
+        drop(_busy);
         // On failure after arming, hide all journal views too. The backend gate
         // already denies operations, including stale/queued editor writes.
         let _ = app.emit("mno:database-mode-changed", ());
@@ -375,9 +400,17 @@ mod tests;
 
 #[cfg(all(test, windows))]
 #[test]
-fn windows_restore_commands_are_unavailable_even_in_test_builds() {
-    assert!(!restore_available());
-    assert_eq!(require_restore_available(), Err(Error::Unsupported));
+fn windows_restore_commands_follow_explicit_acceptance_feature() {
+    let enabled = cfg!(feature = "windows-restore-acceptance");
+    assert_eq!(restore_available(), enabled);
+    assert_eq!(
+        require_restore_available(),
+        if enabled {
+            Ok(())
+        } else {
+            Err(Error::Unsupported)
+        }
+    );
 }
 
 #[cfg(all(test, windows))]
@@ -406,6 +439,7 @@ fn windows_restore_requires_an_unchanged_archive_and_quit_waits_for_publication(
         Err(Error::InvalidBackup)
     );
     assert!(!root.join("generations").exists());
+    assert_eq!(state.windows_restore_outcome(), None);
     assert!(state.operation(None).is_ok());
 
     std::fs::write(&archive, &original).unwrap();

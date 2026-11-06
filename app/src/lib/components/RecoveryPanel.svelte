@@ -114,7 +114,15 @@
 </script>
 <main aria-live="polite">
   <h1>{replacement ? m.replacement_recovery_title({}, { locale: language.current }) : m.restore_recovery_title({}, { locale: language.current })}</h1>
-  {#if !(mode === "blocked" && prepared) && (!replacement || failed || loading) && mode !== "windows_recovery"}<p>{m.database_recovery_blocked({}, { locale: language.current })}</p>{/if}
+  {#if !(mode === "blocked" && prepared) && (!replacement || failed || loading) && mode !== "windows_recovery" && mode !== "windows_restore_pending" && mode !== "windows_restore_uncertain"}<p>{m.database_recovery_blocked({}, { locale: language.current })}</p>{/if}
+  {#if mode === "windows_restore_pending" || mode === "windows_restore_uncertain"}
+    {#if mode === "windows_restore_pending"}
+      <p role="status">{m.windows_restore_pending({}, { locale: language.current })}</p>
+    {:else}
+      <p role="alert">{m.windows_restore_uncertain({}, { locale: language.current })}</p>
+    {/if}
+    <button disabled={busy} onclick={quit}>{m.restore_quit({}, { locale: language.current })}</button>
+  {/if}
   {#if mode === "windows_recovery"}
     {#if windowsPhase === "pending"}
       <p role="status">{m.restore_reopen_instructions({}, { locale: language.current })}</p>

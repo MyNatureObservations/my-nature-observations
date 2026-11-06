@@ -117,3 +117,59 @@ Keep default Windows builds gated until the desktop result is reviewed.
   and packaging, Linux Restore/Recovery, historical migration, Open
   Import, generation cleanup and storage-protocol redesign. Existing
   power-loss and replay limitations remain explicit.
+
+## C8b implementation and local acceptance
+
+Ordinary Windows Restore requires the explicit Cargo feature
+`windows-restore-acceptance`. The shared backend gate applies to
+both picker and confirmation. Default Windows builds keep Restore
+unavailable. The picker requires a Ready journal, and confirmation
+uses the existing one-use token, Ready maintenance gate and archive
+digest verification. Windows Recovery remains a separate blocked-startup
+action using the same candidate and publication architecture.
+
+After a confirmed restore, the backend distinguishes an acknowledged
+Pending publication from an uncertain publication after the write
+latch. The shared shell offers Quit in both cases and reports
+preparation only for acknowledgement. Errors before the latch leave
+the journal available and Settings offers a retry or return. Restart
+admission alone can grant writable access. Prior databases, external
+originals, backups and diagnostic evidence are preserved.
+
+From `app`, using the reviewed local Windows MSVC and notices tooling
+and after `npm.cmd ci` and `npm.cmd run i18n:compile`:
+
+```powershell
+npm.cmd run tauri build -- --ci --no-sign --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.windows-test.conf.json --features windows-restore-acceptance -- --locked
+```
+
+Keep the installer local. Omit the entire feature option for an ordinary
+build. Confirm Settings omits Restore in the default build, and use
+the focused native default/opt-in gate tests to verify backend behavior.
+The feature is not part of any installer workflow defaults.
+
+After review, use the existing disposable `MNO-Test` account and
+synthetic data only. Verify the installer checksum and current-user
+identity before installation.
+
+1. Open the existing journal, save a distinctive synthetic entry and
+   create a backup outside the data directory. Record its SHA-256.
+2. Edit that entry and save a distinguishable post-backup change.
+   Quit cleanly and record the active database hash while closed.
+3. Relaunch and open Settings → Restore. Check cancellation and
+   invalid-backup rejection. Select the valid backup, review the
+   retained-journal explanation and confirm.
+4. Verify the restart-required shell has no editor, and use its Quit
+   action. A second instance must not open an independent journal.
+5. Reopen MNO. Verify the original text is active and the post-backup
+   change is absent. Make a new edit, quit and reopen to verify it.
+6. Compare the backup and previous active database hashes, and verify
+   the prior generation directories remain. Use the same process on
+   a fresh disposable legacy installation if verifying legacy-to-managed
+   desktop coverage. Do not alter database or selection files.
+
+Automated coverage checks the gate, candidate validation, native
+publication/admission, preservation, fail-closed outcomes and frontend
+event-before-reply handoff. The established Windows baseline remains
+visible. Actual opted-in desktop behavior and power-loss durability
+remain unverified.

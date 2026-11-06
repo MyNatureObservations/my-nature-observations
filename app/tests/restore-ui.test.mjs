@@ -430,3 +430,48 @@ test('layout routes managed Windows startup into Recovery without rendering the 
     }
   }
 });
+
+test('Windows Restore handoff uses backend mode even when the event beats the command reply', async () => {
+  for (const [mode, error] of [['windows_restore_pending', null], ['windows_restore_uncertain', 'failed']]) {
+    const root = layoutHarness();
+    await settle();
+    root.calls[0].resolve('ready');
+    await settle();
+    const settings = harness();
+    const selection = settings.run('choose()');
+    settings.calls[0].resolve({ token: 'chosen', preserves_previous: true });
+    await selection;
+    assert.equal(settings.run('preservesPrevious'), true);
+    const prepare = settings.run('restore()');
+    assert.equal(settings.guard(), true);
+    root.event();
+    root.calls[1].resolve(mode);
+    await settle();
+    assert.equal(root.run('mode'), mode);
+    assert.equal(root.run('result'), null);
+    const panel = recoveryHarness(mode);
+    if (error) settings.calls[1].reject(error);
+    else settings.calls[1].resolve();
+    await prepare;
+    const quit = panel.run('quit()');
+    assert.equal(panel.calls[0].name, 'quit_after_restore');
+    panel.calls[0].resolve();
+    await quit;
+    assert.deepEqual(panel.finished, []);
+    panel.dispose();
+    root.dispose();
+  }
+});
+
+test('safe Windows preparation failure leaves a return path to the current journal', async () => {
+  const h = harness();
+  const selection = h.run('choose()');
+  h.calls[0].resolve({ token: 'chosen', preserves_previous: true });
+  await selection;
+  const prepare = h.run('restore()');
+  h.calls[1].reject('preparation_failed');
+  await prepare;
+  assert.equal(h.run('phase'), 'failed');
+  assert.equal(h.run('canReturnHome()'), true);
+  assert.equal(h.guard(), false);
+});

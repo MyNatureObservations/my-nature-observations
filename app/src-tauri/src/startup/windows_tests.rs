@@ -730,6 +730,7 @@ fn explicit_restore_publishes_pending_and_restarts_from_legacy_then_admitted() {
         let maintenance = state.maintenance().unwrap();
         maintenance.publish_windows_restore(&candidate).unwrap();
         drop(maintenance);
+        assert_eq!(state.windows_restore_outcome(), Some(true));
         assert!(state.operation(None).is_err());
         assert!(DirectoryLease::acquire(&root).is_err());
         let head = fs::read(root.join("generation-selection.json")).unwrap();
@@ -781,6 +782,7 @@ fn explicit_restore_interruption_preserves_legacy_and_backup_and_fails_closed() 
             with_restore_fault(point, || maintenance.publish_windows_restore(&candidate)).is_err()
         );
         drop(maintenance);
+        assert_eq!(state.windows_restore_outcome(), Some(false));
         assert!(state.operation(None).is_err());
         drop(state);
         let restarted = DatabaseState::default();
