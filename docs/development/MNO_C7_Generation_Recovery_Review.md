@@ -158,7 +158,7 @@ coordinated deletion/replay of all state or deliberate same-user tampering.
 | **C7.2 — retained current-backup generation builder**, reuse C1 extraction/content checks, private ACL/identity and checked close | Original backup/old journal untouched; no-clobber final generation; no Drop deletion after ownership transfer; final independently verified bytes/content; no selected candidate yet | Three C1 cases plus final-copy/destination conflicts, permissions/disk/flush/close failures, source replacement, altered candidate, sidecars, immutable-to-mutable pin/flush handoff and ownership/error cleanup; damaged old DB is never opened | No activation, migration or Ready. Complete when real format-5/schema-4 candidates with images/places/weather survive independent reopen and all failure paths preserve inputs. Shared tests on macOS/Ubuntu/Windows. |
 | **C7.3 — selected startup and admission kernel**, reuse one root lease, DatabaseState, DataLocation and production validators; keep legacy startup until explicit restore | All DB consumers agree on one path; pending has no normal writes; admitted allows legitimate edits without per-save head updates; ambiguous selection never creates/falls back; only safe blocked owners can offer restore | Healthy legacy/current first launch; selection deletion with legacy DB present; pending admission; edit/checked-close/restart; invalid content/path and missing selected DB; concurrent owner/late writes; damaged DB retains exclusive blocked owner; legacy-marker conflict; failure after admitted publication | No user restore command enablement yet. Complete after full three-platform integration CI, with known unrelated Windows failures kept visible and macOS/Linux routing unchanged. |
 | **C7.4 — connect explicit restore and restart**, reuse existing picker/token/busy handling, maintenance exclusion and restart flow | One kernel for healthy and blocked-startup restore; no dependency on reading damaged old DB; changed backup/token rejected; publication latches writes closed; preserve every prior generation and backup | End-to-end synthetic backup -> final generation -> pending -> restarted admission; cancellation, repeated clicks, queued saves, corruption and process interruptions at each handoff; ambiguous state requires explicit action | No Import, historical migration, cleanup UI or legacy macOS conversion. Complete after focused Windows tests and full CI at the production command integration boundary; restoration stays unsupported until this boundary is approved. |
-| **C7.5 — unelevated Windows 11 acceptance** using an isolated ordinary test account, local NTFS and synthetic data | Same identity/root, no real journal; verify prior generations and original backup remain intact; no silent rollback/empty journal | Retain automated matrix and replay-limitation regression; no need to rerun unrelated suites after documentation-only acceptance | Manually restore a real synthetic backup containing entries/images/places/weather, restart/edit/restart, restore with a damaged old fixture, exercise interrupted/pending and corrupt/missing head cases safely, record warnings/permission failures. Complete only within stated observed scope; no power-loss certification. |
+| **C7.5 — unelevated Windows 11 acceptance** using an isolated ordinary test account, local NTFS and synthetic data | Same identity/root, no real journal; verify prior generations and original backup remain intact; no silent rollback/empty journal | Retain automated matrix and replay-limitation regression; no need to rerun unrelated suites after documentation-only acceptance | Manually restore a real synthetic backup containing entries/images/places/weather, restart/edit/restart, restore with a damaged old fixture, exercise interrupted/pending and corrupt/missing head cases safely, record warnings/permission failures. C7.5c passed within the [observed desktop scope](#c75c-windows-desktop-recovery-acceptance). The remaining scenarios in this row are outside that acceptance. |
 
 Use targeted local tests first and focused platform CI for C7.1/C7.2. Full CI belongs
 at C7.3/C7.4 production integration boundaries. The four known Windows library
@@ -944,3 +944,40 @@ New, changed or missing failures, unexpected ignores and incomplete runs
 fail the comparison. The focused workflow also runs the existing selected
 Windows integration tests. The full CI library job still reports the
 raw Cargo outcome.
+
+### C7.5c Windows desktop Recovery acceptance
+
+**PASS — accepted within the observed desktop scope.** The test ran on a
+physical Windows 11 x64 laptop under the disposable standard-user account
+`MNO-Test`, using the existing synthetic journal. The locally built,
+unsigned, current-user NSIS installer came from commit
+`2ec6a7990c5b102c47d4a0d008dd325e489612a2` using MSVC v143
+`14.43.34808`. The installer was copied to the shared Windows Downloads
+directory, and its SHA-256 was verified from the test account before
+installation:
+
+`6A732C8D30589B8A135E236FA356D6CA364ACAA29351922F034114025E4C955A`
+
+The earlier desktop test verified first-install startup, synthetic entry
+creation and saving, persistence after restart, and creation of a
+`.mno-backup` file. It also confirmed that the empty managed namespace
+blocked startup and exposed the native startup-adapter dialog defect
+corrected in C7.5b.1.
+
+For the retest, the updated installer was installed in `MNO-Test` with
+the existing legacy database, backup and deliberately empty
+`generations` directory preserved. MNO showed the normal WebView
+Recovery shell and kept journal access blocked. The tester used
+**Choose backup**, selected the existing `.mno-backup`, and chose
+**Prepare restore** on the confirmation screen. MNO instructed the
+tester to restart. After restart, the normal home page opened, the
+restored entry `Windows C7.5 – Test 1` could be edited and saved, and the
+new text persisted when the entry was closed and reopened.
+
+This accepts standard-user installation, basic journal creation and
+persistence, backup creation, the blocked-startup Recovery UI and picker,
+restore preparation, admission after restart, and read/write access to
+the recovered journal. Ordinary Windows Restore remains gated.
+Exhaustive interruption and crash coverage, filesystem and permission
+failure coverage, signing and distribution readiness, and general
+Windows production readiness remain outside this desktop acceptance.
