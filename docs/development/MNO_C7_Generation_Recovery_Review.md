@@ -857,3 +857,56 @@ state eligibility and token consumption alongside the existing native
 supersession tests. Actual Windows desktop IPC, picker and Quit/relaunch
 remain subject to desktop acceptance. Existing filesystem and
 power-loss limitations still apply.
+
+### C7.5a internal Windows installer preflight and acceptance
+
+The C6 packaging job builds unsigned x86_64 NSIS in current-user mode.
+It uses the existing application ID and verifies packaged executable
+identity and Windows notices. Its output directory is
+`app/src-tauri/target/windows-test-artifact/`, uploaded as
+`mno-windows-x86_64-nsis-test-<commit>` with the installer,
+`SHA256SUMS.txt` and `BUILD-INFO.json`. The active repository is public.
+GitHub lets signed-in users with repository read access download workflow
+artifacts, so use a private build location for a private installer.
+The public workflow's C6 acceptance metadata predates Windows Recovery.
+
+Once a private installer is available and desktop testing is approved:
+
+1. Sign into a new disposable ordinary Windows 11 account with local NTFS
+   Roaming AppData. Open `%APPDATA%` in Explorer and verify that
+   `org.mynatureobservations.app` is absent before launching MNO. Stop if
+   the profile or path contains any existing journal or valuable data.
+2. Extract the installer to a short local path. Compare its SHA-256 with
+   the supplied checksum, then install for the current user. Record any
+   unsigned-installer warning. Launch MNO, create and save a distinctive
+   synthetic entry, and make a manual backup outside the journal folder.
+   Record its SHA-256. Quit and reopen to check normal startup, and verify
+   that Settings offers backup but does not offer ordinary Restore.
+3. Quit MNO fully. In Explorer, open
+   `%APPDATA%\org.mynatureobservations.app` and recheck that it contains
+   only this test journal. Create one empty folder named `generations`
+   at its top level. Stop if that folder already exists. This is the
+   missing-selection fixture. It touches no SQLite files, records or
+   publication markers. Record the legacy `mno.sqlite` SHA-256 before
+   relaunching.
+4. Launch MNO. Expect the existing blocked Recovery shell with a backup
+   picker and no journal editor. Try launching a second instance and
+   check that it cannot open an independent journal session. In the
+   native picker, first select an unrelated invalid test file, then
+   select the valid backup. Expect rejection followed by a confirmation
+   screen on the valid selection. Confirm and wait for Quit instructions.
+5. Quit using the panel, reopen MNO, and verify the expected synthetic
+   entry. Save a second synthetic entry, quit and reopen again, and
+   verify both entries. Check that the original legacy database and
+   backup hashes match and the recovery-evidence directory is present
+   under `generations`. This fixture has no prior managed database or
+   publication bytes to archive. Existing native tests cover those
+   preservation cases and archive changes between selection and
+   confirmation.
+6. Report the Windows version, installer commit and checksum, language,
+   exact step and error text, and screenshots containing synthetic data
+   only. Leave the disposable journal and evidence intact on failure.
+
+This desktop plan exercises Tauri state registration and lookup, WebView
+rendering, picker and command IPC, actual Quit and relaunch, admission and
+writable SQLite reopening. It does not establish power-loss durability.
