@@ -568,3 +568,186 @@ Local macOS all-target compilation, the codec test and 11 C4 regressions
 passed. Full platform CI is required for native acceptance. The accepted
 cooperating-writer, older-record replay and total managed evidence loss
 limits remain. Physical power-loss durability remains unverified.
+
+## C7.4a Restore and Recovery integration review
+
+C7.3c is accepted within the tested Windows scope of
+[run 42192369790](https://github.com/MyNatureObservations/my-nature-observations/actions/runs/42192369790).
+The two admission tests ran and passed. The Windows library baseline remains
+four known failures. The captured DataLocation tests exercise the shared
+installer callback, while actual Tauri registration and desktop startup
+still require acceptance.
+
+### Existing macOS workflow
+
+| Step | Current behavior and code |
+| --- | --- |
+| Choose and validate | The native picker in `choose_restore_backup` uses RestoreState's busy reservation. `validate_selection` requires a Ready operation permit, reads the active schema, checks the backup manifest and verifies the archive. It returns a one-use token bound to the archive hash and current process generation. |
+| Confirm | The settings Restore page shows confirmation after choosing a valid backup. Cancel discards the frontend token. Confirm invokes `restore_selected_backup`, which takes the backend choice and verifies the token. The command runs blocking work off the UI thread and emits the mode-change event when it returns. |
+| Preserve and commit | `activate_selection` obtains Maintenance, checks the process generation and revalidates the archive hash. The macOS activation engine prepares the candidate, retains the active source and writes verified protection backup evidence. It publishes its legacy recovery marker binding old and new content before copying to a separate local staging database. It verifies staged content before activation. |
+| Close and restart | The activation engine uses its close-owner and marker contracts to check SQLite closure and persistence around macOS activation. The running recovery latch keeps ordinary operations closed. Successful activation tells the frontend to quit and reopen, without granting Ready in the old process. `quit_after_restore` uses normal application exit with the existing work and unsaved-change guards. |
+| Blocked startup | `begin_with` retains a RecoveryGate for recognized legacy artifacts or sidecars. App setup withholds DataLocation. The layout selects RecoveryPanel through `database_mode`. The macOS status engine classifies marker, active database, candidate and protection evidence and offers verified actions such as Continue, FinishNew or KeepPrevious. |
+| Recovery completion and errors | `run_recovery` reserves work, runs the confirmed macOS engine and installs DataLocation only when startup admission has granted Ready. Mode changes return the shell to the journal. Invalid startup without a retained RecoveryGate goes through the native error and exit path. Restore errors use localized invalid/failed messages, with quit errors handled separately. |
+
+Sources for the command and disk paths.
+[restore_app.rs](../../app/src-tauri/src/restore_app.rs),
+[activation.rs](../../app/src-tauri/src/backup/restore_context/activation.rs),
+[startup recovery engine](../../app/src-tauri/src/backup/restore_context/activation/startup.rs),
+[recovery.rs](../../app/src-tauri/src/recovery.rs),
+[startup_error.rs](../../app/src-tauri/src/startup_error.rs).
+
+Sources for UI and application setup.
+[Restore page](../../app/src/routes/settings/restore/+page.svelte),
+[RecoveryPanel](../../app/src/lib/components/RecoveryPanel.svelte),
+[app layout](../../app/src/routes/+layout.svelte),
+[lib.rs](../../app/src-tauri/src/lib.rs).
+
+### Windows restore sequence
+
+1. Reuse the picker, busy reservation, one-use confirmation and current
+   format-5/schema-4 validation. The choice must bind the archive digest and
+   the current journal context. Open the archive read-only with write/delete
+   denial during the confirmed read and hash the same object used by C1.
+   Changes between selection and confirmation must require a new choice.
+2. Prepare and independently verify privately before entering the durable
+   transition. The existing UI validates before confirmation and performs
+   the retained build after confirmation. This avoids keeping a prepared
+   SQLite owner alive while the user decides. C1 extraction may occur for
+   validation before confirmation, but the managed namespace must remain
+   absent on a legacy root until explicit commit.
+3. Promote the relevant C7.2 construction and ownership checks into one
+   production builder. Reuse the private ACL and C1 validation code. Use an
+   exclusive generation destination, independently verify the final file,
+   check identity, link count and sidecars, and check every SQLite close.
+   Flush candidate bytes and the same-volume directory chain. C7.2 tested
+   the handle handoff with fixtures. It did not establish durable production
+   publication of a retained directory. A staged file prepared outside the
+   authoritative namespace must be revalidated at its final location.
+4. At commit, use the existing `DatabaseState::maintenance` barrier to drain
+   journal and backup operations, check the confirmation context again and
+   latch normal operations closed before introducing managed evidence or
+   publishing a record. The macOS RecoverySession factory is platform-gated.
+   Add a narrow Windows capability under the same state and lease. Preserve
+   operation exclusion, stale editor rejection and the old journal's file
+   ownership. The last successful old-journal write before the latch stays
+   in the retained previous journal.
+5. Publish only pending through the C7.1a publisher under the lease. Its
+   low-level function accepts a replace flag, so the caller must enforce
+   the expected transition and current head identity. Initial publication
+   is no-clobber. Replacement requires the previously admitted head to
+   match. Retain the candidate protection through publication and checked
+   close of owned resources. Keep normal commands closed once publication
+   may have happened. Reuse the explicit quit and reopen flow, with the
+   original DataLocation inaccessible through normal operation gates.
+6. On reopening, C7.3a detects the managed layout, C7.3c verifies and admits
+   the pending generation, and C7.3b provides ordinary mutable opening.
+   Install DataLocation only after Ready. No running-process path switch
+   is required. The original legacy database or previous generation stays
+   where it was. Windows needs no old-database copy to preserve it.
+
+Reusable production boundaries.
+[C1 preparation](../../app/src-tauri/src/backup/restore.rs),
+[protected publisher](../../app/src-tauri/src/startup/established/selection_publication.rs),
+[Windows resolver](../../app/src-tauri/src/startup/established/managed_layout.rs),
+[state and maintenance](../../app/src-tauri/src/database_state.rs).
+The [C7.2 probe](../../app/src-tauri/src/backup/restore/tests/candidate_handoff.rs)
+supplies the verified handoff pattern. The legacy macOS protection backup,
+filesystem activation and marker proof chain stay on the macOS path.
+
+### Legacy transition and interruption
+
+C7.3 can handle an established legacy root coexisting with a valid managed
+selection. The presence of `root/mno.sqlite` and its sidecars does not
+override the selected generation. Existing legacy recovery markers are a
+different case and conflict with managed startup. Ordinary legacy startup
+continues without creating the generations directory or selection.
+
+The first durable managed artifact is an important commit boundary. If
+construction creates the generations directory and then fails before
+publishing a valid head, startup correctly blocks. The original journal
+still exists, but automatic fallback would violate the approved rule.
+Prepare before this boundary, and take the irreversible process latch
+before creating managed evidence. A brief incomplete state is acceptable
+only when explicit Recovery is available. No new authoritative format is
+proposed. The existing intent marker and retained namespace provide the
+interruption evidence.
+
+| Failure boundary | Required disposition |
+| --- | --- |
+| Cancel, validation failure or interrupted private preparation | Preserve input and previous data. No managed evidence on a previously legacy root. A new explicit attempt can retry. Close verified handles before cleanup of exclusively owned scratch files. |
+| Failure introducing durable generation evidence or during publication | Preserve candidate and intent/staging evidence. Block ordinary operations and require explicit Recovery if the layout is incomplete or ambiguous. |
+| Pending acknowledged, before quit or restart | Keep the old process gated. A later startup can verify and admit the pending candidate. |
+| Admission verification fails before publication | Preserve the pending record and files. Transient sharing problems can retry by restart. Persistent digest/content/path failures require Recovery. |
+| Admission interrupted during publication | Block on surviving intent or staging evidence. No automatic repair or selection of the old journal. |
+| Admitted acknowledgement succeeds but writable open fails | Withhold Ready. A clean admitted record can be revalidated on restart. Persistent failures require explicit Recovery. |
+
+### Windows blocked-startup Recovery
+
+Today the managed resolver returns errors through the generic startup
+error path. App setup hides the window and exits after the native message.
+A damaged legacy journal can take the same path. Existing RecoveryGate
+cases can reach the shell but Windows status and action commands return
+unsupported. The picker currently requires Ready and the active schema,
+so it cannot provide an escape route for a damaged journal.
+
+C7.4c needs a narrowly typed Windows recoverable verdict retaining the
+existing DirectoryLease without DataLocation. Only a successfully acquired
+and verified supported root may grant that capability. In-use, unsafe
+path, unavailable permissions and unsupported filesystem errors stay
+outside it. Reuse RecoveryPanel and the Restore picker/confirmation
+components in that shell. The first choice should be explicit restore
+from a verified backup or quit. Candidate construction must depend on
+the archive and safe root, never on opening the damaged prior database.
+
+A missing selected generation, malformed/unsupported record, damaged
+legacy database, failed pending verification or persistent admitted open
+failure can use that same recovery route. Interrupted publication needs
+an additional authorization rule. The current publisher cannot reuse a
+surviving create-new intent path, and simply deleting stale markers would
+remove the evidence that prevents unsafe admission. Under the retained
+lease, preserve the exact old head and any intent/staged evidence before
+a user-authorized replacement. Verify which objects belong to the old
+episode and fail closed when ownership cannot be established. Decide the
+evidence-retention and recovery publication sequence before coding that
+route. Choosing a previous generation is deferred. If later offered, it
+requires an explicit selection and independent verification of current
+content, with no automatic rollback or fallback scan.
+
+### Stages and decisions
+
+- **C7.4b, explicit restore and controlled restart.** Wire the Windows
+  candidate builder, archive token, maintenance latch and pending publisher
+  beneath the existing command boundary. Keep end-user availability gated
+  until C7.4c provides an escape from interrupted first publication. Native
+  tests cover legacy and managed origins, changed backup, cancellation,
+  queued writes, competing owner, candidate copy/flush/close faults,
+  publication and restart admission. Compare previous bytes and sidecars
+  and verify stored images after reopening. Completion requires a native
+  command-boundary round trip and deterministic fault gates.
+- **C7.4c, blocked startup recovery.** Route owned safe-root failures to the
+  existing shell with a narrow backup restore action. Reuse the C7.4b builder
+  and C7.1a acknowledgement. Resolve the interrupted publication evidence
+  policy first. Native tests cover each blocked state, no DataLocation or
+  stale writable operation, safe exit, preservation of conflicting evidence,
+  and explicit recovery from a damaged old journal. Completion requires an
+  end-to-end Windows desktop check with an isolated ordinary account and
+  synthetic data. Check confirmation, quit/reopen, Tauri DataLocation
+  registration, a legitimate edit, and a second restart.
+- **C7.4d only if needed.** Address specific compatibility or UX gaps from
+  the desktop check using the same Restore and Recovery surfaces. Keep
+  previous-generation selection and cleanup outside this stage unless
+  separately approved.
+
+For b and c, run existing macOS restore, guarded quit, recovery activation
+and startup regressions, plus Linux legacy startup and unsupported-command
+checks. Use full platform CI at production integration boundaries and
+compare the known four Windows library failures. Neither prior CI nor the
+planned desktop acceptance establishes physical power-loss durability.
+
+**Review verdict.** The shared architecture supports a staged Windows
+implementation. End-user Restore availability is blocked until safe
+blocked-startup Recovery exists. Approve the b-before-c rollout gate,
+the exact point at which managed evidence becomes authoritative, and
+the c policy for preserving and superseding interrupted publication
+evidence before implementation. The cooperating-writer, older-valid-record
+replay and total managed evidence loss limits still apply.
