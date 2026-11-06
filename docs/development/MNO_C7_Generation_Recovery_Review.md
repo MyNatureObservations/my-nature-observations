@@ -928,3 +928,19 @@ the empty generations fixture, and an unsupported namespace object.
 Native CI covers the adapter and real filesystem operations. A fresh
 local Windows installer and manual retest are still required for
 desktop acceptance.
+
+### C7.5b.1a Windows CI baseline comparison
+
+Run 42241130250 exposed that the focused baseline step only ran Cargo.
+Cargo correctly returned 101 for the four known library failures. There
+was no baseline comparison, parser or baseline artifact. Review of the
+diagnostics against C5c run 41894600284 confirmed the same compiler
+fixture error, timeout mismatch and two unsupported migration errors.
+
+The focused workflow now keeps the raw output visible and requires a
+complete run with the exact failure and ignore identities and matching
+failure diagnostics. Compiler fixture paths and line offsets may vary.
+New, changed or missing failures, unexpected ignores and incomplete runs
+fail the comparison. The focused workflow also runs the existing selected
+Windows integration tests. The full CI library job still reports the
+raw Cargo outcome.

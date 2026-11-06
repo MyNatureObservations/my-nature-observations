@@ -321,7 +321,22 @@ jobs:
           cargo test --locked --lib startup::windows_tests
       - name: Compare the Windows library failure baseline
         if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
-        run: cargo test --locked --lib
+        run: |
+          python ../../.github/scripts/test-windows-library-baseline.py
+          status=0
+          log="$RUNNER_TEMP/mno-windows-library.log"
+          cargo test --locked --lib --color never > "$log" 2>&1 || status=$?
+          cat "$log"
+          python ../../.github/scripts/windows-library-baseline.py "$log" "$status"
+      - name: Run selected Windows integration tests
+        if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
+        run: >-
+          cargo test --locked
+          --test database_crash
+          --test database_safety
+          --test descriptor_owner
+          --test recovery_handoff_prototype
+          --test generation_activation_prototype
       - name: Run isolated schema and Windows persistence probes
         if: inputs.scope == 'windows-initialization-probe'
         run: cargo test --locked --lib windows_initialization_probe -- --nocapture
