@@ -171,3 +171,8 @@ pub(in crate::backup) fn file_identity(file: &File) -> io::Result<FileIdentity> 
         })
     }
 }
+
+#[cfg(all(test, windows))]
+pub(super) fn create_retained_directory(path: &Path) -> io::Result<()> {
+    create_dir(path)
+}

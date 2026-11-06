@@ -315,11 +315,14 @@ jobs:
         run: |
           cargo test --locked --lib startup::generation_selection
           cargo test --locked --lib selection_probe
+      - name: Run isolated C1 and C7.2 candidate checks
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --lib candidate_builder
       - name: Explain focused scope
         if: always()
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
-          This scope runs Windows initialization, startup safety and isolated C7.1 checks.
+          This scope runs Windows initialization, startup safety, selection and candidate checks.
           No frontend checks or packaging. C5c production safety tests exercise only local NTFS.
           Read the probe log for NTFS directory open/flush observations.
           API/process-exit success does not establish power-loss durability.

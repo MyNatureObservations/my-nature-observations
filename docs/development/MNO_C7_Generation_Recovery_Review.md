@@ -243,3 +243,41 @@ test calls the real disposition API on a handle lacking DELETE and verifies
 that reopening blocks. These tests still require a completed Windows run.
 The error hooks model interruption at publication boundaries. Physical
 power-loss behavior and protection after handle release remain unverified.
+
+### C7.2 retained candidate and writable handoff
+
+C7.1a was accepted after Windows run
+[42176298998](https://github.com/MyNatureObservations/my-nature-observations/actions/runs/42176298998).
+The [C7.2 Windows probe](../../app/src-tauri/src/backup/restore/tests/candidate_handoff.rs)
+reuses C1's private extraction from a read-only archive handle and checked
+SQLite close. It copies the closed database into a new private directory
+using exclusive file creation, flushes the copy, then independently verifies
+file identity, the manifest digest, SQLite integrity, current schema and
+stored content including image assets. The fixture removes the external
+image original before construction. Failed retained copies stay in the
+fixture for inspection.
+
+Before modeled admission the probe reacquires a restrictive read handle and
+rechecks identity, digest and content. A second read handle shares reads
+and writes while continuing to deny delete access. Both handles are live
+when identity is compared. The restrictive handle is released after
+verification, and SQLite opens read-write without CREATE while the second
+handle keeps the object pinned. The connection closes before the pin is
+released. Subsequent ordinary reopening validates current content after a
+legitimate edit. The bundled SQLite Windows VFS normally shares reads and
+writes, which is compatible with this proposed overlap. Native tests are
+required to establish that the actual handoff succeeds.
+
+The probe covers repeated retained construction, truncation, archive tampering,
+copy and verification failure, a byte-identical replacement object, altered
+bytes, conflicting handles and injected handoff failure. It rejects unexpected
+candidate sidecars before opening SQLite and preserves their bytes. Tests
+also preserve the source backup, active journal and previous generation.
+C1 retains its separate mid-extraction failure checks.
+
+Local macOS checks passed the three C1 tests and the selection codec test.
+The focused Windows CI scope runs both C1 and C7.2. C7.2 uses a private fixture
+namespace with directory pins. Admission is an in-process test boundary.
+After admission, write sharing relies on cooperating journal owners.
+Durable directory publication, cross-process admission and production layout
+recognition remain for later stages. Power-loss durability remains unverified.

@@ -182,3 +182,7 @@ fn truncated_backup_is_rejected_without_partial_candidate_or_input_changes() {
     assert_eq!(fs::read(&archive).unwrap(), truncated);
     assert_eq!(fs::read(&source).unwrap(), source_before);
 }
+
+#[cfg(windows)]
+#[path = "candidate_handoff.rs"]
+mod candidate_handoff;
