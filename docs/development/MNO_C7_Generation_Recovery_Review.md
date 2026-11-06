@@ -216,3 +216,30 @@ simulate OS crashes or loss of power. The existing
 Native replacement evidence remains pending that run. Older valid record
 replay remains an accepted limitation. Candidate persistence, physical
 power-loss durability and production startup integration remain outside C7.1.
+
+### C7.1a acknowledgement ownership
+
+C7.1 released the marker handle before replacement and later removed the
+marker by pathname. Its published record handle also allowed competing
+writers after the byte check. Both gaps crossed the acknowledgement boundary.
+
+The isolated Windows probe now creates the marker with write and DELETE
+access and zero sharing. It retains that handle through replacement,
+verification and flush. The published file is opened with read and write
+access, zero sharing and reparse-point protection. The probe reads and
+flushes that same handle and retains it through acknowledgement.
+Acknowledgement uses FileDispositionInfo on the owned marker handle.
+Successful disposition removes the marker when that handle closes. A failed
+disposition propagates its Windows error and leaves the marker as blocking
+evidence. Ordinary handle close on an earlier error leaves the marker too.
+[Microsoft API reference](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle).
+
+The focused Windows job runs the existing C7.1 tests and the new native
+checks. A child process attempts marker deletion and rename immediately
+after replacement, and record write, deletion and replacement after the
+verification and flush barriers. The parent waits at those boundaries while
+holding the handles, then checks acknowledgement and reopening. A separate
+test calls the real disposition API on a handle lacking DELETE and verifies
+that reopening blocks. These tests still require a completed Windows run.
+The error hooks model interruption at publication boundaries. Physical
+power-loss behavior and protection after handle release remain unverified.

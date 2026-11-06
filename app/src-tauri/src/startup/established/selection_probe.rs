@@ -5,7 +5,13 @@ use crate::startup::{
     generation_selection::{LIMIT, LayoutEvidence, Phase, Record, Selection, classify},
 };
 use uuid::Uuid;
-use windows_sys::Win32::Storage::FileSystem::MOVEFILE_REPLACE_EXISTING;
+use windows_sys::Win32::{
+    Foundation::GENERIC_WRITE,
+    Storage::FileSystem::{
+        DELETE, FILE_DISPOSITION_INFO, FileDispositionInfo, MOVEFILE_REPLACE_EXISTING,
+        SetFileInformationByHandle,
+    },
+};
 
 const HEAD: &str = "generation-selection.json";
 const STAGED: &str = ".generation-selection-staged";
@@ -25,6 +31,10 @@ fn read_record(path: &Path) -> io::Result<Vec<u8>> {
         .share_mode(3)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)?;
+    read_record_handle(&file)
+}
+
+fn read_record_handle(file: &File) -> io::Result<Vec<u8>> {
     let metadata = file.metadata()?;
     if !metadata.is_file() || !plain(&metadata) {
         return Err(invalid());
@@ -33,6 +43,24 @@ fn read_record(path: &Path) -> io::Result<Vec<u8>> {
     file.take((LIMIT + 1) as u64).read_to_end(&mut bytes)?;
     Record::decode(&bytes)?;
     Ok(bytes)
+}
+
+fn acknowledge(marker: File) -> io::Result<()> {
+    let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
+    // SAFETY: the buffer has the layout and size required by FileDispositionInfo.
+    // The owned handle remains live throughout the call and closes on return.
+    if unsafe {
+        SetFileInformationByHandle(
+            marker.as_raw_handle(),
+            FileDispositionInfo,
+            (&disposition as *const FILE_DISPOSITION_INFO).cast(),
+            std::mem::size_of_val(&disposition) as u32,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 fn reopen(lease: &DirectoryLease, evidence: LayoutEvidence) -> io::Result<Selection> {
@@ -74,9 +102,13 @@ fn publish(
     let head = root.join(HEAD);
     let create = |path: &Path| OpenOptions::new().write(true).create_new(true).open(path);
     // Keep evidence across replacement and every fallible persistence barrier.
-    let marker = create(&intent)?;
+    let marker = OpenOptions::new()
+        .write(true)
+        .access_mode(GENERIC_WRITE | DELETE)
+        .share_mode(0)
+        .create_new(true)
+        .open(&intent)?;
     flush(&marker)?;
-    drop(marker);
     lease.boundary.sync()?;
     hook(Step::Intent)?;
 
@@ -101,8 +133,13 @@ fn publish(
         return Err(io::Error::last_os_error());
     }
     hook(Step::Replaced)?;
-    let published = opened_file(&head)?;
-    if read_record(&head)? != bytes {
+    let published = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .share_mode(0)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(&head)?;
+    if read_record_handle(&published)? != bytes {
         return Err(invalid());
     }
     flush(&published)?;
@@ -110,7 +147,9 @@ fn publish(
     hook(Step::Flushed)?;
     // A stale marker after a crash blocks reopening. The record and its
     // directory entry have passed all barriers before marker removal.
-    fs::remove_file(intent)
+    acknowledge(marker)?;
+    drop(published);
+    Ok(())
 }
 
 fn fixture() -> (tempfile::TempDir, DirectoryLease) {
@@ -238,4 +277,75 @@ fn corrupt_managed_record_blocks_publication_without_falling_back() {
     assert!(publish(&lease, LayoutEvidence::Managed, &pending(), |_| Ok(())).is_err());
     assert_eq!(fs::read(head).unwrap(), b"{partial");
     assert!(!lease.root.join(INTENT).exists());
+}
+
+#[test]
+fn competing_process() {
+    let Some(root) = std::env::var_os("MNO_C71A_TEST_ROOT") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(root);
+    let intent = root.join(INTENT);
+    assert!(fs::remove_file(&intent).is_err());
+    assert!(fs::rename(&intent, root.join("renamed-intent")).is_err());
+    if std::env::var_os("MNO_C71A_TEST_VERIFIED").is_some() {
+        let head = root.join(HEAD);
+        assert!(OpenOptions::new().write(true).open(&head).is_err());
+        assert!(fs::remove_file(&head).is_err());
+        let replacement = root.join("replacement");
+        fs::write(&replacement, pending().encode().unwrap()).unwrap();
+        assert_eq!(
+            unsafe {
+                MoveFileExW(
+                    wide(&replacement).as_ptr(),
+                    wide(&head).as_ptr(),
+                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+                )
+            },
+            0
+        );
+        assert!(replacement.is_file());
+    }
+}
+
+#[test]
+fn publication_protects_marker_and_verified_record_until_acknowledgement() {
+    let (_temp, lease) = fixture();
+    let record = pending();
+    publish(&lease, LayoutEvidence::Legacy, &record, |step| {
+        if matches!(step, Step::Replaced | Step::Flushed) {
+            let mut child = std::process::Command::new(std::env::current_exe()?);
+            child.args(["competing_process", "--nocapture"]);
+            child.env("MNO_C71A_TEST_ROOT", &lease.root);
+            child.env_remove("MNO_C71A_TEST_VERIFIED");
+            if step == Step::Flushed {
+                child.env("MNO_C71A_TEST_VERIFIED", "1");
+            }
+            assert!(child.status()?.success());
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert!(!present(&lease.root.join(INTENT)).unwrap());
+    assert_eq!(
+        reopen(&lease, LayoutEvidence::Managed).unwrap(),
+        Selection::Managed(record)
+    );
+}
+
+#[test]
+fn native_acknowledgement_failure_leaves_selection_blocked() {
+    let (_temp, lease) = fixture();
+    let record = pending();
+    publish(&lease, LayoutEvidence::Legacy, &record, |_| Ok(())).unwrap();
+    // Simulate the acknowledgement boundary using a handle without DELETE.
+    let marker = OpenOptions::new()
+        .write(true)
+        .share_mode(0)
+        .create_new(true)
+        .open(lease.root.join(INTENT))
+        .unwrap();
+    assert!(acknowledge(marker).is_err());
+    assert!(present(&lease.root.join(INTENT)).unwrap());
+    assert!(reopen(&lease, LayoutEvidence::Managed).is_err());
 }
