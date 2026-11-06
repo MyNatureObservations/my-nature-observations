@@ -528,3 +528,43 @@ startup regressions and runs the full Windows library suite for comparison
 with the four known failures. Native verification of the correction awaits
 that run. Local macOS all-target compilation and eight startup-error tests
 passed.
+
+### C7.3c pending Windows startup
+
+The ordering review found a bounded path using the C7.3b resolver and the
+C7.1a publisher. Startup retains the directory lease and checks the record,
+filesystem identity and sidecars. It hashes pending bytes through the same
+restrictive handle used to protect read-only SQLite validation. That handle
+requests write access for flushing and shares reads only. No SQL writer opens
+at this point. SQLite's ordinary read-only open shares both read and write,
+as required to coexist with the flush handle. Native verification of this
+specific combination is part of the new Windows tests.
+
+After verification, startup overlaps the immutable pin with the mutable
+bridge, checks identity and flushes the file and generation directories.
+It releases the selection record's read pin to permit replacement, checks
+its bytes again under the lease, then uses the same protected publication
+function as the C7.1a tests. The candidate pins stay live through publication
+and handle-based acknowledgement. Startup releases the restrictive pin and
+confirms writable SQLite access only after acknowledgement succeeds. The
+admitted record retains the candidate digest for provenance. Ordinary
+admitted startup validates current content independently of that digest.
+
+Before publication, failure leaves a pending record eligible for a fresh
+verification attempt. After intent creation, surviving intent or staging
+evidence blocks startup even when the head contains valid admitted bytes.
+After acknowledgement, a failed writable open leaves an admitted record
+which can be revalidated on restart. Every failure withholds Ready and
+the location callback. Tests inject errors across verification, replacement,
+acknowledgement and the writable-open boundary, including while the SQLite
+connection is live before its checked close. These are deterministic error
+injections. The C7.1a tests continue to exercise native sharing conflicts
+and a real disposition failure on the same publication implementation.
+
+The Windows lifecycle tests check pending-to-admitted startup, preservation
+and a subsequent edit and reopen through the captured DataLocation. Actual
+Tauri state registration and desktop startup remain outside that boundary.
+Local macOS all-target compilation, the codec test and 11 C4 regressions
+passed. Full platform CI is required for native acceptance. The accepted
+cooperating-writer, older-record replay and total managed evidence loss
+limits remain. Physical power-loss durability remains unverified.

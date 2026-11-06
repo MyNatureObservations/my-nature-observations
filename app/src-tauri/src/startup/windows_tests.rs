@@ -375,7 +375,7 @@ fn independently_reopened_invalid_new_content_is_not_admitted() {
 }
 
 #[test]
-fn unsafe_or_pending_managed_layout_never_falls_back_to_legacy() {
+fn unsafe_managed_layout_never_falls_back_to_legacy() {
     use super::generation_selection::{Phase, Record};
     for case in [
         "pending",
@@ -429,12 +429,17 @@ fn unsafe_or_pending_managed_layout_never_falls_back_to_legacy() {
         }
         let record = Record::new(
             generation,
-            if matches!(case, "admitted" | "wrong_schema") {
+            if case == "admitted" {
                 Phase::Admitted
             } else {
                 Phase::Pending
             },
-            "a".repeat(64),
+            if case == "wrong_schema" {
+                use sha2::{Digest, Sha256};
+                format!("{:x}", Sha256::digest(fs::read(&candidate).unwrap()))
+            } else {
+                "a".repeat(64)
+            },
         );
         let mut bytes = record.encode().unwrap();
         match case {
@@ -465,7 +470,7 @@ fn unsafe_or_pending_managed_layout_never_falls_back_to_legacy() {
         let state = DatabaseState::default();
         let error = state.initialize_startup(&root).unwrap_err();
         let expected = match case {
-            "pending" => "database_managed_pending_admission_disabled",
+            "pending" => "database_managed_verification_failed",
             "admitted" | "wrong_schema" => "database_managed_verification_failed",
             "interrupted" => "database_managed_publication_incomplete",
             _ => "database_managed_layout_invalid",
@@ -505,6 +510,15 @@ fn legacy_ready_uses_one_path_and_rejects_hardlinked_database() {
 
 #[test]
 fn admitted_generation_supplies_startup_location_and_reopens_after_edits() {
+    managed_lifecycle(super::generation_selection::Phase::Admitted);
+}
+
+#[test]
+fn pending_generation_acknowledges_before_ready_and_reopens_after_edits() {
+    managed_lifecycle(super::generation_selection::Phase::Pending);
+}
+
+fn managed_lifecycle(initial_phase: super::generation_selection::Phase) {
     use super::generation_selection::{Phase, Record};
     let (_temp, root) = created();
     let legacy = root.join("mno.sqlite");
@@ -526,7 +540,7 @@ fn admitted_generation_supplies_startup_location_and_reopens_after_edits() {
     let original = fs::read(&path).unwrap();
     use sha2::{Digest, Sha256};
     let digest = format!("{:x}", Sha256::digest(&original));
-    let selection = Record::new(generation, Phase::Admitted, digest)
+    let selection = Record::new(generation, initial_phase, digest.clone())
         .encode()
         .unwrap();
     let head = root.join("generation-selection.json");
@@ -557,6 +571,11 @@ fn admitted_generation_supplies_startup_location_and_reopens_after_edits() {
         let location = location.unwrap();
         assert_eq!(state.ready_database_path().unwrap(), resolved);
         assert_eq!(location.path(), resolved);
+        assert_eq!(
+            Record::decode(&fs::read(&head).unwrap()).unwrap().phase,
+            Phase::Admitted
+        );
+        assert!(!root.join(".generation-selection-in-progress").exists());
         assert!(DatabaseState::default().initialize_startup(&root).is_err());
         assert!(fs::rename(&directory, directory.with_extension("moved")).is_err());
         assert!(fs::rename(&path, path.with_extension("moved")).is_err());
@@ -575,10 +594,99 @@ fn admitted_generation_supplies_startup_location_and_reopens_after_edits() {
     }
 
     assert_ne!(fs::read(path).unwrap(), original);
-    assert_eq!(fs::read(head).unwrap(), selection);
+    assert_eq!(
+        fs::read(head).unwrap(),
+        Record::new(generation, Phase::Admitted, digest)
+            .encode()
+            .unwrap()
+    );
     assert_eq!(fs::read(legacy).unwrap(), legacy_before);
     assert_eq!(
         fs::read(legacy_sidecar).unwrap(),
         b"previous journal evidence"
     );
+}
+
+#[test]
+fn pending_admission_interruption_matrix_preserves_evidence_and_gates_ready() {
+    use super::established::windows::managed_layout::{
+        AdmissionPoint as Point, with_admission_fault,
+    };
+    use super::generation_selection::{Phase, Record};
+    use sha2::{Digest, Sha256};
+
+    for point in [
+        Point::BeforeVerification,
+        Point::Digest,
+        Point::SqliteVerification,
+        Point::BeforePublication,
+        Point::Replaced,
+        Point::BeforeAcknowledgement,
+        Point::Acknowledged,
+        Point::WritableOpen,
+    ] {
+        let (_temp, root) = created();
+        let previous = root.join("mno.sqlite");
+        let previous_bytes = fs::read(&previous).unwrap();
+        let backup = root.join("backup.mno-backup");
+        fs::write(&backup, b"backup sentinel").unwrap();
+        let generation = uuid::Uuid::new_v4();
+        let selected = root.join("generations").join(generation.to_string());
+        fs::create_dir_all(&selected).unwrap();
+        let path = selected.join("journal.sqlite");
+        database::create_current_database(&path).unwrap();
+        let candidate = fs::read(&path).unwrap();
+        let record = Record::new(
+            generation,
+            Phase::Pending,
+            format!("{:x}", Sha256::digest(&candidate)),
+        );
+        let head = root.join("generation-selection.json");
+        fs::write(&head, record.encode().unwrap()).unwrap();
+
+        let state = DatabaseState::default();
+        with_admission_fault(point, || {
+            assert!(
+                crate::install_journal_location(&state, &root, |_| {
+                    panic!("interrupted admission must not install DataLocation")
+                })
+                .is_err(),
+                "{point:?}"
+            );
+        });
+        assert!(state.operation(None).is_err());
+        drop(state);
+        let interrupted = matches!(point, Point::Replaced | Point::BeforeAcknowledgement);
+        assert_eq!(
+            root.join(".generation-selection-in-progress").is_file(),
+            interrupted
+        );
+        let current = Record::decode(&fs::read(&head).unwrap()).unwrap();
+        let admitted = interrupted || matches!(point, Point::Acknowledged | Point::WritableOpen);
+        assert_eq!(
+            current.phase,
+            if admitted {
+                Phase::Admitted
+            } else {
+                Phase::Pending
+            }
+        );
+        assert_eq!(current.generation, record.generation);
+        assert_eq!(current.candidate_sha256, record.candidate_sha256);
+        let retry = DatabaseState::default();
+        if interrupted {
+            assert_eq!(
+                retry.initialize_startup(&root).unwrap_err(),
+                "database_managed_publication_incomplete"
+            );
+        } else {
+            assert_eq!(
+                retry.initialize_startup(&root).unwrap(),
+                path.canonicalize().unwrap()
+            );
+        }
+        assert_eq!(fs::read(path).unwrap(), candidate);
+        assert_eq!(fs::read(previous).unwrap(), previous_bytes);
+        assert_eq!(fs::read(backup).unwrap(), b"backup sentinel");
+    }
 }

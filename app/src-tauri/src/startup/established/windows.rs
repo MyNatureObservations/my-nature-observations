@@ -291,3 +291,6 @@ mod selection_probe;
 
 #[path = "managed_layout.rs"]
 pub(in crate::startup) mod managed_layout;
+
+#[path = "selection_publication.rs"]
+mod selection_publication;

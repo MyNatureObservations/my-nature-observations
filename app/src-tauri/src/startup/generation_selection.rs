@@ -62,7 +62,7 @@ impl Record {
         Ok(record)
     }
 
-    #[cfg(test)]
+    #[cfg(any(windows, test))]
     pub(super) fn encode(&self) -> io::Result<Vec<u8>> {
         let bytes = serde_json::to_vec(self).map_err(io::Error::other)?;
         Self::decode(&bytes)?;
