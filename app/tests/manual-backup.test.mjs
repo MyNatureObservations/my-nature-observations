@@ -25,6 +25,7 @@ function harness() {
     $derived: value => value,
     $effect: () => {},
     afterNavigate: () => {},
+    onMount: () => {},
     language: { current: "sv" },
     m: new Proxy({}, { get: (_, key) => (_args, options) => translations[options.locale][key] }),
     invoke: (command, args) => {

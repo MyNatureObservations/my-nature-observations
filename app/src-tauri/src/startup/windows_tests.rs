@@ -556,6 +556,9 @@ fn managed_lifecycle(initial_phase: super::generation_selection::Phase) {
     );
     assert!(blocked.ready_database_path().is_err());
     drop(writer);
+    // Blocked managed startup owns the lease until that process exits.
+    assert!(DirectoryLease::acquire(&root).is_err());
+    drop(blocked);
 
     for (expected, edit) in [("Before", true), ("After", false)] {
         let state = DatabaseState::default();

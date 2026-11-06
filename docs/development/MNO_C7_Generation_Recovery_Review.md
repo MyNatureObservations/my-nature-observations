@@ -819,3 +819,18 @@ injection checks individual boundaries on NTFS. Desktop behavior,
 coordinated noncooperating writers, older valid head replay, total loss
 of managed evidence and physical power-loss durability remain outside
 the verified contract.
+
+#### C7.4c.1a regression corrections
+
+The admitted and pending lifecycle tests started a second in-process
+startup while their blocked startup state still owned the directory
+lease. The tests now assert exclusion after the competing file writer
+closes, then drop the blocked state to model process exit before retrying.
+
+The C7.4b Settings availability check added a mount hook that four
+frontend test harnesses had not modeled. The Settings markup test also
+searched only direct action-row children, so it missed the Restore link
+inside its availability condition. The test fixtures now account for
+the lifecycle hook and verify the conditional native link with both
+availability responses. Production startup and the availability gate
+are unchanged.

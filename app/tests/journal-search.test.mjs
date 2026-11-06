@@ -15,6 +15,7 @@ const flush = async () => {for(let i=0;i<12;i++)await Promise.resolve();};
 function navHarness({blocked=false, initial='https://mno.invalid/journal'}={}) {
   const calls=[],timers=new Map(),effects=[]; let navigate; let next=0;
   const context=vm.createContext({$state:v=>v,$derived:v=>v,$effect:f=>effects.push(f),
+    onMount() {},
     PLACE_MAP: 'mno:place-map', getContext: () => ({ close() {} }),
     createJournalReader:()=>()=>Promise.resolve({data:[]}),language:{current:'sv'},m:new Proxy({},{get:()=>()=>''}),
     afterNavigate:f=>navigate=f,page:{url:new URL(initial)},
