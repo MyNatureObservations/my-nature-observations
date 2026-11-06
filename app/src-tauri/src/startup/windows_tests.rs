@@ -715,7 +715,13 @@ fn explicit_restore_publishes_pending_and_restarts_from_legacy_then_admitted() {
     let mut previous = legacy.clone();
     for _ in 0..2 {
         let state = DatabaseState::default();
-        assert_eq!(state.initialize_startup(&root).unwrap(), previous);
+        let opened = state.initialize_startup(&root).unwrap();
+        // Startup canonicalizes the root, while the fixture may use a DOS short path.
+        let previous_identity = identity(&File::open(&previous).unwrap()).unwrap();
+        assert_eq!(
+            identity(&File::open(opened).unwrap()).unwrap(),
+            previous_identity
+        );
         let before = fs::read(&previous).unwrap();
         let (candidate, _) = crate::backup::restore::prepare_windows_backup(&backup, None).unwrap();
         let maintenance = state.maintenance().unwrap();
@@ -731,7 +737,10 @@ fn explicit_restore_publishes_pending_and_restarts_from_legacy_then_admitted() {
         drop(state);
         let restarted = DatabaseState::default();
         let selected = restarted.initialize_startup(&root).unwrap();
-        assert_ne!(selected, previous);
+        assert_ne!(
+            identity(&File::open(&selected).unwrap()).unwrap(),
+            previous_identity
+        );
         assert!(selected.starts_with(root.canonicalize().unwrap().join("generations")));
         let db = crate::database::open_existing(&selected).unwrap();
         let title: String = db
