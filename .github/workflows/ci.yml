@@ -330,7 +330,8 @@ jobs:
           python ../../.github/scripts/windows-library-baseline.py "$log" "$status"
       - name: Check Windows Restore acceptance opt-in
         if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
-        run: cargo test --locked --lib --features windows-restore-acceptance restore_app::
+        run: |
+          cargo test --locked --lib --features windows-restore-acceptance restore_app::
       - name: Run selected Windows integration tests
         if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
         run: >-
