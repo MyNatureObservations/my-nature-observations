@@ -785,3 +785,37 @@ injections model returning at specific boundaries on NTFS. They do not
 exercise a physical power loss or actual desktop Quit. The existing
 limitations for cooperating writers, replay of an older valid record and
 complete loss of managed evidence remain.
+
+### C7.4c.1 backend supersession
+
+Managed Windows startup failures retain the directory lease and stay in
+the blocked shell. The internal confirmation boundary requires the
+confirmed archive digest and serializes attempts. It reuses C1 archive
+validation and C7.4b candidate preparation, without opening the old
+journal during Recovery. Acknowledgement leaves the process blocked
+until restart. Windows Recovery has no new Tauri command or UI surface.
+
+On established local NTFS with a plain managed namespace, Recovery can
+supersede missing or malformed heads, invalid selected generations and
+interrupted publication. It retains or establishes the protected intent,
+copies bounded plain single-link head, staging and intent bytes into a
+private recovery-evidence directory, and flushes that evidence before
+retiring any occupied staging slot by its retained handle. It holds the
+intent through the existing protected publisher's acknowledgement.
+Only the new Pending head is authoritative. No previous database or
+backup is removed. Evidence directories are diagnostic only.
+
+Unsafe names, object types, sharing failures, evidence above the codec
+size bound, conflicting legacy artifacts and layouts lacking verified
+establishment remain blocked. After an interrupted supersession, an
+explicit retry can archive the surviving evidence and try another
+candidate. After acknowledgement, ordinary startup verifies and admits
+Pending. A retryable admission error can be retried by restarting, while
+ambiguous publication requires explicit Recovery.
+
+Native Windows tests exercise confirmed supersession, preservation,
+writable reopening, lease exclusion and injected failures. Fault
+injection checks individual boundaries on NTFS. Desktop behavior,
+coordinated noncooperating writers, older valid head replay, total loss
+of managed evidence and physical power-loss durability remain outside
+the verified contract.

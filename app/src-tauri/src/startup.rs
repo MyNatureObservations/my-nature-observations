@@ -332,6 +332,22 @@ pub(crate) struct RecoveryGate {
     reason: String,
 }
 impl RecoveryGate {
+    #[cfg(windows)]
+    pub(crate) fn managed_windows(&self) -> bool {
+        self.reason.starts_with("database_managed_")
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn supersede_windows(
+        &self,
+        candidate: &crate::backup::restore::WindowsCandidate,
+    ) -> Result<(), String> {
+        if !self.managed_windows() {
+            return Err("database_recovery_unsupported".into());
+        }
+        established::windows::managed_layout::supersede(self.lease()?, candidate).map_err(failure)
+    }
+
     pub(crate) fn reason(&self) -> &str {
         &self.reason
     }
@@ -410,15 +426,22 @@ fn begin_with(
 ) -> Result<StartupOutcome, String> {
     let lock = DirectoryLease::acquire(root)?;
     #[cfg(windows)]
-    if let Some(admitted) = established::windows::managed_layout::resolve(&lock)
-        .map_err(|reason| reason.code().to_owned())?
-    {
-        return Ok(StartupOutcome::Ready(StartupReady {
-            path: admitted.path,
-            database_pin: Some(admitted.database),
-            _generation_directories: Some(admitted.directories),
-            lock: Some(lock),
-        }));
+    match established::windows::managed_layout::resolve(&lock) {
+        Ok(Some(admitted)) => {
+            return Ok(StartupOutcome::Ready(StartupReady {
+                path: admitted.path,
+                database_pin: Some(admitted.database),
+                _generation_directories: Some(admitted.directories),
+                lock: Some(lock),
+            }));
+        }
+        Ok(None) => {}
+        Err(reason) => {
+            return Ok(StartupOutcome::Recovery(RecoveryGate {
+                lease: lock,
+                reason: reason.code().to_owned(),
+            }));
+        }
     }
     let recovery = match checkpoint(&lock.root, &mut metadata) {
         Ok(present) => present,

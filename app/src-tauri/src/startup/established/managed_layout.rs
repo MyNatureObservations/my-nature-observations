@@ -318,12 +318,115 @@ pub(in crate::startup) fn publish_restore(
         }
         _ => return Err(invalid()),
     };
-    let generation = uuid::Uuid::new_v4();
     // From this point the old process cannot resume journal operations.
     latch();
     if existing.is_none() {
         WindowsCandidate::create_directory(&generations)?;
     }
+    let (pending, _pins) = prepare_generation(lease, candidate)?;
+    let replace = existing.is_some();
+    if let Some((previous_pin, bytes)) = existing {
+        drop(previous_pin);
+        if read_record(&head)? != bytes {
+            return Err(invalid());
+        }
+    }
+    publish_record(lease, &pending, replace, |step| {
+        if step == Step::Replaced {
+            restore_point(RestorePoint::Replaced)?;
+        }
+        Ok(())
+    })?;
+    restore_point(RestorePoint::Acknowledged)?;
+    Ok(())
+}
+
+// The existing intent stays protected until the new Pending record has passed
+// the same acknowledgement barriers as ordinary publication.
+pub(in crate::startup) fn supersede(
+    lease: &DirectoryLease,
+    candidate: &crate::backup::restore::WindowsCandidate,
+) -> io::Result<()> {
+    use super::selection_publication::{acknowledge, open_intent, publish_with_intent};
+    use crate::backup::restore::WindowsCandidate;
+    let root = &lease.root;
+    lease.ensure_current().map_err(io::Error::other)?;
+    lease.boundary.check()?;
+    if !canonical_entry(root, GENERATIONS)?
+        || crate::startup::checkpoint(root, |path| fs::symlink_metadata(path))
+            .map_err(io::Error::other)?
+        || !crate::startup::established::read(root).map_err(io::Error::other)?
+    {
+        return Err(invalid());
+    }
+    let head = canonical_entry(root, HEAD)?
+        .then(|| open_single_file(&root.join(HEAD), 1, false))
+        .transpose()?;
+    let staged = canonical_entry(root, STAGED)?
+        .then(|| open_intent(&root.join(STAGED), true))
+        .transpose()?;
+    let had_intent = canonical_entry(root, INTENT)?;
+    let intent = open_intent(&root.join(INTENT), had_intent)?;
+    flush(&intent)?;
+    lease.boundary.sync()?;
+    let (pending, pins) = prepare_generation(lease, candidate)?;
+
+    let evidence = root
+        .join(GENERATIONS)
+        .join(format!("recovery-evidence-{}", pending.generation));
+    WindowsCandidate::create_directory(&evidence)?;
+    let directory = directory_handle(&evidence)?;
+    for (name, source) in [
+        (HEAD, head.as_ref()),
+        (STAGED, staged.as_ref()),
+        (INTENT, had_intent.then_some(&intent)),
+    ] {
+        if let Some(source) = source {
+            let metadata = source.metadata()?;
+            if !metadata.is_file()
+                || !plain(&metadata)
+                || windows_file_information(source)?.nNumberOfLinks != 1
+                || metadata.len() > LIMIT as u64
+            {
+                return Err(invalid());
+            }
+            let mut output = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(evidence.join(name))?;
+            if io::copy(&mut source.take((LIMIT + 1) as u64), &mut output)? != metadata.len() {
+                return Err(invalid());
+            }
+            flush(&output)?;
+        }
+    }
+    flush(&intent)?;
+    directory.sync_all()?;
+    pins[0].sync_all()?;
+    lease.boundary.sync()?;
+    restore_point(RestorePoint::Evidence)?;
+    // The staged bytes are durable in the evidence directory. Clear the
+    // occupied staging slot by its owned handle while intent still blocks startup.
+    if let Some(staged) = staged {
+        acknowledge(staged)?;
+        lease.boundary.sync()?;
+    }
+    let replace = head.is_some();
+    drop(head);
+    publish_with_intent(lease, &pending, replace, intent, |step| match step {
+        Step::Replaced => restore_point(RestorePoint::Replaced),
+        Step::Flushed => restore_point(RestorePoint::BeforeAcknowledgement),
+        _ => Ok(()),
+    })
+}
+
+fn prepare_generation(
+    lease: &DirectoryLease,
+    candidate: &crate::backup::restore::WindowsCandidate,
+) -> io::Result<(Record, [File; 3])> {
+    use crate::backup::restore::WindowsCandidate;
+    let generations = lease.root.join(GENERATIONS);
+    let generation = uuid::Uuid::new_v4();
     let parent = directory_handle(&generations)?;
     require_ntfs(&generations, &parent)?;
     let volume = identity(&lease.directory)?.0;
@@ -358,22 +461,8 @@ pub(in crate::startup) fn publish_restore(
     parent.sync_all()?;
     lease.boundary.sync()?;
     restore_point(RestorePoint::Verified)?;
-    let replace = existing.is_some();
-    if let Some((previous_pin, bytes)) = existing {
-        drop(previous_pin);
-        if read_record(&head)? != bytes {
-            return Err(invalid());
-        }
-    }
     let pending = Record::new(generation, Phase::Pending, candidate.digest().to_owned());
-    publish_record(lease, &pending, replace, |step| {
-        if step == Step::Replaced {
-            restore_point(RestorePoint::Replaced)?;
-        }
-        Ok(())
-    })?;
-    restore_point(RestorePoint::Acknowledged)?;
-    Ok(())
+    Ok((pending, [parent, directory, pin]))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -381,7 +470,9 @@ pub(in crate::startup) enum RestorePoint {
     Namespace,
     Copied,
     Verified,
+    Evidence,
     Replaced,
+    BeforeAcknowledgement,
     Acknowledged,
 }
 

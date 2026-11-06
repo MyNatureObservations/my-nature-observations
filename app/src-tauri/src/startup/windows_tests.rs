@@ -791,3 +791,201 @@ fn explicit_restore_interruption_preserves_legacy_and_backup_and_fails_closed() 
         assert_eq!(fs::read(&backup).unwrap(), backup_bytes);
     }
 }
+
+#[test]
+fn confirmed_recovery_supersedes_managed_failures_and_keeps_original_evidence() {
+    use generation_selection::{Phase, Record};
+
+    for case in [
+        "missing",
+        "malformed",
+        "pending-missing",
+        "pending",
+        "admitted",
+        "interrupted",
+    ] {
+        let (parent, root) = created();
+        let backup = restore_fixture(parent.path());
+        let backup_bytes = fs::read(&backup).unwrap();
+        let (_, digest) = crate::backup::restore::prepare_windows_backup(&backup, None).unwrap();
+        let legacy = root.join("mno.sqlite");
+        fs::write(&legacy, b"damaged legacy").unwrap();
+        let old = uuid::Uuid::new_v4();
+        let generations = root.join("generations");
+        let old_dir = generations.join(old.to_string());
+        fs::create_dir_all(&old_dir).unwrap();
+        let old_db = old_dir.join("journal.sqlite");
+        let mut evidence = Vec::new();
+        match case {
+            "malformed" => evidence.push(("generation-selection.json", b"broken json".to_vec())),
+            "pending-missing" | "pending" | "admitted" => {
+                let phase = if case != "admitted" {
+                    Phase::Pending
+                } else {
+                    Phase::Admitted
+                };
+                evidence.push((
+                    "generation-selection.json",
+                    Record::new(old, phase, "0".repeat(64)).encode().unwrap(),
+                ));
+                if case != "pending-missing" {
+                    fs::write(&old_db, b"damaged selected database").unwrap();
+                }
+            }
+            "interrupted" => {
+                evidence.push(("generation-selection.json", b"old head".to_vec()));
+                evidence.push((
+                    ".generation-selection-staged",
+                    b"interrupted bytes".to_vec(),
+                ));
+                evidence.push((".generation-selection-in-progress", b"old intent".to_vec()));
+            }
+            _ => {}
+        }
+        for (name, bytes) in &evidence {
+            fs::write(root.join(name), bytes).unwrap();
+        }
+
+        let blocked = DatabaseState::default();
+        assert!(blocked.initialize_startup(&root).is_err(), "{case}");
+        assert!(DirectoryLease::acquire(&root).is_err());
+        assert!(blocked.confirm_windows_recovery(&backup, None).is_err());
+        assert!(
+            blocked
+                .confirm_windows_recovery(&backup, Some("changed"))
+                .is_err()
+        );
+        for (name, bytes) in &evidence {
+            assert_eq!(&fs::read(root.join(name)).unwrap(), bytes);
+        }
+        assert_eq!(fs::read_dir(&generations).unwrap().count(), 1);
+
+        blocked
+            .confirm_windows_recovery(&backup, Some(&digest))
+            .unwrap();
+        assert!(blocked.operation(None).is_err());
+        assert!(
+            blocked
+                .confirm_windows_recovery(&backup, Some(&digest))
+                .is_err()
+        );
+        let pending =
+            Record::decode(&fs::read(root.join("generation-selection.json")).unwrap()).unwrap();
+        assert_eq!(pending.phase, Phase::Pending);
+        let saved = generations.join(format!("recovery-evidence-{}", pending.generation));
+        for (name, bytes) in &evidence {
+            assert_eq!(&fs::read(saved.join(name)).unwrap(), bytes);
+        }
+        drop(blocked);
+
+        let restarted = DatabaseState::default();
+        let path = restarted.initialize_startup(&root).unwrap();
+        let connection = database::open_existing(&path).unwrap();
+        assert_eq!(
+            connection
+                .execute(
+                    "UPDATE journal_entries SET title = 'Recovered' WHERE id = 'restore-a'",
+                    []
+                )
+                .unwrap(),
+            1
+        );
+        connection.close().unwrap();
+        drop(restarted);
+        let reopened = DatabaseState::default();
+        assert_eq!(reopened.initialize_startup(&root).unwrap(), path);
+        let connection = database::open_existing(&path).unwrap();
+        let title: String = connection
+            .query_row(
+                "SELECT title FROM journal_entries WHERE id = 'restore-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(title, "Recovered");
+        connection.close().unwrap();
+        assert_eq!(fs::read(&legacy).unwrap(), b"damaged legacy");
+        if matches!(case, "pending" | "admitted") {
+            assert_eq!(fs::read(old_db).unwrap(), b"damaged selected database");
+        }
+        assert_eq!(fs::read(&backup).unwrap(), backup_bytes);
+    }
+}
+
+#[test]
+fn interrupted_recovery_remains_blocked_and_allows_explicit_retry() {
+    use established::windows::managed_layout::{
+        AdmissionPoint, RestorePoint, with_admission_fault, with_restore_fault,
+    };
+    for point in [
+        RestorePoint::Verified,
+        RestorePoint::Evidence,
+        RestorePoint::Replaced,
+        RestorePoint::BeforeAcknowledgement,
+    ] {
+        let (parent, root) = created();
+        let backup = restore_fixture(parent.path());
+        let (_, digest) = crate::backup::restore::prepare_windows_backup(&backup, None).unwrap();
+        fs::create_dir(root.join("generations")).unwrap();
+        fs::write(root.join("generation-selection.json"), b"damaged head").unwrap();
+        let state = DatabaseState::default();
+        assert!(state.initialize_startup(&root).is_err());
+        assert!(
+            with_restore_fault(point, || state
+                .confirm_windows_recovery(&backup, Some(&digest)))
+            .is_err()
+        );
+        assert!(state.operation(None).is_err());
+        assert!(root.join(".generation-selection-in-progress").exists());
+        drop(state);
+        let retry = DatabaseState::default();
+        assert!(retry.initialize_startup(&root).is_err());
+        retry
+            .confirm_windows_recovery(&backup, Some(&digest))
+            .unwrap();
+        drop(retry);
+        let failed_admission = DatabaseState::default();
+        assert!(
+            with_admission_fault(AdmissionPoint::BeforeVerification, || failed_admission
+                .initialize_startup(&root))
+            .is_err()
+        );
+        assert!(failed_admission.operation(None).is_err());
+        drop(failed_admission);
+        assert!(DatabaseState::default().initialize_startup(&root).is_ok());
+    }
+}
+
+#[test]
+fn recovery_rejects_shared_or_hardlinked_staging_evidence() {
+    let (parent, root) = created();
+    let backup = restore_fixture(parent.path());
+    let (_, digest) = crate::backup::restore::prepare_windows_backup(&backup, None).unwrap();
+    fs::create_dir(root.join("generations")).unwrap();
+    let staged = root.join(".generation-selection-staged");
+    fs::write(&staged, b"original staging evidence").unwrap();
+
+    let state = DatabaseState::default();
+    assert!(state.initialize_startup(&root).is_err());
+    let competing = File::open(&staged).unwrap();
+    assert!(
+        state
+            .confirm_windows_recovery(&backup, Some(&digest))
+            .is_err()
+    );
+    drop(competing);
+    assert!(!root.join("generation-selection.json").exists());
+
+    let alias = root.join("staging-alias");
+    fs::hard_link(&staged, &alias).unwrap();
+    assert!(
+        state
+            .confirm_windows_recovery(&backup, Some(&digest))
+            .is_err()
+    );
+    assert!(state.operation(None).is_err());
+    assert!(!root.join("generation-selection.json").exists());
+    for path in [staged, alias] {
+        assert_eq!(fs::read(path).unwrap(), b"original staging evidence");
+    }
+}

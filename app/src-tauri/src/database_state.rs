@@ -101,6 +101,10 @@ impl DatabaseState {
             crate::startup::StartupOutcome::Ready(ready) => {
                 (Phase::Ready, Some(ready.database_path()))
             }
+            #[cfg(windows)]
+            crate::startup::StartupOutcome::Recovery(gate) if gate.managed_windows() => {
+                (Phase::Blocked, None)
+            }
             crate::startup::StartupOutcome::Recovery(_) => (Phase::Recovery, None),
         };
         self.directory
@@ -109,6 +113,32 @@ impl DatabaseState {
         self.phase.store(phase as u8, Ordering::Release);
         path.ok_or(blocked_reason)
     }
+    // Internal backend boundary. No Tauri command exposes Windows Recovery.
+    #[cfg(windows)]
+    #[allow(dead_code)]
+    pub(crate) fn confirm_windows_recovery(
+        &self,
+        archive: &std::path::Path,
+        confirmed_digest: Option<&str>,
+    ) -> Result<(), String> {
+        let digest = confirmed_digest.ok_or("database_recovery_confirmation_required")?;
+        let _exclusive = self
+            .generation
+            .try_write()
+            .map_err(|_| "database_recovery_busy")?;
+        let Some(crate::startup::StartupOutcome::Recovery(gate)) = self.directory.get() else {
+            return Err("database_recovery_unsupported".into());
+        };
+        if !gate.managed_windows() || self.recovery_required.load(Ordering::Acquire) {
+            return Err("database_recovery_unsupported".into());
+        }
+        let (candidate, _) = crate::backup::restore::prepare_windows_backup(archive, Some(digest))
+            .map_err(|e| e.to_string())?;
+        gate.supersede_windows(&candidate)?;
+        self.recovery_required.store(true, Ordering::Release);
+        Ok(())
+    }
+
     // Shell status only; neither method changes phase or grants admission.
     pub(crate) fn startup_recovery_pending(&self) -> bool {
         self.phase.load(Ordering::Acquire) == Phase::Recovery as u8

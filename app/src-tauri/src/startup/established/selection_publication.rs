@@ -5,7 +5,7 @@ use crate::startup::{
     generation_selection::{LIMIT, Record},
 };
 use windows_sys::Win32::{
-    Foundation::GENERIC_WRITE,
+    Foundation::{GENERIC_READ, GENERIC_WRITE},
     Storage::FileSystem::{
         DELETE, FILE_DISPOSITION_INFO, FileDispositionInfo, MOVEFILE_REPLACE_EXISTING,
         SetFileInformationByHandle,
@@ -64,21 +64,35 @@ pub(super) fn publish_record(
     lease: &DirectoryLease,
     record: &Record,
     replace: bool,
+    hook: impl FnMut(Step) -> io::Result<()>,
+) -> io::Result<()> {
+    let marker = open_intent(&lease.root.join(INTENT), false)?;
+    publish_with_intent(lease, record, replace, marker, hook)
+}
+
+pub(super) fn open_intent(path: &Path, existing: bool) -> io::Result<File> {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .access_mode(GENERIC_READ | GENERIC_WRITE | DELETE)
+        .share_mode(0)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .create_new(!existing)
+        .open(path)
+}
+
+pub(super) fn publish_with_intent(
+    lease: &DirectoryLease,
+    record: &Record,
+    replace: bool,
+    marker: File,
     mut hook: impl FnMut(Step) -> io::Result<()>,
 ) -> io::Result<()> {
     let bytes = record.encode()?;
     let root = &lease.root;
-    let intent = root.join(INTENT);
     let staged = root.join(STAGED);
     let head = root.join(HEAD);
     let create = |path: &Path| OpenOptions::new().write(true).create_new(true).open(path);
-    // Keep evidence across replacement and every fallible persistence barrier.
-    let marker = OpenOptions::new()
-        .write(true)
-        .access_mode(GENERIC_WRITE | DELETE)
-        .share_mode(0)
-        .create_new(true)
-        .open(&intent)?;
     flush(&marker)?;
     lease.boundary.sync()?;
     hook(Step::Intent)?;
