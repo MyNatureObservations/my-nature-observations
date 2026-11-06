@@ -31,7 +31,7 @@ pub(super) fn invalid() -> io::Error {
 }
 
 impl Record {
-    #[cfg(test)]
+    #[cfg(any(windows, test))]
     pub(super) fn new(generation: Uuid, phase: Phase, digest: String) -> Self {
         Self {
             format: FORMAT.into(),

@@ -690,3 +690,95 @@ fn pending_admission_interruption_matrix_preserves_evidence_and_gates_ready() {
         assert_eq!(fs::read(backup).unwrap(), b"backup sentinel");
     }
 }
+
+fn restore_fixture(parent: &Path) -> PathBuf {
+    let source = parent.join("source.sqlite");
+    database::create_current_database(&source).unwrap();
+    let archive = parent.join("restore.mno-backup");
+    let connection = rusqlite::Connection::open(&source).unwrap();
+    connection.execute(
+        "INSERT INTO journal_entries VALUES ('restore-a','2026-10-01','Restored journal',?1,1,'created','updated')",
+        [r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Synthetic entry"}]}]}"#],
+    ).unwrap();
+    crate::backup::create_backup(&connection, &archive, crate::backup::BackupKind::Manual).unwrap();
+    connection.close().unwrap();
+    archive
+}
+
+#[test]
+fn explicit_restore_publishes_pending_and_restarts_from_legacy_then_admitted() {
+    let (parent, root) = created();
+    let backup = restore_fixture(parent.path());
+    let backup_bytes = fs::read(&backup).unwrap();
+    let legacy = root.join("mno.sqlite");
+    let legacy_bytes = fs::read(&legacy).unwrap();
+    let mut previous = legacy.clone();
+    for _ in 0..2 {
+        let state = DatabaseState::default();
+        assert_eq!(state.initialize_startup(&root).unwrap(), previous);
+        let before = fs::read(&previous).unwrap();
+        let (candidate, _) = crate::backup::restore::prepare_windows_backup(&backup, None).unwrap();
+        let maintenance = state.maintenance().unwrap();
+        maintenance.publish_windows_restore(&candidate).unwrap();
+        drop(maintenance);
+        assert!(state.operation(None).is_err());
+        assert!(DirectoryLease::acquire(&root).is_err());
+        let head = fs::read(root.join("generation-selection.json")).unwrap();
+        assert_eq!(
+            generation_selection::Record::decode(&head).unwrap().phase,
+            generation_selection::Phase::Pending
+        );
+        drop(state);
+        let restarted = DatabaseState::default();
+        let selected = restarted.initialize_startup(&root).unwrap();
+        assert_ne!(selected, previous);
+        assert!(selected.starts_with(root.canonicalize().unwrap().join("generations")));
+        let db = crate::database::open_existing(&selected).unwrap();
+        let title: String = db
+            .query_row("SELECT title FROM journal_entries", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(title, "Restored journal");
+        db.close().unwrap();
+        assert!(restarted.operation(None).is_ok());
+        assert_eq!(fs::read(&previous).unwrap(), before);
+        assert_eq!(fs::read(&legacy).unwrap(), legacy_bytes);
+        assert_eq!(fs::read(&backup).unwrap(), backup_bytes);
+        previous = selected;
+    }
+}
+
+#[test]
+fn explicit_restore_interruption_preserves_legacy_and_backup_and_fails_closed() {
+    use established::windows::managed_layout::{RestorePoint, with_restore_fault};
+    for point in [
+        RestorePoint::Namespace,
+        RestorePoint::Copied,
+        RestorePoint::Verified,
+        RestorePoint::Replaced,
+        RestorePoint::Acknowledged,
+    ] {
+        let (parent, root) = created();
+        let backup = restore_fixture(parent.path());
+        let backup_bytes = fs::read(&backup).unwrap();
+        let state = DatabaseState::default();
+        let legacy = state.initialize_startup(&root).unwrap();
+        let legacy_bytes = fs::read(&legacy).unwrap();
+        let (candidate, _) = crate::backup::restore::prepare_windows_backup(&backup, None).unwrap();
+        let maintenance = state.maintenance().unwrap();
+        assert!(
+            with_restore_fault(point, || maintenance.publish_windows_restore(&candidate)).is_err()
+        );
+        drop(maintenance);
+        assert!(state.operation(None).is_err());
+        drop(state);
+        let restarted = DatabaseState::default();
+        if point == RestorePoint::Acknowledged {
+            assert_ne!(restarted.initialize_startup(&root).unwrap(), legacy);
+        } else {
+            assert!(restarted.initialize_startup(&root).is_err(), "{point:?}");
+            assert!(restarted.operation(None).is_err());
+        }
+        assert_eq!(fs::read(&legacy).unwrap(), legacy_bytes);
+        assert_eq!(fs::read(&backup).unwrap(), backup_bytes);
+    }
+}

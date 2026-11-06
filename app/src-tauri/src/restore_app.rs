@@ -106,17 +106,60 @@ fn activate_selection(state: &DatabaseState, choice: Choice) -> Result<(), Error
     drop(activated);
     Ok(()) // Disk activated, NOT Ready. All session/SQLite owners close before reply.
 }
+#[cfg(windows)]
+fn validate_selection(state: &DatabaseState, path: PathBuf) -> Result<Choice, Error> {
+    let permit = state.operation(None).map_err(|_| Error::Busy)?;
+    let generation = permit.snapshot(()).generation;
+    let (_, hash) = crate::backup::restore::prepare_windows_backup(&path, None)
+        .map_err(|_| Error::InvalidBackup)?;
+    Ok(Choice {
+        token: uuid::Uuid::new_v4().to_string(),
+        path,
+        hash,
+        generation,
+    })
+}
+
+#[cfg(windows)]
+fn activate_selection(state: &DatabaseState, choice: Choice) -> Result<(), Error> {
+    let maintenance = state.maintenance().map_err(|_| Error::Busy)?;
+    if maintenance.generation() != choice.generation {
+        return Err(Error::Changed);
+    }
+    let (candidate, _) =
+        crate::backup::restore::prepare_windows_backup(&choice.path, Some(&choice.hash))
+            .map_err(|_| Error::InvalidBackup)?;
+    maintenance
+        .publish_windows_restore(&candidate)
+        .map_err(|_| Error::Failed)
+}
+
+#[tauri::command]
+pub(crate) fn restore_available() -> bool {
+    // Windows stays unavailable in every build until blocked-startup Recovery is accepted.
+    cfg!(target_os = "macos")
+}
+
+fn require_restore_available() -> Result<(), Error> {
+    #[cfg(not(target_os = "macos"))]
+    if !restore_available() {
+        return Err(Error::Unsupported);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub(crate) async fn choose_restore_backup(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     dialog_title: String,
 ) -> Result<Option<Selection>, Error> {
+    require_restore_available()?;
     tauri::async_runtime::spawn_blocking(move || {
         let shared = app.state::<RestoreState>();
         let _busy = shared.reserve()?;
         *shared.selected.lock().map_err(|_| Error::Failed)? = None;
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", windows))]
         {
             let Some(file) = app
                 .dialog()
@@ -136,7 +179,7 @@ pub(crate) async fn choose_restore_backup(
             *shared.selected.lock().map_err(|_| Error::Failed)? = Some(choice);
             Ok(Some(result))
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", windows)))]
         {
             let _ = (window, dialog_title);
             Err(Error::Unsupported)
@@ -150,6 +193,7 @@ pub(crate) async fn restore_selected_backup(
     app: tauri::AppHandle,
     token: String,
 ) -> Result<(), Error> {
+    require_restore_available()?;
     tauri::async_runtime::spawn_blocking(move || {
         let shared = app.state::<RestoreState>();
         let _busy = shared.reserve()?;
@@ -162,9 +206,9 @@ pub(crate) async fn restore_selected_backup(
         if choice.token != token {
             return Err(Error::Changed);
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", windows))]
         let result = activate_selection(&app.state::<DatabaseState>(), choice);
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", windows)))]
         let result = Err(Error::Unsupported);
         // On failure after arming, hide all journal views too. The backend gate
         // already denies operations, including stale/queued editor writes.
@@ -223,3 +267,54 @@ fn request_quit(
 }
 #[cfg(all(test, target_os = "macos"))]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[test]
+fn windows_restore_commands_are_unavailable_even_in_test_builds() {
+    assert!(!restore_available());
+    assert_eq!(require_restore_available(), Err(Error::Unsupported));
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn windows_restore_requires_an_unchanged_archive_and_quit_waits_for_publication() {
+    use crate::backup::{BackupKind, create_backup};
+    let parent = tempfile::tempdir().unwrap();
+    let root = parent.path().join("app");
+    let state = DatabaseState::default();
+    let database = state.initialize_startup(&root).unwrap();
+    let archive = parent.path().join("restore.mno-backup");
+    let db = rusqlite::Connection::open(database).unwrap();
+    create_backup(&db, &archive, BackupKind::Manual).unwrap();
+    db.close().unwrap();
+    let shared = RestoreState::default();
+    let choice = validate_selection(&state, archive.clone()).unwrap();
+    assert!(!root.join("generations").exists());
+    assert_eq!(
+        request_quit(&state, &shared, || panic!("Ready quit")),
+        Err(Error::Changed)
+    );
+    let original = std::fs::read(&archive).unwrap();
+    std::fs::write(&archive, b"changed archive").unwrap();
+    assert_eq!(
+        activate_selection(&state, choice),
+        Err(Error::InvalidBackup)
+    );
+    assert!(!root.join("generations").exists());
+    assert!(state.operation(None).is_ok());
+
+    std::fs::write(&archive, &original).unwrap();
+    let choice = validate_selection(&state, archive.clone()).unwrap();
+    activate_selection(&state, choice).unwrap();
+    let reservation = shared.reserve().unwrap();
+    assert_eq!(
+        request_quit(&state, &shared, || panic!("busy quit")),
+        Err(Error::Busy)
+    );
+    drop(reservation);
+    let mut quit = false;
+    request_quit(&state, &shared, || quit = true).unwrap();
+    assert!(quit);
+    assert!(state.operation(None).is_err());
+    assert_eq!(std::fs::read(archive).unwrap(), original);
+}

@@ -145,21 +145,11 @@ fn inspect(lease: &DirectoryLease) -> io::Result<Result<Option<Admitted>, Block>
     }
     if pending {
         admission_point(AdmissionPoint::BeforeVerification)?;
-        let mut digest = Sha256::new();
-        let mut reader = &database;
-        let mut chunk = [0u8; 64 * 1024];
-        loop {
-            let count = reader.read(&mut chunk)?;
-            if count == 0 {
-                break;
-            }
-            digest.update(&chunk[..count]);
-            admission_point(AdmissionPoint::Digest)?;
-        }
-        if format!("{:x}", digest.finalize()) != record.candidate_sha256 {
+        if candidate_digest(&database, || admission_point(AdmissionPoint::Digest))?
+            != record.candidate_sha256
+        {
             return Ok(Err(Block::Verification));
         }
-        reader.rewind()?;
         admission_point(AdmissionPoint::SqliteVerification)?;
     }
     let mut header = [0u8; 20];
@@ -268,5 +258,158 @@ pub(in crate::startup) fn with_admission_fault<T>(
         }
     }
     let _reset = Reset(ADMISSION_FAULT.replace(Some(point)));
+    action()
+}
+
+fn candidate_digest(
+    file: &File,
+    mut progress: impl FnMut() -> io::Result<()>,
+) -> io::Result<String> {
+    let mut reader = file;
+    let mut digest = Sha256::new();
+    let mut chunk = [0u8; 64 * 1024];
+    loop {
+        let count = reader.read(&mut chunk)?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&chunk[..count]);
+        progress()?;
+    }
+    reader.rewind()?;
+    Ok(format!("{:x}", digest.finalize()))
+}
+
+pub(in crate::startup) fn publish_restore(
+    lease: &DirectoryLease,
+    active: &Path,
+    candidate: &crate::backup::restore::WindowsCandidate,
+    latch: impl FnOnce(),
+) -> io::Result<()> {
+    use crate::backup::restore::WindowsCandidate;
+    let root = &lease.root;
+    lease.boundary.check()?;
+    if canonical_entry(root, INTENT)?
+        || canonical_entry(root, STAGED)?
+        || crate::startup::checkpoint(root, |path| fs::symlink_metadata(path))
+            .map_err(io::Error::other)?
+        || !crate::startup::established::read(root).map_err(io::Error::other)?
+    {
+        return Err(invalid());
+    }
+    let generations = root.join(GENERATIONS);
+    let head = root.join(HEAD);
+    let existing = match (
+        canonical_entry(root, GENERATIONS)?,
+        canonical_entry(root, HEAD)?,
+    ) {
+        (false, false) if active == crate::database::expected_database_path(root) => None,
+        (true, true) => {
+            let mut bytes = Vec::new();
+            let pin = open_single_file(&head, 1, false)?;
+            (&pin).take((LIMIT + 1) as u64).read_to_end(&mut bytes)?;
+            let record = Record::decode(&bytes)?;
+            if record.phase != Phase::Admitted
+                || active != generations.join(&record.generation).join(DATABASE)
+            {
+                return Err(invalid());
+            }
+            Some((pin, bytes))
+        }
+        _ => return Err(invalid()),
+    };
+    let generation = uuid::Uuid::new_v4();
+    // From this point the old process cannot resume journal operations.
+    latch();
+    if existing.is_none() {
+        WindowsCandidate::create_directory(&generations)?;
+    }
+    let parent = directory_handle(&generations)?;
+    require_ntfs(&generations, &parent)?;
+    let volume = identity(&lease.directory)?.0;
+    if identity(&parent)?.0 != volume {
+        return Err(invalid());
+    }
+    // Persist evidence before writing the retained candidate or selection.
+    parent.sync_all()?;
+    lease.boundary.sync()?;
+    restore_point(RestorePoint::Namespace)?;
+    let selected = generations.join(generation.to_string());
+    WindowsCandidate::create_directory(&selected)?;
+    let directory = directory_handle(&selected)?;
+    if identity(&directory)?.0 != volume {
+        return Err(invalid());
+    }
+    let path = selected.join(DATABASE);
+    let output = candidate.copy_to(&path)?;
+    let expected = identity(&output)?;
+    drop(output);
+    restore_point(RestorePoint::Copied)?;
+    let pin = open_single_file(&path, 1, false)?;
+    if identity(&pin)? != expected || candidate_digest(&pin, || Ok(()))? != candidate.digest() {
+        return Err(invalid());
+    }
+    crate::startup::sidecars::check(&path, &mut |p| fs::symlink_metadata(p))
+        .map_err(io::Error::other)?;
+    crate::database::initialize_database(&path).map_err(io::Error::other)?;
+    crate::startup::sidecars::check(&path, &mut |p| fs::symlink_metadata(p))
+        .map_err(io::Error::other)?;
+    directory.sync_all()?;
+    parent.sync_all()?;
+    lease.boundary.sync()?;
+    restore_point(RestorePoint::Verified)?;
+    let replace = existing.is_some();
+    if let Some((previous_pin, bytes)) = existing {
+        drop(previous_pin);
+        if read_record(&head)? != bytes {
+            return Err(invalid());
+        }
+    }
+    let pending = Record::new(generation, Phase::Pending, candidate.digest().to_owned());
+    publish_record(lease, &pending, replace, |step| {
+        if step == Step::Replaced {
+            restore_point(RestorePoint::Replaced)?;
+        }
+        Ok(())
+    })?;
+    restore_point(RestorePoint::Acknowledged)?;
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::startup) enum RestorePoint {
+    Namespace,
+    Copied,
+    Verified,
+    Replaced,
+    Acknowledged,
+}
+
+fn restore_point(point: RestorePoint) -> io::Result<()> {
+    #[cfg(test)]
+    if RESTORE_FAULT.get() == Some(point) {
+        return Err(io::Error::other("injected Windows restore error"));
+    }
+    let _ = point;
+    Ok(())
+}
+
+#[cfg(test)]
+thread_local! {
+    static RESTORE_FAULT: std::cell::Cell<Option<RestorePoint>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+pub(in crate::startup) fn with_restore_fault<T>(
+    point: RestorePoint,
+    action: impl FnOnce() -> T,
+) -> T {
+    struct Reset(Option<RestorePoint>);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            RESTORE_FAULT.set(self.0);
+        }
+    }
+    let _reset = Reset(RESTORE_FAULT.replace(Some(point)));
     action()
 }

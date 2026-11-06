@@ -116,6 +116,7 @@ pub fn run() {
             import_app::choose_open_import,
             import_app::cancel_open_import,
             import_app::activate_open_import,
+            restore_app::restore_available,
             restore_app::choose_restore_backup,
             restore_app::restore_selected_backup,
             restore_app::quit_after_restore,

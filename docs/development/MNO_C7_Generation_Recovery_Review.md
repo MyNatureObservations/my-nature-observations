@@ -751,3 +751,37 @@ the exact point at which managed evidence becomes authoritative, and
 the c policy for preserving and superseding interrupted publication
 evidence before implementation. The cooperating-writer, older-valid-record
 replay and total managed evidence loss limits still apply.
+
+### C7.4b implementation boundary
+
+Restore availability is queried by the Settings navigation and direct
+Restore route. Both backend Restore commands enforce the same compile-time
+platform decision before opening a picker or consuming a confirmation.
+Windows stays disabled in all builds. Native tests call the internal
+implementation. Revisit the gate only after C7.4c and desktop acceptance.
+
+The running journal retains its startup lease. The maintenance guard
+drains journal operations while the confirmed archive is reopened with
+restrictive sharing, checked against the selection digest, and passed
+through C1. The candidate is closed before managed publication. The
+running process latches closed before creating the first managed directory.
+The publisher copies into an exclusively created database, checks identity
+and digest under a restrictive pin, independently verifies SQLite and
+stored content, and flushes the candidate and directory boundaries before
+publishing Pending through C7.1a. The existing explicit Quit path is
+available after the latch. Only C7.3c on restart can admit the candidate.
+
+After first managed-namespace creation, a missing selection blocks
+ordinary startup. Interruption during record replacement retains the
+publisher's existing evidence. After acknowledgement a restart may admit
+Pending even if Quit did not run. During a subsequent restore, a failure
+before changing the previous authoritative record can leave that same
+admitted generation selected. Previous database files, original backups,
+and interrupted generation directories are retained.
+
+Native Windows tests exercise legacy and admitted publication, restart,
+the disabled command gate and injected publication failures. These
+injections model returning at specific boundaries on NTFS. They do not
+exercise a physical power loss or actual desktop Quit. The existing
+limitations for cooperating writers, replay of an older valid record and
+complete loss of managed evidence remain.

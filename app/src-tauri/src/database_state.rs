@@ -341,6 +341,18 @@ impl<'s> Maintenance<'s> {
         self.require_recovery();
         Ok(session)
     }
+    #[cfg(windows)]
+    pub(crate) fn publish_windows_restore(
+        &self,
+        candidate: &crate::backup::restore::WindowsCandidate,
+    ) -> Result<(), String> {
+        self.ensure_usable()?;
+        let Some(crate::startup::StartupOutcome::Ready(ready)) = self.state.directory.get() else {
+            return Err("database_startup_blocked".into());
+        };
+        ready.publish_windows_restore(candidate, || self.require_recovery())
+    }
+
     pub(crate) fn operation_id(&self) -> uuid::Uuid {
         self.operation_id
     }

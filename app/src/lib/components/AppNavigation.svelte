@@ -1,6 +1,6 @@
 <script lang="ts">
   import PlaceMapPanel from "$lib/components/PlaceMapPanel.svelte";
-  import { getContext } from "svelte";
+  import { getContext, onMount } from "svelte";
   import { PLACE_MAP, type PlaceMapController } from "$lib/place-map.svelte";
   const placeMap = getContext<PlaceMapController>(PLACE_MAP);
   import AboutMno from "$lib/components/AboutMno.svelte";
@@ -16,6 +16,11 @@
 
   const readJournal = createJournalReader();
   type Panel = "left" | "top" | "right";
+
+  let restoreAvailable = $state(false);
+  onMount(() => {
+    void invoke<boolean>("restore_available").then((available) => { restoreAvailable = available; }).catch(() => {});
+  });
 
   let isCreatingBackup = $state(false);
   let backupStatus = $state("idle");
@@ -494,7 +499,9 @@
             <button class="backup-button" type="button" onclick={createManualBackup} disabled={isCreatingBackup || isExporting}>
               {m.backup_create({}, { locale: language.current })}
             </button>
-            <a class="backup-button" href="/settings/restore" onclick={clearCompletedStatuses}>{m.settings_restore({}, { locale: language.current })}</a>
+            {#if restoreAvailable}
+              <a class="backup-button" href="/settings/restore" onclick={clearCompletedStatuses}>{m.settings_restore({}, { locale: language.current })}</a>
+            {/if}
           </div>
           {#if backupStatus !== "idle"}
             <p class="backup-status" class:error={!["creating", "created"].includes(backupStatus)} role={["creating", "created"].includes(backupStatus) ? "status" : "alert"}>{backupStatusMessage()}</p>

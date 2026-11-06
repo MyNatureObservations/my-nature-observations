@@ -273,6 +273,22 @@ pub(crate) struct StartupReady {
     path: PathBuf,
 }
 impl StartupReady {
+    #[cfg(windows)]
+    pub(crate) fn publish_windows_restore(
+        &self,
+        candidate: &crate::backup::restore::WindowsCandidate,
+        latch: impl FnOnce(),
+    ) -> Result<(), String> {
+        self.ensure_current()?;
+        established::windows::managed_layout::publish_restore(
+            self.lease()?,
+            &self.path,
+            candidate,
+            latch,
+        )
+        .map_err(failure)
+    }
+
     pub(crate) fn lease(&self) -> Result<&DirectoryLease, String> {
         let lease = self.lock.as_ref().ok_or("database_startup_blocked")?;
         lease.ensure_current()?;

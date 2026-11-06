@@ -5,11 +5,12 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { compile, parse } from 'svelte/compiler';
 const source=readFileSync(new URL('../src/routes/settings/restore/+page.svelte',import.meta.url),'utf8');
-function harness() {
+function harness(available = true) {
   let guard; const calls=[];
   const script=ts.transpileModule(source.match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^  import .*;\n/gm,''),{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
-  const context=vm.createContext({$state:v=>v,beforeNavigate:f=>guard=f,language:{current:'sv'},m:{restore_open:()=> 'Välj'},invoke:(name,args)=>new Promise((resolve,reject)=>calls.push({name,args,resolve,reject}))});
+  const context=vm.createContext({$state:v=>v,onMount:f=>{if (!available) f();},beforeNavigate:f=>guard=f,language:{current:'sv'},m:{restore_open:()=> 'Välj'},invoke:(name,args)=>new Promise((resolve,reject)=>calls.push({name,args,resolve,reject}))});
   vm.runInContext(script,context);
+  if (available) vm.runInContext("available = true", context);
   return {calls,run:code=>vm.runInContext(code,context),guard:()=>{let cancelled=false;guard({cancel(){cancelled=true;}});return cancelled;}};
 }
 const settle=async()=>{await Promise.resolve();await Promise.resolve();};
@@ -19,6 +20,15 @@ test('restore view compiles and settings link uses ordinary guarded navigation',
   assert.match(nav,/href="\/settings\/restore"/);
   const editor=readFileSync(new URL('../src/lib/components/JournalEditor.svelte',import.meta.url),'utf8');
   assert.match(editor,/beforeNavigate/);assert.match(editor,/hasPendingChanges.*isSaving/);
+});
+test('unavailable Restore rejects direct route actions', async () => {
+  const h = harness(false);
+  assert.equal(h.calls[0].name, 'restore_available');
+  h.calls[0].resolve(false);
+  await settle();
+  await h.run('choose()');
+  await h.run('phase = "confirmed"; token = "opaque"; restore()');
+  assert.equal(h.calls.length, 1);
 });
 test('picker cancellation never starts restore; confirmation requires validated token',async()=>{
   const h=harness();await h.run('restore()');assert.equal(h.calls.length,0);

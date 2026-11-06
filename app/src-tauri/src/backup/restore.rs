@@ -974,3 +974,63 @@ mod digest_lock_tests {
         );
     }
 }
+
+#[cfg(windows)]
+pub(crate) struct WindowsCandidate(ClosedPreparedRestore);
+
+#[cfg(windows)]
+pub(crate) fn prepare_windows_backup(
+    path: &Path,
+    expected: Option<&str>,
+) -> Result<(WindowsCandidate, String)> {
+    use std::{io::Seek, os::windows::fs::OpenOptionsExt};
+    use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ};
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .map_err(io_error)?;
+    if !file.metadata().map_err(io_error)?.is_file() {
+        return Err(PrepareError::DamagedArchive);
+    }
+    use std::os::windows::fs::MetadataExt;
+    if file.metadata().map_err(io_error)?.file_attributes() & 0x400 != 0 {
+        return Err(PrepareError::DamagedArchive);
+    }
+    let hash = handle_digest(&file).map_err(io_error)?;
+    if expected.is_some_and(|expected| expected != hash) {
+        return Err(PrepareError::CandidateChanged);
+    }
+    file.rewind().map_err(io_error)?;
+    let prepared = prepare_open_file(file, Arc::new(AtomicBool::new(false)))?;
+    let manifest = prepared.manifest();
+    if manifest.format_version != 5
+        || manifest.database_schema_version != crate::database::SCHEMA_VERSION
+    {
+        return Err(PrepareError::IncompatibleSchema);
+    }
+    let closed = prepared
+        .try_close()
+        .map_err(|_| PrepareError::InvalidDatabase)?;
+    Ok((WindowsCandidate(closed), hash))
+}
+
+#[cfg(windows)]
+impl WindowsCandidate {
+    pub(crate) fn create_directory(path: &Path) -> io::Result<()> {
+        private::create_retained_directory(path)
+    }
+    pub(crate) fn digest(&self) -> &str {
+        &self.0._manifest.database_sha256
+    }
+    pub(crate) fn copy_to(&self, path: &Path) -> io::Result<File> {
+        use std::io::Seek;
+        let mut output = private::create_file(path)?;
+        let mut input = &self.0._file;
+        input.rewind()?;
+        io::copy(&mut input, &mut output)?;
+        output.sync_all()?;
+        Ok(output)
+    }
+}
