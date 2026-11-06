@@ -284,3 +284,7 @@ pub(in crate::startup) fn with_fault<T>(point: Fault, action: impl FnOnce() -> T
     let _reset = Reset(FAILURE.replace(Some(point)));
     action()
 }
+
+#[cfg(test)]
+#[path = "selection_probe.rs"]
+mod selection_probe;

@@ -111,17 +111,15 @@ races; do not claim Linux activation ready from this design review.
   journal's unexpected WAL/journal state must not be discarded, skipped or treated
   as an empty database. Pending candidates must be standalone. Normal SQLite crash
   recovery/WAL support needs explicit tests before any guard relaxation.
-- **Legacy root adoption needs an approved rule.** Prefer a fixed legacy-root target
-  variant in the same versioned record, so existing `mno.sqlite` need not move. Do
-  not label a damaged old DB as newly verified/admitted just to permit restoration.
-  Healthy adoption and damaged-root explicit recovery are distinct entry conditions.
-  Once transition/generation evidence exists, missing selection must block; never
-  fall back to root `mno.sqlite`. A truly untouched legacy layout can retain current
-  startup until adoption, with no CREATE permission for an established missing DB.
+- **Legacy journals stay in place.** Ordinary legacy startup does not write a
+  selection record. Explicit restore introduces generation management by selecting
+  its verified candidate. Once transition or generation evidence exists, a missing
+  selection blocks instead of selecting the legacy root database. Missing selection
+  alone never authorizes first-time initialization.
 - Missing/corrupt selection repair is an explicit user-confirmed restore operation,
   not an automatic fallback. Preserve malformed metadata/evidence before replacing
-  it and retain all generation directories. Exact bootstrap/evidence rules and the
-  minimal blocked-startup UI require approval and tests before integration.
+  it and retain all generation directories. The production layout recognizer and minimal blocked-startup UI require tests
+  before integration.
 
 One shared selection/admission kernel should be the target architecture. Keep
 macOS's current path and Linux's current restrictions unchanged during Windows
@@ -158,7 +156,7 @@ coordinated deletion/replay of all state or deliberate same-user tampering.
 | --- | --- | --- | --- |
 | **C7.1 — selection codec and NTFS publication boundary**, inert module using C4 record rules and C5 Windows handle/flush operations | Strict bounded versioned record; pending/admitted; same-volume publication; retain old data/evidence; no unsafe replacement fallback | Unknown/duplicate fields, bad IDs/versions, missing/truncated records; first publication and actual replacement; injected file/directory failures; sharing/reparse/identity changes; bounded subprocess interruptions before/after both phase publications | No production selection or UI. Complete when Windows native replacement and repeat-startup classification are demonstrated; macOS/Linux record regressions unchanged. Stop if native replacement safety cannot be established. |
 | **C7.2 — retained current-backup generation builder**, reuse C1 extraction/content checks, private ACL/identity and checked close | Original backup/old journal untouched; no-clobber final generation; no Drop deletion after ownership transfer; final independently verified bytes/content; no selected candidate yet | Three C1 cases plus final-copy/destination conflicts, permissions/disk/flush/close failures, source replacement, altered candidate, sidecars, immutable-to-mutable pin/flush handoff and ownership/error cleanup; damaged old DB is never opened | No activation, migration or Ready. Complete when real format-5/schema-4 candidates with images/places/weather survive independent reopen and all failure paths preserve inputs. Shared tests on macOS/Ubuntu/Windows. |
-| **C7.3 — selected startup and admission kernel**, reuse one root lease, DatabaseState, DataLocation and production validators; apply approved legacy adoption rule | All DB consumers agree on one path; pending has no normal writes; admitted allows legitimate edits without per-save head updates; ambiguous selection never creates/falls back; only safe blocked owners can offer restore | Healthy legacy/current first launch; selection deletion with legacy DB present; pending admission; edit/checked-close/restart; invalid content/path and missing selected DB; concurrent owner/late writes; damaged DB retains exclusive blocked owner; legacy-marker conflict; failure after admitted publication | No user restore command enablement yet. Complete after full three-platform integration CI, with known unrelated Windows failures kept visible and macOS/Linux routing unchanged. |
+| **C7.3 — selected startup and admission kernel**, reuse one root lease, DatabaseState, DataLocation and production validators; keep legacy startup until explicit restore | All DB consumers agree on one path; pending has no normal writes; admitted allows legitimate edits without per-save head updates; ambiguous selection never creates/falls back; only safe blocked owners can offer restore | Healthy legacy/current first launch; selection deletion with legacy DB present; pending admission; edit/checked-close/restart; invalid content/path and missing selected DB; concurrent owner/late writes; damaged DB retains exclusive blocked owner; legacy-marker conflict; failure after admitted publication | No user restore command enablement yet. Complete after full three-platform integration CI, with known unrelated Windows failures kept visible and macOS/Linux routing unchanged. |
 | **C7.4 — connect explicit restore and restart**, reuse existing picker/token/busy handling, maintenance exclusion and restart flow | One kernel for healthy and blocked-startup restore; no dependency on reading damaged old DB; changed backup/token rejected; publication latches writes closed; preserve every prior generation and backup | End-to-end synthetic backup -> final generation -> pending -> restarted admission; cancellation, repeated clicks, queued saves, corruption and process interruptions at each handoff; ambiguous state requires explicit action | No Import, historical migration, cleanup UI or legacy macOS conversion. Complete after focused Windows tests and full CI at the production command integration boundary; restoration stays unsupported until this boundary is approved. |
 | **C7.5 — unelevated Windows 11 acceptance** using an isolated ordinary test account, local NTFS and synthetic data | Same identity/root, no real journal; verify prior generations and original backup remain intact; no silent rollback/empty journal | Retain automated matrix and replay-limitation regression; no need to rerun unrelated suites after documentation-only acceptance | Manually restore a real synthetic backup containing entries/images/places/weather, restart/edit/restart, restore with a damaged old fixture, exercise interrupted/pending and corrupt/missing head cases safely, record warnings/permission failures. Complete only within stated observed scope; no power-loss certification. |
 
@@ -169,8 +167,8 @@ readiness claim follows from a green isolated prototype alone.
 
 ## Decisions before production integration
 
-1. Approve the legacy-root target/adoption and missing-selection evidence rules.
-   Layout adoption is not database schema migration; do not move old journal bytes.
+1. Specify the exact on-disk evidence the production layout recognizer will use
+   to enforce the approved legacy and missing-selection rules.
 2. Approve minimal blocked-startup choices: explicit backup restore or exit, with
    all journal operations unavailable. Current startup error UI hides the window
    and exits, and the current restore picker requires a Ready database.
@@ -179,4 +177,42 @@ readiness claim follows from a green isolated prototype alone.
    separate approvals. No automatic deletion or rollback UI is proposed.
 
 Recommended next implementation only: **C7.1**, after reviewing this plan. Keep
-adoption/UI decisions open before C7.3/C7.4 rather than expanding the first stage.
+layout-recognition/UI details open before C7.3/C7.4 rather than expanding the first stage.
+
+## C7.1 implementation and verification
+
+The test-only codec in [generation_selection.rs](../../app/src-tauri/src/startup/generation_selection.rs)
+accepts version 1, a canonical v4 generation UUID, a pending or admitted phase
+and a lowercase SHA-256 candidate digest. The parser bounds record size and
+rejects unknown and duplicate fields. The digest binds first admission. This
+stage checks record transitions and leaves database admission to later work.
+
+The classifier takes independent layout evidence. Proven fresh and untouched
+legacy layouts can have no record. A managed layout requires a valid record.
+Contradictory evidence, unknown layout, or evidence of interrupted publication
+blocks selection. The inputs are fixtures for the future layout recognizer.
+Production must establish freshness or legacy status from its layout and
+establishment evidence. Once a restore introduces generation management,
+retained generation or transition evidence must prevent legacy fallback if
+the record goes missing. Existing journals stay in place until explicit restore.
+
+The Windows [publication probe](../../app/src-tauri/src/startup/established/selection_probe.rs)
+uses the C5 directory lease and local NTFS boundary. It creates and flushes
+an interruption marker, then writes, flushes and independently rereads a
+create-new staged record. Same-directory MoveFileExW uses WRITE_THROUGH and
+adds REPLACE_EXISTING only for a verified transition from an existing record.
+The probe rereads the published bytes and flushes the record and bounded
+directories before removing the interruption marker. A marker surviving a
+crash conservatively blocks selection. Any failure before acknowledgement
+leaves evidence. The probe has no automatic repair or cleanup for interrupted
+publication. Its namespace assumes cooperating owners under the lease.
+
+The cross-platform test covers codec and layout classification. The Windows
+checks cover repeated native replacement and lease reacquisition, sharing
+denial, corrupt records, and injected failures before and after replacement.
+The fault tests exercise returned errors at explicit boundaries. They do not
+simulate OS crashes or loss of power. The existing
+`windows-initialization-probe` CI scope runs the new tests on Windows NTFS.
+Native replacement evidence remains pending that run. Older valid record
+replay remains an accepted limitation. Candidate persistence, physical
+power-loss durability and production startup integration remain outside C7.1.

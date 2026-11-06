@@ -559,3 +559,6 @@ pub(crate) mod migration_probe {
 
 #[cfg(all(test, windows))]
 mod windows_tests;
+
+#[cfg(test)]
+mod generation_selection;

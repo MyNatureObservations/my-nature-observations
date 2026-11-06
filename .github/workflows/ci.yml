@@ -310,11 +310,16 @@ jobs:
       - name: Run production Windows startup safety regressions
         if: ${{ !cancelled() }}
         run: cargo test --locked --lib startup::windows_tests
+      - name: Run isolated C7.1 selection and NTFS replacement checks
+        if: ${{ !cancelled() }}
+        run: |
+          cargo test --locked --lib startup::generation_selection
+          cargo test --locked --lib selection_probe
       - name: Explain focused scope
         if: always()
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
-          C5a runs only isolated initialization probes and current Windows startup safety tests.
+          This scope runs Windows initialization, startup safety and isolated C7.1 checks.
           No frontend checks or packaging. C5c production safety tests exercise only local NTFS.
           Read the probe log for NTFS directory open/flush observations.
           API/process-exit success does not establish power-loss durability.
