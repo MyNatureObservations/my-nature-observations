@@ -281,3 +281,120 @@ namespace with directory pins. Admission is an in-process test boundary.
 After admission, write sharing relies on cooperating journal owners.
 Durable directory publication, cross-process admission and production layout
 recognition remain for later stages. Power-loss durability remains unverified.
+
+## C7.2 review and C7.3 startup integration audit
+
+C7.2 at `afd4d40d0f9751369de766e635c6371fb2538a54` is accepted within its
+fixture scope. The reported native Windows result is
+[run 42177014641](https://github.com/MyNatureObservations/my-nature-observations/actions/runs/42177014641).
+The review found no blocking defect in the isolated probe. Production
+integration has additional gates described below.
+
+| Classification | Finding |
+| --- | --- |
+| Verified in scope | `construct` uses C1 extraction and checked close. Exclusive creation prevents overwriting a retained candidate. `verify` checks the standalone header, digest, SQLite integrity and existing schema/content validation. The image fixture lacks the external original, so the check depends on stored assets. |
+| Verified in scope | `admit` compares Windows file IDs while the restrictive and permissive read pins overlap. The restrictive pin denies write and delete access. The bridge allows SQLite writes while denying delete access. The fixture exercises conflicting handles, rename denial, a byte-identical replacement before admission and successful edits after admission. The connection precedes the bridge in ownership and closes before its release. |
+| Nonblocking | The test reuses one private fixture namespace and probes Windows sharing with competing handles in the same process. It does not exercise a startup lease across competing processes or identify a SQLite handle directly. The identity argument depends on the pinned directory chain and compatible native sharing. |
+| Nonblocking | The pending object holds directory pins but releases the database pin between construction and modeled admission. Admission rechecks both identity and bytes. The test demonstrates in-process revalidation and preserves the backup, old generation and unrelated journal data. It provides no persisted proof of the original file ID across restart. |
+| Blocking for production enablement | A valid digest alone cannot authorize writable access to a hard link to another journal. Resolve canonical fixed names under the lease, check each directory component and database handle for reparse points, require the supported local volume and reject multiple links to the database. Carry the verified path and pins into Ready. Add real Windows alias, sharing and owner-exclusion regressions before enabling the managed route. |
+| Deferred | After the restrictive pin is released, the bridge intentionally permits other write-compatible opens. The probe assumes cooperating writers under a private root. It provides no protection against independent same-user writes after admission, and sidecar presence checks do not prevent arbitrary external sidecar creation. The probe neither flushes a published generation directory nor proves power-loss durability. |
+
+### Production entry points
+
+1. In [startup.rs](../../app/src-tauri/src/startup.rs),
+   `begin_with` acquires `DirectoryLease` at line 375. Classify the root
+   under that lease before the legacy database path is derived at line 392.
+   Keep `checkpoint` and reject conflicts between legacy recovery artifacts
+   and generation state. Use `established::read` and the existing Windows
+   establishment confirmation for established roots. Do not publish an
+   initialization marker to repair an ambiguous managed root.
+2. Use [generation_selection.rs](../../app/src-tauri/src/startup/generation_selection.rs)
+   for the bounded codec and classification contract. The filesystem
+   recognizer must supply real evidence and reject I/O failures, reparse
+   points and reserved name aliases. Resolve only the record's canonical
+   UUID beneath a fixed generations directory with a fixed database filename.
+   Never scan generations to choose a substitute.
+3. For pending selection, reuse C7.2's digest, integrity, schema and content
+   checks under restrictive handles. Require standalone SQLite state and
+   preserve all unexpected sidecars. Acquire the compatible bridge before
+   releasing the immutable pin. Confirm the candidate's bounded directory
+   persistence and acknowledge the admitted record while writes are still
+   denied. Reuse the C5 checked flush primitives and the C7.1a publication
+   order. File flushes requiring write access must occur during verified
+   candidate preparation or under a separately verified sharing order.
+   The C5 initialization marker and its no-clobber publisher cannot stand
+   in for generation acknowledgement.
+4. `StartupReady::database_path` and `ensure_current` at lines 269 and
+   278 are the owner boundary. Store the selected path and retained pins
+   there. [database_state.rs](../../app/src-tauri/src/database_state.rs)
+   `initialize_startup` at line 82 installs the owner before Ready.
+   Its `ready_database_path` at line 121 currently recomputes the legacy
+   path from the lease. Make it return the same selected path as startup.
+   Keep `DirectoryLease::database_path` as the legacy protocol path for
+   existing recovery callers.
+5. [lib.rs](../../app/src-tauri/src/lib.rs) installs `DataLocation` at
+   line 101 only after successful startup. Preserve that gate.
+   [database.rs](../../app/src-tauri/src/database.rs) `open_database` at
+   line 28 uses that location for read-write open without CREATE.
+   `initialize_database` at line 43 supplies current schema/content checks.
+   On admitted restart, reacquire the lease and pins and validate current
+   state without comparing ordinary edits to the pending digest.
+   A writable open failure must withhold Ready on that attempt. A clean
+   admitted record can be revalidated on a later attempt.
+
+### Legacy discrimination and failure policy
+
+Use the retained generations namespace itself as evidence that explicit
+restore has started. The publisher must establish and flush it before first
+selection publication and retain it thereafter. Any selection record,
+reserved staging or intent name, or generations namespace triggers managed
+inspection. An empty, malformed or inaccessible namespace is still evidence
+and cannot authorize legacy fallback. Absence of all managed evidence allows
+the existing legacy path and existing fresh-creation proof to run. A newly
+created root, new lock and lock-only inventory are required for creation.
+A missing record alone carries no authority. No extra marker is proposed
+for this scope. Loss of both the selection and every managed artifact
+cannot be distinguished from an untouched legacy layout. An independent
+marker would be a separate decision if that stronger detection requirement
+is adopted. Older valid record replay remains accepted.
+
+| Startup state | Required result |
+| --- | --- |
+| Established legacy root with current valid database and no managed evidence | Continue current startup at the same root path. Preserve existing establishment behavior and never write a generation selection as part of ordinary legacy startup. |
+| Damaged legacy database | Preserve the existing error path and all files. No fallback creation or implicit restore. |
+| Managed evidence with missing or malformed record, alias, unknown version or conflicting legacy artifacts | Block before opening SQLite. Preserve the record, legacy root and all generations. |
+| Valid record with missing selected directory or database, unsafe identity, pending digest mismatch or integrity/content failure | Block. Preserve evidence and withhold Ready and DataLocation. |
+| Unexpected selected WAL, SHM or rollback journal | Block without replay or cleanup. Sidecars in an unselected previous journal stay untouched and cannot choose the active journal. |
+| Intent or staged evidence after interrupted admission or publication | Block even when the visible record parses. An intact pending record without interruption evidence can resume verification. An acknowledged admitted record can reopen after current validation. |
+| Concurrent owner, sharing denial or persistence failure | Block or return the existing in-use outcome. No retry that weakens sharing, no file deletion and no alternative journal selection. |
+
+### Small C7.3 slices and completion gates
+
+1. **Resolve layout and own the path.** Add a Windows managed resolver under
+   the existing lease and thread a single selected path through Ready and
+   DataLocation. Keep managed cases blocked while this slice is verified.
+   Test established/fresh discrimination, missing records with a surviving
+   generations directory, conflicting artifacts, names and inaccessible
+   files. Verify legacy startup on Windows, macOS and Linux.
+2. **Admitted startup with retained identity.** Verify the pinned directory
+   chain, file identity, link count, sidecars and current SQLite content
+   before issuing Ready. Run native Windows cases for reparse points, hard
+   links, replacement, sharing denial and a competing startup process.
+   Test that edits survive restart and that journal and backup path
+   consumers agree. Pending records stay blocked in this slice.
+3. **Pending admission and acknowledgement.** Revalidate the pending digest
+   and candidate before the protected C7.1a transition. Test interruption
+   before and after record replacement, verification/flush errors, marker
+   removal failure and a subsequent writable-open failure. Verify that
+   no failure exposes a writable DataLocation or selects an older journal.
+   Exercise native Windows restarts and retain C4 and legacy startup
+   regressions on macOS and Linux.
+
+Complete C7.3 only when native Windows tests cover both startup phases
+and failure boundaries, the full platform CI comparison preserves the
+known baseline, and legacy paths retain their behavior. Restore commands,
+Recovery UI, layout migration, destructive cleanup and physical power-loss
+claims are outside this integration. Before implementation, confirm that
+retained namespace evidence and the cooperating-writer model are the
+intended limits. C7.4 must establish and persist that namespace before
+publishing its first selection.
