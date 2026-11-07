@@ -125,3 +125,28 @@ historical four-failure mode and the transition, including rejection
 of a missing pass, a changed diagnostic or an extra failure. The C5c
 baseline remains recorded. A three-failure result is pending native
 Windows CI.
+
+### C9c legacy weather fixture portability
+
+Both tests first create a schema-0 fixture. The storage test reaches its
+read-only and write-before-upgrade assertions, then the test-only
+schema-1 initializer rejects migration on Windows before the supported
+write check. The view test reaches its read-only and batch-limit checks,
+then hits the same guard before inserting corrupt weather.
+
+macOS retains the existing migration continuation. Windows now asserts
+the exact migration rejection and unchanged legacy database bytes in
+both tests, then uses a separate current-schema journal admitted by
+production startup. Storage verifies that an unadmitted write cannot open
+SQLite, then verifies weather writes and reads without changing journal
+content. View verifies that an invalid current-schema weather row is
+rejected without rewriting the database. Production migration and weather
+behavior are unchanged.
+
+Local macOS weather storage and view suites passed (nine tests total),
+along with formatting, workflow YAML parsing and comparator regressions.
+The focused Windows run requires explicit passes from both weather tests
+and the C9b compiler test. It still checks the exact historical timeout
+diagnostic and the two known ignores, and rejects unexpected failures.
+The historical baseline modes remain available. The transition from
+three known failures to one is pending native Windows evidence.

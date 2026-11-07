@@ -7,11 +7,14 @@ from pathlib import Path
 COMPILER = "backup::journal_content::tests::compiler_rejects_sql_access_and_snapshot_replacement"
 NETWORK = "weather::historical::tests::refused_connection_remains_a_network_failure"
 MIGRATION = 'called `Result::unwrap()` on an `Err` value: "database_migration_platform_unsupported"'
+LEGACY_WEATHER = (
+    "weather::storage::legacy_tests::legacy_recovery_reads_absent_weather_and_requires_safe_startup_before_write",
+    "weather::view::tests::legacy_reads_do_not_migrate_and_corrupt_weather_is_not_presented",
+)
 EXPECTED = {
     COMPILER: 'error[E0583]: file not found for module `tests`',
     NETWORK: 'assertion `left == right` failed\n  left: Timeout\n right: Network',
-    "weather::storage::legacy_tests::legacy_recovery_reads_absent_weather_and_requires_safe_startup_before_write": MIGRATION,
-    "weather::view::tests::legacy_reads_do_not_migrate_and_corrupt_weather_is_not_presented": MIGRATION,
+    **dict.fromkeys(LEGACY_WEATHER, MIGRATION),
 }
 IGNORED = {
     "photographs::tests::preparation_measurements",
@@ -19,15 +22,16 @@ IGNORED = {
 }
 
 
-def compare(output, status, require_compiler_pass=False):
+def compare(output, status, require_compiler_pass=False, require_legacy_weather_pass=False):
     expected = EXPECTED.copy()
-    if require_compiler_pass:
-        del expected[COMPILER]
+    required = (COMPILER,) if require_compiler_pass else ()
+    if require_legacy_weather_pass:
+        required += LEGACY_WEATHER
     output = re.sub(r"\x1b\[[0-9;]*m", "", output).replace("\r\n", "\n")
-    if require_compiler_pass and re.findall(
-        rf"^test {re.escape(COMPILER)} \.\.\. (.*)$", output, re.M
-    ) != ["ok"]:
-        raise ValueError("Expected exactly one explicit pass for the compiler safety test")
+    for name in required:
+        del expected[name]
+        if re.findall(rf"^test {re.escape(name)} \.\.\. (.*)$", output, re.M) != ["ok"]:
+            raise ValueError(f"Expected exactly one explicit pass for {name}")
     failed = re.findall(r"^test (\S+) \.\.\. FAILED$", output, re.M)
     ignored = re.findall(r"^test (\S+) \.\.\. ignored(?:, .*)?$", output, re.M)
     summaries = re.findall(r"^test result: FAILED\. (\d+) passed; (\d+) failed; (\d+) ignored; (\d+) measured; (\d+) filtered out;", output, re.M)
@@ -63,12 +67,15 @@ if __name__ == "__main__":
     parser.add_argument("log", type=Path)
     parser.add_argument("status", type=int)
     parser.add_argument("--require-compiler-pass", action="store_true")
+    parser.add_argument("--require-legacy-weather-pass", action="store_true")
     args = parser.parse_args()
     try:
-        compare(args.log.read_text(encoding="utf-8", errors="replace"), args.status, args.require_compiler_pass)
+        compare(args.log.read_text(encoding="utf-8", errors="replace"), args.status, args.require_compiler_pass, args.require_legacy_weather_pass)
     except ValueError as error:
         sys.exit(str(error))
-    if args.require_compiler_pass:
+    if args.require_legacy_weather_pass:
+        print("Both legacy weather tests passed and the remaining baseline matched.")
+    elif args.require_compiler_pass:
         print("Compiler safety test passed. The other three C5c failures and two ignores matched.")
     else:
         print("Matched the four C5c failure identities and reasons and the two approved ignores.")

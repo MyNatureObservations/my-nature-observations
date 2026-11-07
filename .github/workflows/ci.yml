@@ -327,7 +327,7 @@ jobs:
           log="$RUNNER_TEMP/mno-windows-library.log"
           cargo test --locked --lib --color never > "$log" 2>&1 || status=$?
           cat "$log"
-          python ../../.github/scripts/windows-library-baseline.py "$log" "$status" --require-compiler-pass
+          python ../../.github/scripts/windows-library-baseline.py "$log" "$status" --require-compiler-pass --require-legacy-weather-pass
       - name: Check Windows Restore acceptance opt-in
         if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
         run: |

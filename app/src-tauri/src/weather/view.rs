@@ -209,7 +209,33 @@ mod tests {
             )
             .is_err()
         );
+        #[cfg(not(windows))]
         crate::database::initialize_schema1_database_for_test(&path).unwrap();
+        #[cfg(windows)]
+        let (state, path) = {
+            assert_eq!(
+                crate::database::initialize_schema1_database_for_test(&path).unwrap_err(),
+                "database_migration_platform_unsupported"
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            let current = DatabaseState::default();
+            let path = current
+                .initialize_startup(&dir.path().join("current"))
+                .unwrap();
+            let db = Connection::open(&path).unwrap();
+            db.execute(
+                "INSERT INTO journal_entries VALUES ('e','2026-10-25','',?1,1,'','')",
+                [r#"{"type":"doc","content":[{"type":"paragraph"}]}"#],
+            )
+            .unwrap();
+            db.close().unwrap();
+            (current, path)
+        };
+        #[cfg(windows)]
+        let open = || {
+            Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(|e| e.to_string())
+        };
         let db = Connection::open(&path).unwrap();
         db.execute("INSERT INTO journal_weather VALUES ('e',1,'{\"period\":{\"kind\":\"day\",\"date\":\"2026-10-25\"},\"precipitationMm\":-1}',NULL,1)",[]).unwrap();
         db.close().unwrap();
