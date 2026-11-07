@@ -329,7 +329,7 @@ pub(crate) async fn restore_selected_backup(
         let result = {
             let state = app.state::<DatabaseState>();
             activate_selection(&state, choice).map_err(|error| {
-                if state.windows_restore_outcome().is_none() {
+                if state.ready_database_path().is_ok() {
                     Error::PreparationFailed
                 } else {
                     error
@@ -340,6 +340,12 @@ pub(crate) async fn restore_selected_backup(
         let result = Err(Error::Unsupported);
         #[cfg(windows)]
         drop(_busy);
+        #[cfg(windows)]
+        if result == Err(Error::PreparationFailed) {
+            // The current journal is still Ready. A needless refresh could
+            // strand the user in the blocked shell if IPC fails.
+            return result;
+        }
         // On failure after arming, hide all journal views too. The backend gate
         // already denies operations, including stale/queued editor writes.
         let _ = app.emit("mno:database-mode-changed", ());
@@ -422,10 +428,18 @@ fn windows_restore_requires_an_unchanged_archive_and_quit_waits_for_publication(
     let state = DatabaseState::default();
     let database = state.initialize_startup(&root).unwrap();
     let archive = parent.path().join("restore.mno-backup");
-    let db = rusqlite::Connection::open(database).unwrap();
+    let db = rusqlite::Connection::open(&database).unwrap();
     create_backup(&db, &archive, BackupKind::Manual).unwrap();
     db.close().unwrap();
     let shared = RestoreState::default();
+    let invalid = parent.path().join("invalid.mno-backup");
+    std::fs::write(&invalid, b"invalid archive").unwrap();
+    let original_database = std::fs::read(&database).unwrap();
+    assert!(matches!(
+        validate_selection(&state, invalid),
+        Err(Error::InvalidBackup)
+    ));
+    assert_eq!(std::fs::read(&database).unwrap(), original_database);
     let choice = validate_selection(&state, archive.clone()).unwrap();
     assert!(!root.join("generations").exists());
     assert_eq!(
@@ -440,7 +454,27 @@ fn windows_restore_requires_an_unchanged_archive_and_quit_waits_for_publication(
     );
     assert!(!root.join("generations").exists());
     assert_eq!(state.windows_restore_outcome(), None);
-    assert!(state.operation(None).is_ok());
+    assert_eq!(std::fs::read(&database).unwrap(), original_database);
+    assert!(!root.join("generation-selection.json").exists());
+    {
+        let active = state.ready_database_path().unwrap();
+        let _permit = state.operation(None).unwrap();
+        let db = crate::database::open_existing(&active).unwrap();
+        db.execute(
+            "INSERT INTO journal_entries VALUES ('after-rejection','2026-10-25','Still writable',?1,1,'','')",
+            [r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Synthetic entry"}]}]}"#],
+        ).unwrap();
+        assert_eq!(
+            db.query_row(
+                "SELECT title FROM journal_entries WHERE id = 'after-rejection'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "Still writable"
+        );
+        db.close().unwrap();
+    }
 
     std::fs::write(&archive, &original).unwrap();
     let choice = validate_selection(&state, archive.clone()).unwrap();

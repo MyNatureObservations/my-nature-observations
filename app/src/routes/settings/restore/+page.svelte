@@ -10,15 +10,15 @@
   });
   let preservesPrevious = $state(false);
   let token = $state<string | null>(null);
-  let phase = $state<"idle" | "checking" | "confirmed" | "writing" | "awaiting_exit" | "failed">("idle");
+  let phase = $state<"idle" | "checking" | "confirmed" | "writing" | "awaiting_exit" | "uncertain" | "failed">("idle");
   let error = $state("");
-  beforeNavigate((navigation) => { if (phase === "writing" || phase === "awaiting_exit") navigation.cancel(); });
+  beforeNavigate((navigation) => { if (phase === "writing" || phase === "awaiting_exit" || phase === "uncertain") navigation.cancel(); });
   function canReturnHome() {
     return phase === "idle" || phase === "checking" || phase === "confirmed" ||
       (phase === "failed" && (error === "invalid" || error === "preparation_failed"));
   }
   async function choose() {
-    if (!available || phase === "checking" || phase === "writing" || phase === "awaiting_exit") return;
+    if (!available || phase === "checking" || phase === "writing" || phase === "awaiting_exit" || phase === "uncertain") return;
     token = null; error = ""; phase = "checking";
     try {
       const selection = await invoke<{ token: string; preserves_previous?: boolean } | null>("choose_restore_backup", { dialogTitle: m.restore_open({}, { locale: language.current }) });
@@ -34,10 +34,19 @@
       await invoke("restore_selected_backup", { token });
       token = null;
       phase = "awaiting_exit";
-    } catch (reason) { phase = "failed"; error = reason === "preparation_failed" ? reason : "failed"; token = null; }
+    } catch (reason) {
+      token = null;
+      if (preservesPrevious && reason !== "preparation_failed") {
+        // The mode event or reply may have been lost after the write latch.
+        phase = "uncertain";
+      } else {
+        phase = "failed";
+        error = reason === "preparation_failed" ? reason : "failed";
+      }
+    }
   }
   async function quit() {
-    if (phase !== "awaiting_exit") return;
+    if (phase !== "awaiting_exit" && phase !== "uncertain") return;
     try { await invoke("quit_after_restore"); }
     catch { error = "quit_failed"; }
   }
@@ -53,6 +62,9 @@
       <p>{preservesPrevious ? m.windows_recovery_confirm({}, { locale: language.current }) : m.restore_confirm({}, { locale: language.current })}</p>
       <button onclick={restore}>{preservesPrevious ? m.windows_restore_prepare({}, { locale: language.current }) : m.restore_confirm_button({}, { locale: language.current })}</button>
       <button onclick={() => { token = null; phase = "idle"; }}>{m.restore_cancel({}, { locale: language.current })}</button>
+    {:else if phase === "uncertain"}
+      <p role="alert">{m.windows_restore_uncertain({}, { locale: language.current })}</p>
+      <button onclick={quit}>{m.restore_quit({}, { locale: language.current })}</button>
     {:else if phase === "awaiting_exit"}
       <p role="status">{m.restore_reopen_instructions({}, { locale: language.current })}</p>
       <button onclick={quit}>{m.restore_quit({}, { locale: language.current })}</button>

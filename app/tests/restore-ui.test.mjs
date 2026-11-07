@@ -475,3 +475,44 @@ test('safe Windows preparation failure leaves a return path to the current journ
   assert.equal(h.run('canReturnHome()'), true);
   assert.equal(h.guard(), false);
 });
+
+test('failed Restore mode refresh stays blocked and offers Quit without reporting success', async () => {
+  const root = layoutHarness();
+  await settle();
+  root.calls[0].resolve('ready');
+  await settle();
+  root.event();
+  root.calls[1].reject('mode unavailable');
+  await settle();
+  assert.equal(root.run('mode'), 'blocked');
+  assert.equal(root.run('result'), null);
+  assert.deepEqual(root.destinations, []);
+  const panel = recoveryHarness('blocked');
+  const quit = panel.run('quit()');
+  assert.equal(panel.calls[0].name, 'quit_after_restore');
+  panel.calls[0].resolve();
+  await quit;
+  assert.deepEqual(panel.finished, []);
+  root.dispose();
+  panel.dispose();
+});
+
+test('unconfirmed Windows Restore reply without a mode event offers Quit and prevents retry', async () => {
+  const h = harness();
+  const selection = h.run('choose()');
+  h.calls[0].resolve({ token: 'chosen', preserves_previous: true });
+  await selection;
+  const prepare = h.run('restore()');
+  h.calls[1].reject('IPC unavailable');
+  await prepare;
+  assert.equal(h.run('phase'), 'uncertain');
+  assert.equal(h.run('canReturnHome()'), false);
+  assert.equal(h.guard(), true);
+  await h.run('choose()');
+  await h.run('restore()');
+  assert.equal(h.calls.length, 2);
+  const quit = h.run('quit()');
+  assert.equal(h.calls[2].name, 'quit_after_restore');
+  h.calls[2].resolve();
+  await quit;
+});

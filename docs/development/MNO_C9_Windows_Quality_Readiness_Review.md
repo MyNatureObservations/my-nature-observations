@@ -206,3 +206,30 @@ Export and Backup but omits Import, and that direct navigation to
 `/settings/import` displays the unavailable message with no picker.
 On macOS verify the original Import link and picker still open.
 Desktop acceptance is pending.
+
+### C9f Restore safety checks
+
+| Boundary | Previous evidence | C9f coverage or correction |
+| --- | --- | --- |
+| Picker, validation and Ready journal | C8b desktop happy path and native changed-archive test | Native fixture now rejects a malformed selection, checks unchanged journal bytes and absent publication, then reads and writes through the Ready database after a changed-archive rejection. |
+| Protected publication and restart | Native fault matrix covers uncertainty, lease retention, preservation and subsequent admission. C8b desktop covers acknowledged publication | Reused the native fault and startup tests. A Windows preparation error confirmed to leave Ready now avoids an unnecessary mode refresh, which could otherwise hide the journal on IPC failure. |
+| Mode refresh and Quit | Existing shell has controlled Quit. Event-before-reply tests cover acknowledged and uncertain modes | New tests cover failed mode refresh and a failed reply without a mode event. The latter leaves the Windows Restore route in an uncertain state with Quit and no retry or editor navigation. The backend remains the authority for granting Quit while blocked. |
+
+The Windows opt-in gate and macOS flow are unchanged. The opted-in
+desktop path passed C8b. Native Windows C9f evidence is pending.
+Local checks cover the frontend handoff and existing macOS Restore
+regressions. Physical interruption and power-loss durability remain
+outside this verification.
+
+On the next approved desktop candidate, use `MNO-Test` and a synthetic
+journal. Save a marker entry, choose a disposable malformed
+`.mno-backup` file and verify that the picker reports rejection. Return
+to the journal, edit and reopen the marker entry, then confirm that a
+normal backup still works. No database or selection-file manipulation
+is needed. For uncertain publication and mode failures, use the
+automated native fault fixtures and mocked IPC tests. Do not force
+a crash or interrupt a real journal.
+
+Retain the gate pending native CI and the targeted desktop rejection
+check. Then review default enablement as a separate decision with the
+existing installer lifecycle and public release prerequisites.
