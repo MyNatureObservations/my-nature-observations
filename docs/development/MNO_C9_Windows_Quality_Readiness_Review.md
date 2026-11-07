@@ -106,3 +106,22 @@ Next, address the Windows Import affordance and run the installer
 data-preservation checks. Handle the weather failures independently in
 the order of deterministic transport coverage, then the two legacy
 fixtures when their Windows coverage is needed.
+
+### C9b compiler fixture correction
+
+Replaying the old transformation on the actual API source reproduced
+the defect. The LF fixture drops the test module declaration, while the
+CRLF fixture retains it and requests a module absent from the generated
+fixture. This matches the Windows E0583 diagnostic. The fixture now
+normalizes CRLF and asserts exactly one declaration is removed.
+The regression compares LF and CRLF outputs before running the existing
+positive control and negative compiler assertions.
+
+The focused compiler test passed on macOS, along with formatting and
+diff checks. The focused Windows workflow now requires an explicit
+compiler-test pass and matches the other three failure identities and
+reasons and the two existing ignores. Comparator tests cover both the
+historical four-failure mode and the transition, including rejection
+of a missing pass, a changed diagnostic or an extra failure. The C5c
+baseline remains recorded. A three-failure result is pending native
+Windows CI.

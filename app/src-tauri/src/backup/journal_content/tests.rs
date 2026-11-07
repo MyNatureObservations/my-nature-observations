@@ -445,9 +445,18 @@ fn compiler_rejects_sql_access_and_snapshot_replacement() {
     // no SQL is executed by this compiler probe.
     let dir = TempDir::new().unwrap();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let api = std::fs::read_to_string(root.join("src/backup/journal_content.rs"))
-        .unwrap()
-        .replace("#[cfg(test)]\nmod tests;", "");
+    let source = std::fs::read_to_string(root.join("src/backup/journal_content.rs")).unwrap();
+    let declaration = "#[cfg(test)]\nmod tests;";
+    let fixture = |source: &str| {
+        let source = source.replace("\r\n", "\n");
+        assert_eq!(source.matches(declaration).count(), 1);
+        source.replace(declaration, "")
+    };
+    let lf = source.replace("\r\n", "\n");
+    let crlf = lf.replace('\n', "\r\n");
+    let api = fixture(&lf);
+    assert_eq!(fixture(&crlf), api);
+    assert!(!api.lines().any(|line| line.trim() == "mod tests;"));
     std::fs::write(dir.path().join("journal_content.rs"), api).unwrap();
     std::fs::create_dir(dir.path().join("journal_content")).unwrap();
     std::fs::copy(
