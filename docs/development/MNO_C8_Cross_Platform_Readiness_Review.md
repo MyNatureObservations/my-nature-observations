@@ -11,11 +11,11 @@ desktop acceptance are still separate milestones.
 | First launch | **Verified** in the macOS release workflow and startup tests | **Verified** on Windows 11 as a standard user and in native NTFS tests | **Verified in CI** for database establishment. Desktop startup unverified |
 | Journal read/write | **Verified** on macOS | **Verified** for legacy and recovered journals on Windows 11 | **Verified in CI** at the Rust/SQLite boundary. Desktop persistence unverified |
 | Backup | **Verified** on macOS | **Verified** for manual backup creation on Windows 11 | **Verified in CI** for shared backup code. Desktop picker and output unverified |
-| Ordinary Restore | **Verified** through the existing macOS flow | **Gated**. Generation publication and admission are verified in native tests | **Unsupported** |
+| Ordinary Restore | **Verified** through the existing macOS flow | **Gated by default**. The opted-in desktop flow passed [C8b.2](#c8b2-windows-ordinary-restore-desktop-acceptance) | **Unsupported** |
 | Blocked-startup Recovery | **Verified** through the existing macOS flow and regressions | **Verified** for the missing-selection desktop fixture. Other failure boundaries have scoped native test coverage | **Unsupported** |
 | Installation / packaging | **Verified** for Apple Silicon DMG distribution | **Verified** for a local unsigned current-user x64 NSIS acceptance installer. Public distribution unverified | **Unsupported** by the current reviewed packaging process |
 | Automated verification | **Verified** frontend, Rust and arm64 packaging checks | **Verified with baseline exceptions** for Rust compilation, startup, Recovery and selected integration tests | **Verified** on Ubuntu 24.04 for Rust compilation and selected tests |
-| Manual desktop acceptance | **Verified** for the published macOS scope | **Verified** for the C7.5c scope. Ordinary Restore remains outside it | **Unknown** across Ubuntu and Fedora KDE |
+| Manual desktop acceptance | **Verified** for the published macOS scope | **Verified** for the C7.5c scope. The opted-in ordinary Restore flow also passed C8b.2 | **Unknown** across Ubuntu and Fedora KDE |
 
 ## Implementation and evidence
 
@@ -171,5 +171,40 @@ identity before installation.
 Automated coverage checks the gate, candidate validation, native
 publication/admission, preservation, fail-closed outcomes and frontend
 event-before-reply handoff. The established Windows baseline remains
-visible. Actual opted-in desktop behavior and power-loss durability
-remain unverified.
+visible. The [focused Windows run](https://github.com/MyNatureObservations/my-nature-observations/actions/runs/42265179086) passed. Power-loss durability remains unverified.
+
+### C8b.2 Windows ordinary Restore desktop acceptance
+
+**PASS within the opted-in desktop scope.** The tester used a Windows 11
+x64 laptop, the disposable standard-user account `MNO-Test` and an existing
+synthetic journal. The local unsigned NSIS installer was built from
+`b1192263` with MSVC v143 `14.43.34808` and the explicit
+`windows-restore-acceptance` Cargo feature. The installer SHA-256 was
+verified after copying it into the test account:
+
+`7F4F0A4CF5216A22CB0C1FE9DD649B4C114F3A1F09A8BFF98505BDC53FBFBDA4`
+
+The tester opened the existing journal normally and confirmed that
+Settings offered Restore. They saved and reopened `C8b – Restore-test`
+with Version A, created a backup, then saved and reopened Version B.
+They selected the Version A backup through the existing picker, confirmed
+with **Prepare restore**, and followed MNO's instructions to exit and
+restart. The normal home page opened. The active entry contained Version A
+and no Version B text. A new edit saved after Restore persisted across a
+second full exit and restart.
+
+After closing MNO, read-only inspection found these directories:
+
+- `a5780f08-4eaa-44f0-b493-1d88c16031d3`
+- `cb82a89f-9cd1-4c1a-a62c-8d7683cd6c71`
+- `recovery-evidence-a5780f08-4eaa-44f0-b493-1d88c16031d3`
+
+Their presence is consistent with the generation-preservation model.
+The listing does not identify which generation contains Version B or
+independently establish the integrity of each preserved database.
+
+Default Windows builds remain gated. Manual coverage of all
+pre-publication failures, uncertain publication outcomes, interruption
+and crash scenarios, and physical power-loss durability remains outside
+this acceptance. Windows signing, public distribution and general
+production readiness remain separate milestones.
