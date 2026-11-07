@@ -142,11 +142,11 @@ fn activate_selection(state: &DatabaseState, choice: Choice) -> Result<(), Error
 
 #[tauri::command]
 pub(crate) fn restore_available() -> bool {
-    cfg!(target_os = "macos") || cfg!(all(windows, feature = "windows-restore-acceptance"))
+    cfg!(any(target_os = "macos", windows))
 }
 
 fn require_restore_available() -> Result<(), Error> {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     if !restore_available() {
         return Err(Error::Unsupported);
     }
@@ -404,19 +404,18 @@ fn request_quit(
 #[cfg(all(test, target_os = "macos"))]
 mod tests;
 
-#[cfg(all(test, windows))]
+#[cfg(all(test, any(target_os = "macos", windows)))]
 #[test]
-fn windows_restore_commands_follow_explicit_acceptance_feature() {
-    let enabled = cfg!(feature = "windows-restore-acceptance");
-    assert_eq!(restore_available(), enabled);
-    assert_eq!(
-        require_restore_available(),
-        if enabled {
-            Ok(())
-        } else {
-            Err(Error::Unsupported)
-        }
-    );
+fn ordinary_restore_is_available_on_supported_platforms() {
+    assert!(restore_available());
+    assert_eq!(require_restore_available(), Ok(()));
+}
+
+#[cfg(all(test, not(any(target_os = "macos", windows))))]
+#[test]
+fn ordinary_restore_is_unavailable_on_unsupported_platforms() {
+    assert!(!restore_available());
+    assert_eq!(require_restore_available(), Err(Error::Unsupported));
 }
 
 #[cfg(all(test, windows))]

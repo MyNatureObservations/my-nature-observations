@@ -150,13 +150,13 @@ test('settings actions share one quiet button style while navigation remains nat
     assert.match(component.slice(actions[0].start,actions[0].end), index===0?/m\.backup_create/:/m\.settings_export/);
     assert.match(component.slice(actions[1].start,actions[1].end), index===0?/m\.settings_restore/:/m\.settings_import/);
   }
-  for (const available of [true, false]) {
-    const h = harness(available, available);
+  for (const [restore, openImport] of [[true, true], [true, false], [false, false]]) {
+    const h = harness(restore, openImport);
     assert.equal(h.run('restoreAvailable'), false);
     assert.equal(h.run('importAvailable'), false);
     await Promise.resolve();
-    assert.equal(h.run('restoreAvailable'), available);
-    assert.equal(h.run('importAvailable'), available);
+    assert.equal(h.run('restoreAvailable'), restore);
+    assert.equal(h.run('importAvailable'), openImport);
   }
   assert.match(component,/\.data-actions\s*\{[^}]*flex-wrap: wrap/);
   assert.match(component,/\.backup-button\s*\{[^}]*text-decoration: none/);

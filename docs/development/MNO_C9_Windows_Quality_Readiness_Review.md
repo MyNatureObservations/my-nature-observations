@@ -233,3 +233,49 @@ a crash or interrupt a real journal.
 Retain the gate pending native CI and the targeted desktop rejection
 check. Then review default enablement as a separate decision with the
 existing installer lifecycle and public release prerequisites.
+
+### C9g Windows desktop acceptance
+
+**PASS within the tested C9e and C9f desktop scope.** Windows 11 x64,
+disposable account `MNO-Test`, unsigned current-user NSIS with Restore
+explicitly enabled, source commit `547291222d59de267b712920a421a69f8271ed59`.
+
+Installer SHA-256:
+`471B1FE94E76CB1CB026E9F309BDE1751CA5FE36BB9D2D4C3DD8AA83A0DC4A44`.
+
+- **C9e:** The synthetic journal survived installation. Backup, Export
+  and Restore remained available. Settings omitted Import. Direct
+  `/settings/import` displayed the unavailable message. Normal startup
+  worked after WebView2 inspection.
+- **C9f:** MNO rejected the malformed backup without preparation or a
+  restart prompt. The tester returned to the journal, saved an edit,
+  restarted and verified persistence, then created a normal backup.
+
+Uncertain publication and failed mode refresh retain their automated
+coverage. Desktop testing did not exercise those cases, crashes or
+physical power-loss durability.
+
+### C9h default Windows Restore
+
+The temporary Cargo feature is removed. The shared capability now
+allows ordinary Restore on macOS and Windows and denies it on Linux.
+Windows Open Import remains unsupported. Backup verification, protected
+publication, fail-closed handoff, controlled Quit and restart admission
+continue to use their existing paths. The focused Windows job runs the
+Restore and Recovery command tests with default features and retains
+the strict zero-failure baseline and approved ignores.
+
+After native CI review, build from `app/` with the established Windows
+toolchain and npm prerequisites:
+
+```powershell
+npm.cmd run tauri build -- --ci --no-sign --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.windows-test.conf.json -- --locked
+```
+
+Install only in `MNO-Test`. Using synthetic data, save a distinctive
+entry, create a valid backup and save a distinguishable later edit.
+Verify Settings offers Restore in this default build. Restore the
+backup, quit using the blocked shell, then reopen and verify the backed-up
+content. Save a new edit, quit and reopen again, and verify persistence.
+Keep prior generations and the backup intact. Default-build desktop
+acceptance and native CI confirmation are pending.

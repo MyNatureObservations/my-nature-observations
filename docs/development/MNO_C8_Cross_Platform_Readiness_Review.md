@@ -120,6 +120,10 @@ Keep default Windows builds gated until the desktop result is reviewed.
 
 ## C8b implementation and local acceptance
 
+This section records the historical opt-in build. The feature was
+removed in [C9h](MNO_C9_Windows_Quality_Readiness_Review.md#c9h-default-windows-restore).
+Use the C9h build instructions for current builds.
+
 Ordinary Windows Restore requires the explicit Cargo feature
 `windows-restore-acceptance`. The shared backend gate applies to
 both picker and confirmation. Default Windows builds keep Restore

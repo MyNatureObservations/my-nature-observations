@@ -328,10 +328,10 @@ jobs:
           cargo test --locked --lib --color never > "$log" 2>&1 || status=$?
           cat "$log"
           python ../../.github/scripts/windows-library-baseline.py "$log" "$status" --require-clean
-      - name: Check Windows Restore acceptance opt-in
+      - name: Check default Windows Restore and Recovery
         if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
         run: |
-          cargo test --locked --lib --features windows-restore-acceptance restore_app::
+          cargo test --locked --lib restore_app::
       - name: Run selected Windows integration tests
         if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
         run: >-
