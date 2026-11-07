@@ -57,6 +57,24 @@ class BaselineTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 compare(rejected, 101, True, True)
 
+    def test_clean_transition_requires_all_passes_and_zero_failures(self):
+        passed = (module["COMPILER"], *module["LEGACY_WEATHER"], module["NETWORK_REPLACEMENT"])
+        clean = (
+            "".join(f"test {name} ... ok\n" for name in passed)
+            + "".join(f"test {name} ... ignored\n" for name in module["IGNORED"])
+            + "test result: ok. 381 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out;\n"
+        )
+        compare(clean, 0, require_clean=True)
+        for rejected, status in [
+            (clean, 101),
+            (transcript(True, True), 101),
+            *((clean.replace(f"test {name} ... ok\n", ""), 0) for name in passed),
+            ("test unexpected ... FAILED\n" + clean, 0),
+            ("test unexpected ... ignored\n" + clean, 0),
+        ]:
+            with self.assertRaises(ValueError):
+                compare(rejected, status, require_clean=True)
+
     def test_rejects_changes(self):
         original = transcript()
         for changed, status in [

@@ -150,3 +150,29 @@ and the C9b compiler test. It still checks the exact historical timeout
 diagnostic and the two known ignores, and rejects unexpected failures.
 The historical baseline modes remain available. The transition from
 three known failures to one is pending native Windows evidence.
+
+### C9d historical weather transport fixture
+
+C9c Windows run 42383850180 matched the one-failure baseline. The old
+test dropped its localhost listener before the request, leaving an
+unowned port, and expected a refusal before the one-second request
+deadline. The Windows log shows a failure in request sending before any
+HTTP response and classification as Timeout. The logged diagnostic lacks
+the underlying socket error and does not establish whether Windows
+refused the connection or where inside request sending the deadline
+expired. There is no demonstrated production classification defect.
+
+The replacement fixture keeps the loopback port owned, accepts and reads
+the HTTP request, then closes without a response. This gives the real
+HTTP client a controlled non-timeout transport failure and verifies
+Network classification. The existing no-response server still verifies
+Timeout independently. A kernel-level refusal is no longer a separate
+assertion. Production request and error mapping code is unchanged.
+
+Local macOS historical-weather tests reported 30 passes and the existing
+ignored live HTTPS test. Five comparator tests, Rust formatting, YAML
+parsing and diff checks passed. The focused Windows workflow now requires
+a clean unfiltered library result, explicit passes from the C9b, C9c and
+C9d tests, and exactly the existing two ignores. Earlier comparison modes
+remain available for historical logs. The last accepted Windows failure
+remains recorded until native CI confirms the transition.
