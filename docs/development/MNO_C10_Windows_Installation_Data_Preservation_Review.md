@@ -95,3 +95,87 @@ complete the preservation checks above, and document the user-facing
 uninstall choice and external backup location. The source review found
 no need for a custom installer template. Revisit the configuration only
 if candidate testing shows a concrete preservation defect.
+
+## C10b desktop acceptance
+
+**VERIFIED — PASS within the tested maintenance scope.** On Windows 11
+under `MNO-Test`, with synthetic journal data:
+
+| Operation | Observed result |
+| --- | --- |
+| Same-version reinstall | SHA-256 comparison found seven journal-related files before and seven after, with zero differences. The journal remained readable and writable after reinstall and restart. |
+| Uninstall with appdata deletion unchecked | The NSIS uninstaller offered appdata deletion. All seven files remained byte-identical after uninstall. |
+| Reinstall after uninstall | All seven files remained byte-identical across reinstall. The journal reopened, accepted a new edit, and retained it after restart. |
+
+The external backup was stored outside the application's AppData
+directory. The test did not exercise data deletion or a distinct-version
+upgrade.
+
+## C10c distribution readiness
+
+The current-user x64 NSIS path is suitable for preparing a Windows
+preview candidate. Public distribution still needs verification of the
+exact candidate on a representative download and install path.
+
+| Classification | Finding and release action |
+| --- | --- |
+| **VERIFIED** | The base configuration and Windows overlay leave WebView2 at the pinned Tauri CLI 2.12.2 default, `downloadBootstrapper`. The NSIS template checks the machine and user Evergreen registrations. On an ordinary installation with the runtime absent, it downloads and runs Microsoft's bootstrapper. The runtime is not embedded. The missing-runtime path requires internet access and a successful bootstrapper run. |
+| **NEEDS MANUAL TEST** | C10b establishes same-version maintenance and ordinary data-preserving uninstall. Test a genuine increasing-version upgrade when two approved versions exist, before claiming upgrade support. A newer binary with the same version does not exercise that path. Verify the missing-WebView2 path only if it is part of the promised installation coverage. |
+| **RELEASE BLOCKER** | The exact public candidate needs verified x64 executable identity, version, SHA-256 and extracted notices, plus a successful browser-download and standard-user installation check on representative Windows 11. If the intended security policy blocks the candidate, resolve the distribution or signing path before publishing for that audience. Existing local acceptance does not establish browser-download reputation behavior. |
+| **DOCUMENTATION REQUIRED** | Provide Windows 11 x64 requirements, the current-user setup and first-launch steps, the WebView2 internet requirement when missing, and expected unsigned warnings or policy blocks. Tell users to create a backup outside the application directories before maintenance and leave the optional appdata deletion box unchecked to retain journals. Disclose that Open Import is unavailable on Windows. Link to GitHub Issues for reproducible problems and Discussions for help. |
+| **OPTIONAL IMPROVEMENT** | Trusted publisher signing can reduce friction. Direct unsigned distribution is technically possible where policy allows it. Evaluate sponsored signing for eligible open-source projects, trusted Authenticode signing or Store distribution separately if needed. A signature alone does not guarantee absence of SmartScreen warnings. |
+
+Sources: [Tauri WebView2 installation modes](https://v2.tauri.app/distribute/windows-installer/#webview2-installation-options),
+[pinned NSIS runtime check](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.12.2/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi#L517),
+[Microsoft SmartScreen reputation](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation)
+and [Smart App Control](https://learn.microsoft.com/windows/apps/develop/smart-app-control/overview).
+
+A browser-downloaded unsigned installer may be shown as an unknown
+publisher or trigger a SmartScreen warning. Smart App Control or
+managed policy can prevent installation. Document those outcomes and
+ask users to stop if their policy blocks the installer. Keep Windows
+security settings intact.
+
+### Licensing and candidate checks
+
+The project carries an [MIT license](../../LICENSE). The independent
+[Windows native inventory](../../app/licensing/native.windows.json)
+covers reviewed Microsoft runtime and WebView2 loader evidence and NSIS
+components. The generator validates pinned target dependencies and
+evidence, emits an offline notice bundle with required license and source
+files, and generates the installer license. The packaging workflow
+extracts the NSIS payload and validates the notices and executable.
+Preserve the reviewed toolchain and rerun these checks on the exact
+candidate. A different bundled runtime or an unreviewed dependency
+requires a targeted evidence review. No concrete missing bundled notice
+was found in the reviewed configuration. The actual candidate is still
+to be inspected.
+
+Map tiles and weather are external services. The map displays
+OpenStreetMap contributor attribution and the weather UI attributes
+Open-Meteo and CC BY 4.0. Keep these service attributions alongside
+the bundled software notices.
+[Notices guide](MNO_Third_Party_Notices.md) · [Packaging verification](../../.github/workflows/ci.yml)
+
+### Minimal remaining acceptance
+
+1. Select the Windows preview version, source commit and supported
+   distribution policy. Produce a candidate and verify the package
+   identity, architecture, checksum, unsigned or signed status and
+   extracted notices.
+2. In a disposable standard-user profile, obtain the exact candidate
+   through a controlled browser download. Record the security prompt
+   or block and the WebView2 state. Verify install and first launch
+   with synthetic data. Repeat with a missing runtime only if that
+   installation path will be supported.
+3. When two approved versions exist, test an increasing-version upgrade
+   under `MNO-Test` using the C10a preservation procedure. Keep an
+   external backup, verify the closed journal files before launch and
+   confirm the upgraded app opens the same journal. Leave data deletion
+   unchecked if the supported path invokes an uninstaller.
+
+**Next step:** Prepare one Windows preview candidate and its short
+download, installation and data-preservation instructions. Reuse the
+C9h Restore and C10b maintenance results. Repeat those workflows only
+if the candidate changes a relevant behavior or the checks expose a
+regression.

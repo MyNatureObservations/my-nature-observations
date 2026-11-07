@@ -66,7 +66,7 @@ CI keeps the existing quality checks and adds a macOS notice/package job with th
 Remaining before public release:
 
 - About MNO now provides offline notice access and the project MIT text; see the [Settings review and packaged manual acceptance](MNO_Settings_About_MNO.md). #14 stays open for review/acceptance.
-- Windows and Linux packaging and their native/license inventories are **not validated**. Review actual WebView/runtime distribution (e.g. Windows WebView2 installation policy), Linux system-vs-bundled libraries, target dependency differences and final resources before enabling their notice generation. The generator checks Tauri’s requested target triple and rejects other hosts/targets rather than shipping a macOS-only inventory as universal.
+- Windows x64 has a separately reviewed native inventory and packaged-notice validation for internal NSIS builds. Verify the exact public candidate as described in the [C10 distribution review](MNO_C10_Windows_Installation_Data_Preservation_Review.md#c10c-distribution-readiness). Linux packaging still needs a reviewed target inventory before the generator can support it.
 - Future dependency/toolchain updates require regenerating and reviewing changes, including new NOTICE files, assets, source obligations and version-specific exceptions. This process is not a general legal certification or signing/notarization approval.
 - Manual acceptance: copy the packaged `notices/` folder to an offline location, open HTML, inspect representative MIT/Apache, Leaflet BSD, ring, CDLA and compiler-builtins entries, and expand an MPL source archive. Verify future About navigation separately.
 
