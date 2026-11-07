@@ -113,6 +113,7 @@ pub fn run() {
             recovery::database_mode,
             recovery::recovery_status,
             recovery::run_recovery,
+            import_app::open_import_available,
             import_app::choose_open_import,
             import_app::cancel_open_import,
             import_app::activate_open_import,

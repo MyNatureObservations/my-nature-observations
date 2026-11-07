@@ -354,6 +354,11 @@ fn report(
     }
 }
 #[tauri::command]
+pub(crate) fn open_import_available() -> bool {
+    cfg!(target_os = "macos")
+}
+
+#[tauri::command]
 pub(crate) async fn choose_open_import(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,

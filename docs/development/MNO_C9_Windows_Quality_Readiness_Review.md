@@ -176,3 +176,33 @@ a clean unfiltered library result, explicit passes from the C9b, C9c and
 C9d tests, and exactly the existing two ignores. Earlier comparison modes
 remain available for historical logs. The last accepted Windows failure
 remains recorded until native CI confirms the transition.
+
+### C9e Settings Import availability
+
+Settings previously showed Import on every platform. The command rejects
+selection outside macOS, so Windows users reached a generic error after
+opening a route that appeared usable. Open Import consumes a portable
+`.mno-export` archive and replaces journal content through the macOS
+activation and recovery protocol. Shared archive handling does not
+provide equivalent Windows activation. Backup, Restore and blocked
+Recovery use separate contracts and retain their existing behavior.
+
+Settings and direct Import navigation now use a read-only capability
+command that reflects the existing macOS-only backend restriction.
+Windows and Linux Settings offer Export with export-only explanatory
+text. A direct Import route explains unavailability in Swedish or
+English and offers a way back without invoking the picker or activation.
+The macOS import picker, confirmation and activation remain available.
+
+Scoped release recommendation is to disclose that Open Import is
+unavailable on Windows. If cross-platform Open Import is required for
+launch, its activation design and acceptance need a separate decision.
+
+Local checks passed for 542 frontend tests, Paraglide, Svelte, Rust
+formatting and macOS all-targets compilation. Mocked availability tests
+exercise both Settings and direct navigation. On the next approved
+Windows desktop candidate, verify in both languages that Settings keeps
+Export and Backup but omits Import, and that direct navigation to
+`/settings/import` displays the unavailable message with no picker.
+On macOS verify the original Import link and picker still open.
+Desktop acceptance is pending.

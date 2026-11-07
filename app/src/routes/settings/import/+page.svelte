@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getContext, onDestroy } from "svelte";
+  import { getContext, onDestroy, onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { beforeNavigate } from "$app/navigation";
   import { language } from "$lib/language.svelte";
@@ -8,6 +8,7 @@
   type Selection = { token: string; format_version: number; entry_count: number; existing_entry_count: number; existing_place_count: number; imported_place_count: number; existing_setting_count: number; imported_setting_count: number };
   type ActivationResult = { activated: boolean; prepared: boolean; error: string | null; mode: "ready" | "recovery" | "blocked" | "unknown" };
   const blockJournal = getContext<(prepared?: boolean) => void>("mno:block-journal");
+  let available = $state<boolean | null>(null);
   let phase = $state<"idle" | "checking" | "confirmed" | "cancelling" | "writing" | "blocked">("idle");
   let token = $state<string | null>(null);
   let entryCount = $state(0);
@@ -31,13 +32,18 @@
   async function release(selected: string) {
     await invoke("cancel_open_import", { token: selected });
   }
+  onMount(() => {
+    void invoke<boolean>("open_import_available")
+      .then((supported) => { if (!disposed) available = supported; })
+      .catch(() => { if (!disposed) available = false; });
+  });
   onDestroy(() => {
     disposed = true;
     revision++;
     if (token) void release(token).catch(() => {});
   });
   async function choose() {
-    if (disposed || phase !== "idle") return;
+    if (!available || disposed || phase !== "idle") return;
     const current = ++revision;
     phase = "checking"; error = ""; notice = "";
     try {
@@ -69,7 +75,7 @@
       ? cause : "failed";
   }
   async function cancel() {
-    if (disposed || phase !== "confirmed" || !token) return;
+    if (!available || disposed || phase !== "confirmed" || !token) return;
     const selected = token;
     const current = ++revision;
     phase = "cancelling"; error = "";
@@ -87,7 +93,7 @@
     blockJournal(); // Restrictive only: this page never grants Ready.
   }
   async function activate() {
-    if (disposed || phase !== "confirmed" || !token) return;
+    if (!available || disposed || phase !== "confirmed" || !token) return;
     const selected = token;
     token = null; // Consumed by the backend; unmount must not cancel activation.
     const current = ++revision;
@@ -132,32 +138,36 @@
     <a class="back-link" href="/">← {m.restore_back_to_home({}, { locale: language.current })}</a>
   {/if}
   <h1>{phase === "confirmed" && hasExistingData() ? m.import_replace_title({}, { locale: language.current }) : m.import_open({}, { locale: language.current })}</h1>
-  {#if phase !== "confirmed" || !hasExistingData()}
-    <p>{m.import_intro({}, { locale: language.current })}</p>
-  {/if}
-  {#if phase === "confirmed"}
-    {#if hasExistingData()}
-      <p role="status">{m.import_replace_valid({}, { locale: language.current })}</p>
-      <p>{m.import_current_count({ count: existingEntryCount }, { locale: language.current })}<br />{m.import_incoming_count({ count: entryCount }, { locale: language.current })}</p>
-      {#if existingPlaceCount > 0 || importedPlaceCount > 0}<p>{m.import_current_places({ count: existingPlaceCount }, { locale: language.current })}<br />{m.import_incoming_places({ count: importedPlaceCount }, { locale: language.current })}</p>{/if}
-      <p>{m.import_replace_confirm({}, { locale: language.current })}</p>
-      {#if existingPlaceCount > 0}<p>{m.import_replace_places({}, { locale: language.current })}</p>{/if}
-      <p>{formatVersion >= 3 ? m.import_replace_startup_v3({}, { locale: language.current }) : m.import_replace_startup({}, { locale: language.current })}</p>
-    {:else}
-      <p role="status">{m.import_preview({ count: entryCount }, { locale: language.current })}</p>
-      {#if importedPlaceCount > 0}<p>{m.import_incoming_places({ count: importedPlaceCount }, { locale: language.current })}</p>{/if}
-      {#if importedSettingCount > 0}<p>{m.import_replace_valid({}, { locale: language.current })}</p>{/if}
-      <p>{m.import_confirm({}, { locale: language.current })}</p>
+  {#if available === false}
+    <p>{m.import_unavailable({}, { locale: language.current })}</p>
+  {:else if available}
+    {#if phase !== "confirmed" || !hasExistingData()}
+      <p>{m.import_intro({}, { locale: language.current })}</p>
     {/if}
-    <button onclick={activate}>{hasExistingData() ? (formatVersion >= 3 ? m.import_replace_button_v3({}, { locale: language.current }) : m.import_replace_button({}, { locale: language.current })) : m.import_confirm_button({}, { locale: language.current })}</button>
-    <button onclick={cancel}>{m.restore_cancel({}, { locale: language.current })}</button>
-  {:else if phase === "checking" || phase === "cancelling" || phase === "writing"}
-    <p role="status">{phase === "checking" ? m.import_checking({}, { locale: language.current }) : phase === "cancelling" ? m.import_cancelling({}, { locale: language.current }) : m.import_working({}, { locale: language.current })}</p>
-  {:else if phase === "idle"}
-    <button onclick={choose}>{m.import_choose({}, { locale: language.current })}</button>
+    {#if phase === "confirmed"}
+      {#if hasExistingData()}
+        <p role="status">{m.import_replace_valid({}, { locale: language.current })}</p>
+        <p>{m.import_current_count({ count: existingEntryCount }, { locale: language.current })}<br />{m.import_incoming_count({ count: entryCount }, { locale: language.current })}</p>
+        {#if existingPlaceCount > 0 || importedPlaceCount > 0}<p>{m.import_current_places({ count: existingPlaceCount }, { locale: language.current })}<br />{m.import_incoming_places({ count: importedPlaceCount }, { locale: language.current })}</p>{/if}
+        <p>{m.import_replace_confirm({}, { locale: language.current })}</p>
+        {#if existingPlaceCount > 0}<p>{m.import_replace_places({}, { locale: language.current })}</p>{/if}
+        <p>{formatVersion >= 3 ? m.import_replace_startup_v3({}, { locale: language.current }) : m.import_replace_startup({}, { locale: language.current })}</p>
+      {:else}
+        <p role="status">{m.import_preview({ count: entryCount }, { locale: language.current })}</p>
+        {#if importedPlaceCount > 0}<p>{m.import_incoming_places({ count: importedPlaceCount }, { locale: language.current })}</p>{/if}
+        {#if importedSettingCount > 0}<p>{m.import_replace_valid({}, { locale: language.current })}</p>{/if}
+        <p>{m.import_confirm({}, { locale: language.current })}</p>
+      {/if}
+      <button onclick={activate}>{hasExistingData() ? (formatVersion >= 3 ? m.import_replace_button_v3({}, { locale: language.current }) : m.import_replace_button({}, { locale: language.current })) : m.import_confirm_button({}, { locale: language.current })}</button>
+      <button onclick={cancel}>{m.restore_cancel({}, { locale: language.current })}</button>
+    {:else if phase === "checking" || phase === "cancelling" || phase === "writing"}
+      <p role="status">{phase === "checking" ? m.import_checking({}, { locale: language.current }) : phase === "cancelling" ? m.import_cancelling({}, { locale: language.current }) : m.import_working({}, { locale: language.current })}</p>
+    {:else if phase === "idle"}
+      <button onclick={choose}>{m.import_choose({}, { locale: language.current })}</button>
+    {/if}
+    {#if notice}<p role="status">{m.import_cancelled({}, { locale: language.current })}</p>{/if}
+    {#if error}<p role="alert">{errorMessage()}</p>{/if}
   {/if}
-  {#if notice}<p role="status">{m.import_cancelled({}, { locale: language.current })}</p>{/if}
-  {#if error}<p role="alert">{errorMessage()}</p>{/if}
 </main>
 
 <style>

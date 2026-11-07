@@ -9,15 +9,17 @@ const layout = readFileSync(new URL('../src/routes/+layout.svelte', import.meta.
 const script = s => ts.transpileModule(s.match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^  import .*;\n/gm, ''), { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
 const messages = new Proxy({}, { get: (_, key) => () => key });
 const settle = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
-function harness(onBlock = () => {}) {
+function harness(onBlock = () => {}, supported = true) {
   let destroy, guard, blocks = 0;
   const calls = [];
   const context = vm.createContext({
     $state: v => v, getContext: key => { assert.equal(key, 'mno:block-journal'); return (prepared = false) => { blocks++; onBlock(prepared); }; },
-    onDestroy: f => destroy = f, beforeNavigate: f => guard = f, language: { current: 'sv' }, m: messages,
-    invoke: (name, args) => new Promise((resolve, reject) => calls.push({ name, args, resolve, reject })),
+    onMount: f => f(), onDestroy: f => destroy = f, beforeNavigate: f => guard = f, language: { current: 'sv' }, m: messages,
+    invoke: (name, args) => name === "open_import_available"
+      ? Promise.resolve(supported) : new Promise((resolve, reject) => calls.push({ name, args, resolve, reject })),
   });
   vm.runInContext(script(source), context);
+  if (supported) vm.runInContext("available = true", context);
   return { calls, run: code => vm.runInContext(code, context), destroy: () => destroy(), blocks: () => blocks,
     canLeave() { let cancelled = false; guard({ cancel() { cancelled = true; } }); return !cancelled; } };
 }
@@ -226,5 +228,23 @@ test('failed or uncertain activation never claims preparation succeeded', async 
     const notices=[]; const h=harness(prepared=>notices.push(prepared)); await selected(h);
     const activating=h.run('activate()');h.calls[1].resolve(result);await activating;
     assert.equal(h.run('phase'),'blocked');assert.equal(notices.includes(true),false);
+  }
+});
+
+
+test('unsupported direct Import route keeps journal actions unavailable and allows navigation away', async () => {
+  const h = harness(() => {}, false);
+  await h.run('choose()');
+  await settle();
+  assert.equal(h.run('available'), false);
+  await h.run('choose()');
+  await h.run('activate()');
+  assert.deepEqual(h.calls, []);
+  assert.equal(h.canLeave(), true);
+  assert.match(source, /available === false[\s\S]*?m\.import_unavailable[\s\S]*?else if available/);
+  for (const locale of ['en', 'sv']) {
+    const translations = JSON.parse(readFileSync(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8'));
+    assert.ok(translations.import_unavailable);
+    assert.ok(translations.settings_export_only_description);
   }
 });
