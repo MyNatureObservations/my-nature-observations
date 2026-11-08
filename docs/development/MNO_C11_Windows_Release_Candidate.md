@@ -122,3 +122,60 @@ behavior.
 Use the [Windows installation guide](../MNO_Windows_Installation.md)
 as the user-facing companion. No release, tag or installer is created
 by this preparation.
+
+## C11c browser-download acceptance
+
+The local RC1 passed package verification and standard-user installation
+in `MNO-Test`, preserved the synthetic journal, and passed save/reopen and
+Backup, Export and Restore visibility checks. Its SHA-256 is
+`4142C6A3C66DDE1E7E17A65BCAF5B0FDB34DF9A65015A57E2477F7232616A693`.
+That hash identifies the local installer only.
+
+The manual [Windows RC1 browser acceptance workflow](../../.github/workflows/windows-rc1.yml)
+always checks out `7ae3313677e6c4b45b9742365bcf7567e5ceac67`.
+It builds the unsigned default-feature NSIS package, verifies its
+identity, packaged executable, installer license and notices, and logs
+the hash of the installer it built. It uploads
+`mno-windows-x64-rc1-7ae3313` for three days with the installer,
+`SHA256SUMS.txt` and `BUILD-INFO.json`. The repository is public and
+repository readers can download the artifact.
+
+GitHub requires the workflow file on the default branch before it can
+receive a manual dispatch. Once registered, select **Windows RC1 browser
+acceptance** in Actions and run it on `codex/cross-platform-ci`, or use:
+
+```sh
+gh workflow run windows-rc1.yml --ref codex/cross-platform-ci
+```
+
+1. From the run's **Artifacts** section, download the ZIP through a normal
+   browser and extract it. Record any browser download warning.
+2. In PowerShell in the extracted directory, verify the workflow-built
+   bytes and check the embedded metadata:
+
+   ```powershell
+   $installer = '.\My-Nature-Observations-0.1.0-windows-x64-rc1-7ae3313-setup.exe'
+   $expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
+   if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $expected) {
+       throw 'Installer checksum mismatch'
+   }
+   Get-Content .\BUILD-INFO.json
+   (Get-Item -LiteralPath $installer).VersionInfo | Select-Object ProductName, ProductVersion
+   Get-AuthenticodeSignature -FilePath $installer | Select-Object Status
+   ```
+
+   Expect My Nature Observations, version 0.1.0 and `NotSigned`.
+   Check the manifest's pinned commit, x64 target and bundle identifier.
+   Compare against the workflow manifest, even if the locally built RC1
+   has a different hash. Byte-identical reproducibility is unverified.
+3. Install as the standard user `MNO-Test` with only synthetic data.
+   Record SmartScreen or policy warnings. If security policy blocks
+   installation, stop and record it with protections left enabled.
+4. Open the journal and verify Backup, Export and Restore are present.
+   If needed, save and reopen one synthetic entry. Record the run,
+   installer hash, Windows version and outcome.
+
+A browser download of an Actions ZIP and subsequent extraction can
+produce different security behavior from a standalone EXE downloaded
+from GitHub Releases. Verify the final public download path separately
+before treating its security behavior as established.
