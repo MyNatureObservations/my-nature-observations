@@ -131,7 +131,7 @@ Backup, Export and Restore visibility checks. Its SHA-256 is
 `4142C6A3C66DDE1E7E17A65BCAF5B0FDB34DF9A65015A57E2477F7232616A693`.
 That hash identifies the local installer only.
 
-The manual [Windows RC1 browser acceptance workflow](../../.github/workflows/windows-rc1.yml)
+The manual Windows RC1 job in the registered [CI workflow](../../.github/workflows/ci.yml)
 always checks out `7ae3313677e6c4b45b9742365bcf7567e5ceac67`.
 It builds the unsigned default-feature NSIS package, verifies its
 identity, packaged executable, installer license and notices, and logs
@@ -140,12 +140,13 @@ the hash of the installer it built. It uploads
 `SHA256SUMS.txt` and `BUILD-INFO.json`. The repository is public and
 repository readers can download the artifact.
 
-GitHub requires the workflow file on the default branch before it can
-receive a manual dispatch. Once registered, select **Windows RC1 browser
-acceptance** in Actions and run it on `codex/cross-platform-ci`, or use:
+Select **CI** in Actions, choose `codex/cross-platform-ci`, and run
+with scope `windows-rc1-browser`. The workflow is already registered
+on the default branch. The RC1 job is defined on the development
+branch and runs only for this manual scope.
 
 ```sh
-gh workflow run windows-rc1.yml --ref codex/cross-platform-ci
+gh workflow run ci.yml --ref codex/cross-platform-ci -f scope=windows-rc1-browser
 ```
 
 1. From the run's **Artifacts** section, download the ZIP through a normal

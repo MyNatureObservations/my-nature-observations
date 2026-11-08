@@ -16,6 +16,7 @@ on:
           - full
           - windows-initialization-probe
           - windows-test-package
+          - windows-rc1-browser
           - windows-loader-diagnostic
           - windows-startup-baseline
 
@@ -486,3 +487,123 @@ jobs:
           library failures remain documented; this packaging job does not run them.
           Restore/Recovery, historical migration and generation activation remain restricted.
           SUMMARY
+
+  windows-rc1:
+    name: Build and verify Windows x64 RC1
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scope == 'windows-rc1-browser' }}
+    env:
+      RC_SOURCE: '7ae3313677e6c4b45b9742365bcf7567e5ceac67'
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RC_SOURCE }}
+          persist-credentials: false
+      - name: Confirm pinned source and x64 runner
+        run: |
+          test "$(git rev-parse HEAD)" = "$RC_SOURCE"
+          test "$RUNNER_ARCH" = X64
+          git log -1 --format='RC source %H'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Set up reviewed Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustc -vV
+      - name: Verify native build environment
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'Reviewed Visual Studio 2022 MSVC tools required' }
+          $version = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt").Trim()
+          if ($version -notmatch '^14\.') { throw "Unreviewed MSVC toolset: $version" }
+          "MNO_MSVC_VERSION=$version" >> $env:GITHUB_ENV
+          Write-Output "MSVC $version (Visual Studio 2022)"
+      - name: Install pinned notice generator
+        run: |
+          if ! cargo about --version 2>/dev/null | grep -qx 'cargo-about 0.9.3'; then
+            cargo install cargo-about --version 0.9.3 --locked --features cli
+          fi
+      - name: Prepare frontend and run focused notices tests
+        run: |
+          npm ci
+          npm run i18n:compile
+          node --test tests/notices.test.mjs tests/nsis-executable.test.mjs
+      - name: Build unsigned current-user RC1 installer
+        run: npm run tauri build -- --ci --no-sign --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.windows-test.conf.json -- --locked
+      - name: Verify installer resources without installation or launch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = 'src-tauri/target/x86_64-pc-windows-msvc/release'
+          $installers = @(Get-ChildItem "$release/bundle/nsis/*.exe")
+          if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
+          $installer = $installers[0]
+          $unpacked = Join-Path $env:RUNNER_TEMP 'mno-rc1-unpacked'
+          & 7z x $installer.FullName "-o$unpacked" -y
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS archive extraction failed' }
+          $notices = @(Get-ChildItem $unpacked -Recurse -Filter THIRD-PARTY-NOTICES.html)
+          if ($notices.Count -ne 1) { throw 'Expected one packaged notices directory' }
+          node scripts/notices/validate.mjs --resources $notices[0].DirectoryName
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged notices validation failed' }
+          $binary = Join-Path $release 'app.exe'
+          $bytes = [IO.File]::ReadAllBytes($binary)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3c)
+          if ([BitConverter]::ToUInt16($bytes, $pe + 4) -ne 0x8664) { throw 'Expected x86_64 PE binary' }
+          $version = (Get-Item $binary).VersionInfo
+          if ($version.ProductVersion -notmatch '^0\.1\.0(?:\.|$)' -or $version.ProductName -ne 'My Nature Observations') { throw 'Unexpected executable metadata' }
+          # NSIS contains the token-patched app; Tauri restores the unpatched
+          # release/app.exe after bundling. Require that exact change ONLY.
+          $packagedBinary = @(Get-ChildItem $unpacked -Recurse -Filter 'app.exe')
+          if ($packagedBinary.Count -ne 1) { throw 'Expected exactly one extracted app.exe' }
+          $verification = node scripts/verify-nsis-executable.mjs $binary $packagedBinary[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS executable integrity verification failed' }
+          $verification | Write-Output
+          $executableCheck = $verification | ConvertFrom-Json
+          $packagedVersion = $packagedBinary[0].VersionInfo
+          if ($packagedVersion.ProductName -ne $version.ProductName -or $packagedVersion.ProductVersion -ne $version.ProductVersion) { throw 'Packaged executable metadata differs' }
+          $script = Get-Content "$release/nsis/x64/installer.nsi" -Raw
+          if ($script -notmatch '(?m)^!define BUNDLEID "org\.mynatureobservations\.app"\s*$' -or
+              $script -notmatch '(?m)^!define INSTALLMODE "currentUser"\s*$' -or
+              $script -notmatch '(?m)^!define LICENSE "[^"]*WINDOWS-INSTALLER-LICENSE\.txt"\s*$') {
+            throw 'Unexpected NSIS bundle identifier, install mode or license reference'
+          }
+          $license = Join-Path $notices[0].DirectoryName 'WINDOWS-INSTALLER-LICENSE.txt'
+          if (!(Test-Path -LiteralPath $license -PathType Leaf)) { throw 'Packaged installer license resource missing' }
+          if ((Get-FileHash $license).Hash -ne (Get-FileHash 'src-tauri/notices/WINDOWS-INSTALLER-LICENSE.txt').Hash) {
+            throw 'Packaged installer license differs from generated license'
+          }
+          if ((Get-AuthenticodeSignature -FilePath $installer.FullName).Status -ne 'NotSigned') {
+            throw 'Expected unsigned RC1 installer'
+          }
+          New-Item -ItemType Directory -Path 'src-tauri/target/windows-rc1-artifact' | Out-Null
+          $out = 'src-tauri/target/windows-rc1-artifact'
+          $filename = 'My-Nature-Observations-0.1.0-windows-x64-rc1-7ae3313-setup.exe'
+          Copy-Item $installer.FullName (Join-Path $out $filename)
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $filename" | Set-Content "$out/SHA256SUMS.txt" -Encoding utf8
+          Write-Output "Workflow-built RC1 SHA-256: $hash"
+          @{
+            sourceCommit = $env:RC_SOURCE; productName = $version.ProductName; version = $version.ProductVersion
+            identifier = 'org.mynatureobservations.app'; target = 'x86_64-pc-windows-msvc'; msvc = $env:MNO_MSVC_VERSION
+            installer = $filename; sha256 = $hash; signed = $false
+            executableVerification = $executableCheck
+            dataDirectory = '%APPDATA%\org.mynatureobservations.app'
+          } | ConvertTo-Json | Set-Content "$out/BUILD-INFO.json" -Encoding utf8
+      - name: Upload Windows RC1 acceptance artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mno-windows-x64-rc1-7ae3313
+          path: app/src-tauri/target/windows-rc1-artifact/*
+          if-no-files-found: error
+          retention-days: 3
