@@ -252,3 +252,35 @@ The standalone EXE download from GitHub Releases remains untested.
 **Recommendation:** Proceed to publication approval for the tested
 unsigned Windows preview once the exact artifact is retained and the
 release notes are ready. Keep the standalone download check explicit.
+
+## C11e publication preparation
+
+GitHub currently lists one published pre-release, the macOS
+`v0.1.0` at `1bf9bd150d3a187bd5002805b684d2ec989f96af`, with
+`My.Nature.Observations_0.1.0_aarch64.dmg`. Use a separate Windows
+pre-release titled **My Nature Observations 0.1.0 — Windows Preview**,
+with a proposed tag `v0.1.0-windows-preview` at the accepted source
+`7ae3313677e6c4b45b9742365bcf7567e5ceac67`. Separate tags keep GitHub's
+source archives aligned with each platform's binary and preserve the
+existing macOS release. No tag has been created.
+
+The accepted executable, `SHA256SUMS.txt` and `BUILD-INFO.json` were
+retained locally from Actions run `42515457927`, artifact
+`mno-windows-x64-rc1-7ae3313`. The executable hash matched the checksum
+manifest, build metadata and the C11d acceptance record. Keep those
+exact bytes. No rebuild is needed.
+
+- [ ] Obtain explicit approval for publication and the separate Windows
+  tag and pre-release.
+- [ ] Recheck the retained
+  `My-Nature-Observations-0.1.0-windows-x64-rc1-7ae3313-setup.exe`
+  against `FFA81CB8AF9A83E66DA5924A65BC739987AD33033885444FB94B4952A2CD6856`.
+- [ ] Use the existing workflow evidence for bundled installer license
+  and offline third-party notices. Upload the exact installer and
+  checksum manifest only to the approved Windows pre-release.
+- [ ] Use the [draft release notes](MNO_Windows_0.1.0_Preview_Release_Notes.md)
+  and link the [Windows installation instructions](../MNO_Windows_Installation.md).
+- [ ] Confirm the existing macOS `v0.1.0` release, tag and DMG remain intact.
+- [ ] After approved publication, download the standalone EXE through
+  a browser, match the accepted SHA-256 and record Windows security
+  behavior. The Actions ZIP acceptance does not cover this download path.
