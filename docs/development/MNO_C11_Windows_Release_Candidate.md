@@ -180,3 +180,75 @@ A browser download of an Actions ZIP and subsequent extraction can
 produce different security behavior from a standalone EXE downloaded
 from GitHub Releases. Verify the final public download path separately
 before treating its security behavior as established.
+
+## C11d Windows 0.1.0 Preview release review
+
+### C11c desktop acceptance — PASS
+
+[Actions run 42515457927](https://github.com/MyNatureObservations/my-nature-observations/actions/runs/42515457927)
+completed successfully. The tester downloaded the Actions ZIP through a
+browser without browser warnings, extracted it, and verified the installer
+against the workflow checksum. Windows SmartScreen displayed its blue
+protection warning. The tester explicitly chose **Run anyway**. Installation
+under the disposable standard-user `MNO-Test` account succeeded, MNO
+launched normally, the existing synthetic journal remained available,
+and Settings offered Backup, Export and Restore.
+
+| Candidate identity | Verified value |
+| --- | --- |
+| File | `My-Nature-Observations-0.1.0-windows-x64-rc1-7ae3313-setup.exe` |
+| Source | `7ae3313677e6c4b45b9742365bcf7567e5ceac67` |
+| Package | My Nature Observations `0.1.0`, ID `org.mynatureobservations.app`, unsigned Windows x64 current-user NSIS |
+| Workflow-built and browser-tested SHA-256 | `FFA81CB8AF9A83E66DA5924A65BC739987AD33033885444FB94B4952A2CD6856` |
+
+This is the Actions-built installer. The earlier local RC1 has a
+different checksum and remains separate evidence. The workflow verified
+the packaged executable, staged and packaged installer license, and
+extracted third-party notices. The browser test covered the Actions ZIP.
+The standalone EXE download from GitHub Releases remains untested.
+
+### Readiness decision
+
+- **Verified.** [C9](MNO_C9_Windows_Quality_Readiness_Review.md) records
+  default Windows Restore, restart admission, persistent edits and
+  rejection of a malformed backup without losing access to the journal.
+  [C10b](MNO_C10_Windows_Installation_Data_Preservation_Review.md#c10b-desktop-acceptance)
+  records byte preservation across same-version reinstall and
+  uninstall/reinstall with data deletion unchecked. Blocked-startup
+  Recovery has separate scoped desktop evidence in the
+  [C7 review](MNO_C7_Generation_Recovery_Review.md).
+- **Acceptable preview limitations.** Scope the preview to Windows 11 x64.
+  Open Import is unavailable. Setup may need internet access to obtain
+  WebView2 when missing. The unsigned installer can trigger SmartScreen
+  or be blocked by local policy. Disclose the observed warning and leave
+  Windows protections enabled. The desktop tests did not cover data
+  deletion, a distinct-version upgrade or crash and power-loss durability.
+  Withhold upgrade support claims until two approved versions are tested.
+- **Publication prerequisites.** Select and retain the exact accepted
+  executable and manifest before the Actions artifact expires. Confirm
+  the hash of the file selected for upload and obtain explicit approval.
+  No implementation blocker is identified for a scoped unsigned preview.
+  Verify the eventual standalone download separately. A policy block on
+  that path for the intended audience requires a distribution decision.
+
+### Publication checklist
+
+- [ ] Retain the browser-tested Actions executable and checksum manifest
+  locally. Match the SHA-256 above before selecting it for publication.
+  If the exact bytes are unavailable, treat any replacement as a new
+  candidate and verify it.
+- [ ] Prepare Windows preview release notes covering Windows 11 x64,
+  unsigned SmartScreen behavior, WebView2, Open Import unavailability
+  and the unverified distinct-version upgrade path. Include the exact
+  filename and full SHA-256, and link the
+  [Windows installation guide](../MNO_Windows_Installation.md).
+- [ ] Verify that the Windows publication plan leaves the existing macOS
+  v0.1.0 release, tag and assets untouched.
+- [ ] Obtain explicit user approval before any publication work.
+- [ ] At the approved publication step, verify the standalone browser
+  download hash and record its security behavior on Windows 11. Reuse
+  the existing functionality and preservation evidence.
+
+**Recommendation:** Proceed to publication approval for the tested
+unsigned Windows preview once the exact artifact is retained and the
+release notes are ready. Keep the standalone download check explicit.
