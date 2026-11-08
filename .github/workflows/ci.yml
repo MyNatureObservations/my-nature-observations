@@ -573,11 +573,34 @@ jobs:
           $packagedVersion = $packagedBinary[0].VersionInfo
           if ($packagedVersion.ProductName -ne $version.ProductName -or $packagedVersion.ProductVersion -ne $version.ProductVersion) { throw 'Packaged executable metadata differs' }
           $script = Get-Content "$release/nsis/x64/installer.nsi" -Raw
-          if ($script -notmatch '(?m)^!define BUNDLEID "org\.mynatureobservations\.app"\s*$' -or
-              $script -notmatch '(?m)^!define INSTALLMODE "currentUser"\s*$' -or
-              $script -notmatch '(?m)^!define LICENSE "[^"]*WINDOWS-INSTALLER-LICENSE\.txt"\s*$') {
-            throw 'Unexpected NSIS bundle identifier, install mode or license reference'
+          function Read-NsisDefine([string] $name) {
+            $pattern = '(?m)^!define ' + [regex]::Escape($name) + ' "([^"\r\n]*)"[ \t]*\r?$'
+            $definitions = [regex]::Matches($script, $pattern)
+            if ($definitions.Count -ne 1) { throw "Expected one NSIS definition for $name, found $($definitions.Count)" }
+            return $definitions[0].Groups[1].Value
           }
+          $bundleId = Read-NsisDefine 'BUNDLEID'
+          if ($bundleId -cne 'org.mynatureobservations.app') {
+            throw "NSIS BUNDLEID: expected org.mynatureobservations.app, got '$bundleId'"
+          }
+          $installMode = Read-NsisDefine 'INSTALLMODE'
+          if ($installMode -cne 'currentUser') {
+            throw "NSIS INSTALLMODE: expected currentUser, got '$installMode'"
+          }
+          # Tauri stages the installer-page license as a UTF-8 BOM copy.
+          $licenseReference = Read-NsisDefine 'LICENSE'
+          $stagedLicense = (Resolve-Path "$release/nsis/x64").Path + '\license_file'
+          if (![IO.Path]::IsPathFullyQualified($licenseReference) -or
+              [IO.Path]::GetFullPath($licenseReference) -ine $stagedLicense) {
+            throw "NSIS LICENSE: expected '$stagedLicense', got '$licenseReference'"
+          }
+          $originalLicense = (Resolve-Path 'src-tauri/notices/WINDOWS-INSTALLER-LICENSE.txt').Path
+          $expectedLicense = [byte[]](@(0xEF, 0xBB, 0xBF) + [IO.File]::ReadAllBytes($originalLicense))
+          if (!(Test-Path -LiteralPath $stagedLicense -PathType Leaf) -or
+              [Convert]::ToBase64String([IO.File]::ReadAllBytes($stagedLicense)) -cne [Convert]::ToBase64String($expectedLicense)) {
+            throw "NSIS LICENSE: '$stagedLicense' is missing or differs from the generated license plus UTF-8 BOM"
+          }
+          Write-Output "NSIS BUNDLEID=$bundleId INSTALLMODE=$installMode LICENSE=$licenseReference"
           $license = Join-Path $notices[0].DirectoryName 'WINDOWS-INSTALLER-LICENSE.txt'
           if (!(Test-Path -LiteralPath $license -PathType Leaf)) { throw 'Packaged installer license resource missing' }
           if ((Get-FileHash $license).Hash -ne (Get-FileHash 'src-tauri/notices/WINDOWS-INSTALLER-LICENSE.txt').Hash) {
