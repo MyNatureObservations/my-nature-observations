@@ -82,6 +82,7 @@ comparisons retain their source/model and license links. Manual observations
 are not attributed to Open-Meteo. Labels reuse the existing Swedish/English
 weather source translations.
 
-Data attribution does not settle API service-use limits or distribution terms;
-keep the outstanding provider clarification separate. See the
+On 2026-11-09, the project owner confirmed that the Open-Meteo service-use
+question was resolved and that no publication blocker remains for v0.1.
+The data attribution described above still applies. See the
 [provider's license guidance](https://open-meteo.com/en/licence).

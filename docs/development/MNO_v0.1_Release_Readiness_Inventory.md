@@ -32,9 +32,12 @@ nedan; daterade testresultat och historiska bedömningar bevaras.
   slutlig distributionsartefakt måste fortfarande identifieras och stämmas av.
 - OpenStreetMap är accepterat för v0.1: paketerad karta och attribution, även vid
   200% zoom, är manuellt verifierade. Faktiska HTTP-headers/cache har inte observerats;
-  denna verifieringslucka är accepterad. Open-Meteo-besked inväntas fortfarande.
-- **Kvar före publicering:** avsluta Open-Meteo-bedömningen, ge allmänheten åtkomst
-  till repository/release (repositoryt var privat vid senaste kontrollen), och
+  denna verifieringslucka är accepterad.
+- **Open-Meteo:** Projektägaren bekräftade 2026-11-09 att frågan om
+  användning av tjänsten är löst och att inget publiceringshinder kvarstår
+  för v0.1. Befintlig käll- och licenshänvisning gäller fortsatt.
+- **Kvar före publicering vid den ursprungliga avstämningen:** ge allmänheten åtkomst
+  till repository/release (repositoryt var privat vid den kontrollen), och
   bekräfta slutlig DMG:s källrevision, signatur, notiser, SHA-256 samt nedladdnings-
   och installationsacceptans. Återanvänd dokumenterad acceptans; upprepa inte tester
   utan konkret anledning. Ingen tagg, publicering eller synlighetsändring görs här.
