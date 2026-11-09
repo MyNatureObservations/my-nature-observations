@@ -58,6 +58,20 @@ pub fn run() {
     environment::validate_identity(&context.config().identifier, environment::DEVELOPMENT_BUILD)
         .expect("unsafe application environment");
 
+    #[cfg(target_os = "linux")]
+    let context = {
+        let mut context = context;
+        let config = context.config_mut();
+        // Tauri creates WebKit storage before setup. Its default on Linux is
+        // the journal root, which must remain absent until first initialization.
+        // A configured path resolves below local data / window label.
+        let webview_data = std::path::Path::new(&config.identifier).join("webview");
+        for window in &mut config.app.windows {
+            window.data_directory = Some(webview_data.clone());
+        }
+        context
+    };
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             use tauri::Manager;
