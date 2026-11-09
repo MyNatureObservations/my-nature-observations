@@ -59,17 +59,15 @@ pub fn run() {
         .expect("unsafe application environment");
 
     #[cfg(target_os = "linux")]
-    let context = {
+    let (context, linux_windows) = {
         let mut context = context;
-        let config = context.config_mut();
-        // Tauri creates WebKit storage before setup. Its default on Linux is
-        // the journal root, which must remain absent until first initialization.
-        // A configured path resolves below local data / window label.
-        let webview_data = std::path::Path::new(&config.identifier).join("webview");
-        for window in &mut config.app.windows {
-            window.data_directory = Some(webview_data.clone());
+        let windows = &mut context.config_mut().app.windows;
+        let mut linux_windows = Vec::new();
+        for window in windows.iter_mut().filter(|window| window.create) {
+            linux_windows.push(window.clone());
+            window.create = false;
         }
-        context
+        (context, linux_windows)
     };
 
     tauri::Builder::default()
@@ -90,11 +88,26 @@ pub fn run() {
         .manage(import_app::ImportState::default())
         .manage(database_state::DatabaseState::default())
         .manage(weather::historical::saving::PreviewState::default())
-        .setup(|app| {
+        .setup(move |app| {
             #[cfg(target_os = "macos")]
             macos_menu::install_guarded_quit(app)?;
 
             use tauri::Manager;
+            #[cfg(target_os = "linux")]
+            for window in &linux_windows {
+                // The runtime does not carry WindowConfig::data_directory into
+                // WebviewAttributes. Set it directly before the WebView is built.
+                let webview_data = app
+                    .path()
+                    .local_data_dir()?
+                    .join(&window.label)
+                    .join(&app.config().identifier)
+                    .join("webview");
+                tauri::WebviewWindowBuilder::from_config(app.handle(), window)?
+                    .data_directory(webview_data)
+                    .build()?;
+            }
+
             let directory = match database::resolve_data_directory(app.handle()) {
                 Ok(directory) => directory,
                 Err(error) => {
