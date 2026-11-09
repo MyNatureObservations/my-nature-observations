@@ -233,36 +233,34 @@ The standalone EXE download from GitHub Releases remains untested.
 
 ### Publication checklist
 
-- [ ] Retain the browser-tested Actions executable and checksum manifest
+- [x] Retain the browser-tested Actions executable and checksum manifest
   locally. Match the SHA-256 above before selecting it for publication.
   If the exact bytes are unavailable, treat any replacement as a new
   candidate and verify it.
-- [ ] Prepare Windows preview release notes covering Windows 11 x64,
+- [x] Prepare Windows preview release notes covering Windows 11 x64,
   unsigned SmartScreen behavior, WebView2, Open Import unavailability
   and the unverified distinct-version upgrade path. Include the exact
   filename and full SHA-256, and link the
   [Windows installation guide](../MNO_Windows_Installation.md).
-- [ ] Verify that the Windows publication plan leaves the existing macOS
+- [x] Verify that the Windows publication plan leaves the existing macOS
   v0.1.0 release, tag and assets untouched.
-- [ ] Obtain explicit user approval before any publication work.
-- [ ] At the approved publication step, verify the standalone browser
+- [x] Obtain explicit user approval before any publication work.
+- [x] At the approved publication step, verify the standalone browser
   download hash and record its security behavior on Windows 11. Reuse
   the existing functionality and preservation evidence.
 
-**Recommendation:** Proceed to publication approval for the tested
-unsigned Windows preview once the exact artifact is retained and the
-release notes are ready. Keep the standalone download check explicit.
+The publication and standalone download results are recorded in C11h below.
 
 ## C11e publication preparation
 
-GitHub currently lists one published pre-release, the macOS
+At C11e preparation, GitHub listed one published pre-release, the macOS
 `v0.1.0` at `1bf9bd150d3a187bd5002805b684d2ec989f96af`, with
 `My.Nature.Observations_0.1.0_aarch64.dmg`. Use a separate Windows
 pre-release titled **My Nature Observations 0.1.0 — Windows Preview**,
 with a proposed tag `v0.1.0-windows-preview` at the accepted source
 `7ae3313677e6c4b45b9742365bcf7567e5ceac67`. Separate tags keep GitHub's
 source archives aligned with each platform's binary and preserve the
-existing macOS release. No tag has been created.
+existing macOS release. The separate tag was later created in C11f.
 
 The accepted executable, `SHA256SUMS.txt` and `BUILD-INFO.json` were
 retained locally from Actions run `42515457927`, artifact
@@ -270,17 +268,68 @@ retained locally from Actions run `42515457927`, artifact
 manifest, build metadata and the C11d acceptance record. Keep those
 exact bytes. No rebuild is needed.
 
-- [ ] Obtain explicit approval for publication and the separate Windows
+- [x] Obtain explicit approval for publication and the separate Windows
   tag and pre-release.
-- [ ] Recheck the retained
+- [x] Recheck the retained
   `My-Nature-Observations-0.1.0-windows-x64-rc1-7ae3313-setup.exe`
   against `FFA81CB8AF9A83E66DA5924A65BC739987AD33033885444FB94B4952A2CD6856`.
-- [ ] Use the existing workflow evidence for bundled installer license
+- [x] Use the existing workflow evidence for bundled installer license
   and offline third-party notices. Upload the exact installer and
   checksum manifest only to the approved Windows pre-release.
-- [ ] Use the [draft release notes](MNO_Windows_0.1.0_Preview_Release_Notes.md)
+- [x] Use the [draft release notes](MNO_Windows_0.1.0_Preview_Release_Notes.md)
   and link the [Windows installation instructions](../MNO_Windows_Installation.md).
-- [ ] Confirm the existing macOS `v0.1.0` release, tag and DMG remain intact.
-- [ ] After approved publication, download the standalone EXE through
+- [x] Confirm the existing macOS `v0.1.0` release, tag and DMG remain intact.
+- [x] After approved publication, download the standalone EXE through
   a browser, match the accepted SHA-256 and record Windows security
   behavior. The Actions ZIP acceptance does not cover this download path.
+
+## C11h publication closeout
+
+**COMPLETE — C11g passed on the final public distribution path.**
+[Windows 0.1.0 Preview](https://github.com/MyNatureObservations/my-nature-observations/releases/tag/v0.1.0-windows-preview)
+is a separate public GitHub pre-release. Tag `v0.1.0-windows-preview`
+points to `7ae3313677e6c4b45b9742365bcf7567e5ceac67`. The published
+macOS `v0.1.0` release remains unchanged.
+
+On Windows 11 the tester downloaded the standalone installer directly
+from the release using Microsoft Edge. Edge displayed a SmartScreen
+reputation warning for the uncommon, unsigned executable. The tester
+chose **Keep anyway**, and the downloaded
+`My-Nature-Observations-0.1.0-windows-x64-rc1-7ae3313-setup.exe` matched
+the accepted SHA-256:
+
+`FFA81CB8AF9A83E66DA5924A65BC739987AD33033885444FB94B4952A2CD6856`
+
+Setup launched without additional warnings and installed successfully
+under the disposable standard-user `MNO-Test` account. MNO launched
+normally, the existing synthetic journal remained available, and
+Settings offered Backup, Export and Restore.
+
+The earlier Actions ZIP test showed no browser warning, but Windows
+SmartScreen warned at launch and the tester chose **Run anyway**.
+The standalone release test warned in Edge at download and showed no
+additional warning at launch. These observations apply to the tested
+environment. Reputation and local policy can produce different results.
+
+The preview remains scoped to Windows 11 x64. The installer is unsigned
+and local policy may block it. Open Import remains unavailable. Setup
+may need internet access if WebView2 is missing. Distinct-version
+upgrades, uninstall with app-data deletion selected, and exhaustive
+crash and physical power-loss behavior remain outside acceptance.
+See the [current Windows installation guide](../MNO_Windows_Installation.md).
+
+## Linux handoff
+
+Next phase: **desktop feasibility and packaging assessment**. Start
+by mapping the production platform gates and the Linux application-data
+path, then compare that inventory with Ubuntu CI coverage. Identify
+which actions are usable and which are restricted across Backup,
+Export, Restore and Recovery, including path handling and isolation
+of synthetic test journals.
+
+Review WebKitGTK and other Tauri system dependencies, compare AppImage
+and Debian packaging, and identify the minimum native desktop and CI
+acceptance checks. Review target-specific license and third-party
+notice packaging, distribution limits and user-facing instructions.
+Keep the distribution and package format open until the assessment
+is complete.

@@ -1,10 +1,9 @@
 # Install My Nature Observations on Windows
 
-The Windows preview is intended for **Windows 11 x64**. These
-instructions apply once a Windows installer is available.
+The Windows preview supports **Windows 11 x64**.
 
 1. Download the Windows x64 `-setup.exe` from the official
-   [GitHub Releases page](https://github.com/MyNatureObservations/my-nature-observations/releases).
+   [Windows Preview release](https://github.com/MyNatureObservations/my-nature-observations/releases/tag/v0.1.0-windows-preview).
    Use the SHA-256 published for that exact filename. In PowerShell,
    run the following with the path to your downloaded file:
 
@@ -17,8 +16,9 @@ instructions apply once a Windows installer is available.
    for the current user. MNO uses Microsoft Edge WebView2. If the
    Evergreen runtime is missing, Setup needs internet access to
    download and install it.
-3. An unsigned installer can trigger an unknown-publisher or SmartScreen
-   warning. Confirm the download source and checksum. If Windows or
+3. The installer is unsigned. Microsoft Edge may warn during download,
+   and Windows SmartScreen may warn when you open Setup. Confirm the
+   official release URL and verify the checksum before running Setup. If Windows or
    your organization's policy blocks installation, stop and report
    the message. Keep your Windows security settings in place.
 4. Open **My Nature Observations** from the Start menu.
@@ -34,8 +34,9 @@ During uninstall, **leave the optional app-data deletion box unchecked**
 to keep your journal and retained generations. Selecting it can delete
 the journal and any backups stored in the app-data folder.
 
-**Open Import** of a portable export is unavailable on Windows. Restore
-from an MNO backup is available in Settings.
+**Backup**, **Export** and **Restore** are available in Settings.
+**Open Import** of a portable export is unavailable on Windows.
+Upgrades between different Windows versions of MNO have yet to be verified.
 
 For reproducible issues, use [GitHub Issues](https://github.com/MyNatureObservations/my-nature-observations/issues).
 For questions, use [GitHub Discussions](https://github.com/MyNatureObservations/my-nature-observations/discussions).
