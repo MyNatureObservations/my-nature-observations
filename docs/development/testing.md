@@ -175,6 +175,20 @@ Reinstallation from that public `.deb` succeeded. After relaunch, the existing
 synthetic test entry was still available in the isolated journal under the
 test user's home directory. This was a same-version reinstall.
 
+## Fedora KDE 44 RPM smoke test
+
+The local My Nature Observations RPM reported version `0.1.0`, release
+`1`, and architecture `x86_64`. Its metadata declared WebKitGTK 4.1
+and GTK 3 runtime dependencies. The extracted bundle passed Linux x64
+notices validation. The Fedora checkout was unavailable when recording
+the result, so the build commit remains unverified.
+
+On the Fedora KDE 44 machine that built the RPM, the installed app passed
+a clean first launch and opened the offline third-party notices from
+About. A synthetic journal entry persisted after restart. Backup and
+Export both succeeded through the desktop file pickers. Dependency
+installation on a clean Fedora system remains unverified.
+
 ## C1: isolated restore candidate construction
 
 The existing `backup::restore::prepare_candidate` / `prepare_in` boundary validates
