@@ -91,6 +91,109 @@ fn every_reserved_artifact_blocks_before_initializer_and_preserves_existing_data
         assert!(state.maintenance().is_err());
     }
 }
+#[cfg(target_os = "linux")]
+#[test]
+fn windows_managed_names_block_before_the_initializer() {
+    for name in [
+        "generations",
+        "generation-selection.json",
+        ".generation-selection-staged",
+        ".generation-selection-in-progress",
+    ] {
+        for kind in ["directory", "file", "dangling symlink"] {
+            let root = TempDir::new().unwrap();
+            let database = database::expected_database_path(root.path());
+            fs::write(&database, b"untouched").unwrap();
+            let artifact = root.path().join(name);
+            match kind {
+                "directory" => fs::create_dir(&artifact).unwrap(),
+                "file" => fs::write(&artifact, b"malformed").unwrap(),
+                _ => std::os::unix::fs::symlink("missing-target", &artifact).unwrap(),
+            }
+            let result = initialize_with(
+                root.path(),
+                |p| fs::symlink_metadata(p),
+                |_, _| panic!("initializer called for {kind} at {name}"),
+            );
+            assert!(
+                matches!(result, Err(ref e) if e == "database_recovery_artifact_present"),
+                "{name}: {kind}"
+            );
+            assert!(!root.path().join(established::NAME).exists());
+            assert_eq!(fs::read(database).unwrap(), b"untouched");
+            match kind {
+                "directory" => assert_eq!(fs::read_dir(&artifact).unwrap().count(), 0),
+                "file" => assert_eq!(fs::read(&artifact).unwrap(), b"malformed"),
+                _ => assert_eq!(
+                    fs::read_link(&artifact).unwrap(),
+                    Path::new("missing-target")
+                ),
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn copied_windows_admitted_generation_blocks_without_changing_either_journal() {
+    use generation_selection::{Phase, Record};
+    use sha2::{Digest, Sha256};
+
+    fn insert_entry(path: &Path, title: &str) {
+        let db = database::open_existing(path).unwrap();
+        db.execute(
+            "INSERT INTO journal_entries VALUES ('entry','2026-10-25',?1,?2,1,'created','updated')",
+            rusqlite::params![
+                title,
+                r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Synthetic entry"}]}]}"#
+            ],
+        )
+        .unwrap();
+        db.close().unwrap();
+    }
+
+    let parent = TempDir::new().unwrap();
+    let root = parent.path().join("journal");
+    let state = DatabaseState::default();
+    let legacy = state.initialize_startup(&root).unwrap();
+    insert_entry(&legacy, "Retained root");
+    drop(state);
+
+    let legacy_bytes = fs::read(&legacy).unwrap();
+    let control = DatabaseState::default();
+    assert_eq!(control.initialize_startup(&root).unwrap(), legacy);
+    assert!(control.operation(None).is_ok());
+    assert_eq!(fs::read(&legacy).unwrap(), legacy_bytes);
+    drop(control);
+
+    let id = uuid::Uuid::new_v4();
+    let generation = root.join("generations").join(id.to_string());
+    fs::create_dir_all(&generation).unwrap();
+    let selected = generation.join("journal.sqlite");
+    database::create_current_database(&selected).unwrap();
+    insert_entry(&selected, "Selected generation");
+    database::initialize_database(&selected).unwrap();
+    let selected_bytes = fs::read(&selected).unwrap();
+    let record = Record::new(
+        id,
+        Phase::Admitted,
+        format!("{:x}", Sha256::digest(&selected_bytes)),
+    )
+    .encode()
+    .unwrap();
+    let head = root.join("generation-selection.json");
+    fs::write(&head, &record).unwrap();
+
+    let copied = DatabaseState::default();
+    let result = copied.initialize_startup(&root);
+    assert_eq!(fs::read(&legacy).unwrap(), legacy_bytes);
+    assert_eq!(fs::read(&selected).unwrap(), selected_bytes);
+    assert_eq!(fs::read(&head).unwrap(), record);
+    assert_eq!(result.unwrap_err(), "database_recovery_artifact_present");
+    assert!(copied.operation(None).is_err());
+    assert!(copied.maintenance().is_err());
+}
+
 #[test]
 fn filesystem_permission_errors_do_not_masquerade_as_absence() {
     let dir = TempDir::new().unwrap();

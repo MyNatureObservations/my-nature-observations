@@ -375,7 +375,21 @@ fn checkpoint(
     let mut present = false;
     // Detect artifacts by existence/type only. Do not parse or classify here.
     // I/O failures are never absence, including when the other artifact exists.
-    for name in [artifacts::RECOVERY, artifacts::PENDING, artifacts::RECEIPT] {
+    for name in [
+        artifacts::RECOVERY,
+        artifacts::PENDING,
+        artifacts::RECEIPT,
+        // Linux cannot resolve Windows selection authority. The root database
+        // may be a retained generation, so any managed evidence blocks opening.
+        #[cfg(target_os = "linux")]
+        "generations",
+        #[cfg(target_os = "linux")]
+        "generation-selection.json",
+        #[cfg(target_os = "linux")]
+        ".generation-selection-staged",
+        #[cfg(target_os = "linux")]
+        ".generation-selection-in-progress",
+    ] {
         match metadata(&root.join(name)) {
             Err(e) if e.kind() == io::ErrorKind::NotFound => (),
             Err(e) => return Err(failure(e)),
