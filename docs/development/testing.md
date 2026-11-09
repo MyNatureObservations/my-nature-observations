@@ -165,6 +165,16 @@ The package result covers first launch, persistence, WebKit separation,
 Backup and Export on this Ubuntu VM. Other distributions, architectures
 and desktop sessions are outside this result.
 
+### Ubuntu 0.1.0 Preview public-download test
+
+The amd64 `.deb` was downloaded directly from the
+[public Ubuntu Preview pre-release](https://github.com/MyNatureObservations/my-nature-observations/releases/tag/v0.1.0-ubuntu-preview).
+The downloaded package matched the published SHA-256 manifest
+(`eef7637c6f3fdb4a6a2deb2012c568e0f83a683c07a07e1ebbdc2f4baaf8b3e7`).
+Reinstallation from that public `.deb` succeeded. After relaunch, the existing
+synthetic test entry was still available in the isolated journal under the
+test user's home directory. This was a same-version reinstall.
+
 ## C1: isolated restore candidate construction
 
 The existing `backup::restore::prepare_candidate` / `prepare_in` boundary validates
