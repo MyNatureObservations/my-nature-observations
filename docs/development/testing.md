@@ -180,14 +180,20 @@ test user's home directory. This was a same-version reinstall.
 The local My Nature Observations RPM reported version `0.1.0`, release
 `1`, and architecture `x86_64`. Its metadata declared WebKitGTK 4.1
 and GTK 3 runtime dependencies. The extracted bundle passed Linux x64
-notices validation. The Fedora checkout was unavailable when recording
-the result, so the build commit remains unverified.
+notices validation. The reported build commit is
+`f84935e35fd557f7f5de70bf4b68cb1afb169b30`. It was not independently
+verified from the Fedora checkout.
 
 On the Fedora KDE 44 machine that built the RPM, the installed app passed
 a clean first launch and opened the offline third-party notices from
 About. A synthetic journal entry persisted after restart. Backup and
-Export both succeeded through the desktop file pickers. Dependency
-installation on a clean Fedora system remains unverified.
+Export both succeeded through the desktop file pickers.
+
+The same RPM also installed and launched successfully on a separate
+Fedora KDE 44 x86_64 VM restored from a snapshot taken before MNO and its
+build dependencies were installed. This verifies installation and first
+launch on that baseline. The journal restart, Backup and Export checks
+were performed on the build machine.
 
 ## C1: isolated restore candidate construction
 
