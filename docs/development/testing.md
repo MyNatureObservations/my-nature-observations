@@ -145,6 +145,25 @@ workflow with `workflow_dispatch` targeting that branch. A branch push alone
 retains the current main-only push trigger. Do not start a second run or poll
 for completion when handing the first run over for review.
 
+## Ubuntu desktop smoke tests
+
+Both manual tests used Ubuntu 26.04.1 LTS on x86_64 with a Wayland session.
+
+- **L2 DEV smoke test** (`a6a6664153047cc948f71d4c289513d02008bb35`).
+  The app launched with isolated DEV data. A synthetic journal entry was saved
+  and reopened after restart. Backup and Export were exercised in this test.
+- **L3.2 installed package smoke test** (MNO 0.1.0 amd64 `.deb`, build commit
+  `06a8b2058a86ad84192e70f53c2327b5b561f06d`). Inspection of the local package
+  confirmed the amd64 package and the bundled MNO MIT license and third-party
+  notices. The extracted notices passed Linux-target resource validation.
+  The installed app completed a clean first launch with isolated production
+  data. A synthetic journal entry was saved and remained available after
+  restart. WebKit used a separate directory outside the journal directory.
+
+The package result covers first launch, persistence and WebKit separation on
+this Ubuntu VM. Backup and Export evidence comes from the DEV test. Other
+distributions, architectures and desktop sessions are outside this result.
+
 ## C1: isolated restore candidate construction
 
 The existing `backup::restore::prepare_candidate` / `prepare_in` boundary validates
