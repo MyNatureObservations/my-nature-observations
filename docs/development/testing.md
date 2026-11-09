@@ -195,6 +195,16 @@ build dependencies were installed. This verifies installation and first
 launch on that baseline. The journal restart, Backup and Export checks
 were performed on the build machine.
 
+### Fedora 0.1.0 Preview public-download test
+
+On the separate Fedora KDE 44 x86_64 VM, the RPM was downloaded directly
+from the [public Fedora Preview pre-release](https://github.com/MyNatureObservations/my-nature-observations/releases/tag/v0.1.0-fedora-preview).
+The downloaded RPM matched the published SHA-256 manifest
+(`5a34415a0f9588b8dc67a34c846b461bdace7cda7b020d5ad0b772b9054df3cb`).
+The same-version reinstall via DNF succeeded. After launching MNO again
+from the KDE application menu, the existing synthetic test entry was
+still available.
+
 ## C1: isolated restore candidate construction
 
 The existing `backup::restore::prepare_candidate` / `prepare_in` boundary validates
