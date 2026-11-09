@@ -5,10 +5,11 @@ import { resolve, relative } from 'node:path';
 export function assertTarget(platform, arch, target) {
   if (platform === 'darwin' && arch === 'arm64' && target === 'aarch64-apple-darwin') return 'native.json';
   if (platform === 'win32' && arch === 'x64' && target === 'x86_64-pc-windows-msvc') return 'native.windows.json';
-  throw Error('Notices require a reviewed matching macOS arm64 or Windows x86_64 MSVC host/target.');
+  if (platform === 'linux' && arch === 'x64' && target === 'x86_64-unknown-linux-gnu') return 'native.json';
+  throw Error('Notices require a reviewed matching macOS arm64, Windows x86_64 MSVC or Linux x86_64 GNU host/target.');
 }
 export function validateNative(native, target) {
-  if (native.target !== target || !native.rustVersion || !native.rustCommit || !native.sourceLock || !native.components?.length) throw Error('Missing or mismatched native dependency information');
+  if (!(native.targets ?? [native.target]).includes(target) || !native.rustVersion || !native.rustCommit || !native.sourceLock || !native.components?.length) throw Error('Missing or mismatched native dependency information');
   if (target === 'x86_64-pc-windows-msvc') {
     for (const name of ['Microsoft WebView2 Loader', 'Microsoft Visual C++ runtime', 'NSIS installer stub and standard plugins', 'Tauri NSIS helper']) {
       if (!native.components.some(c => c.name === name && c.notices?.length)) throw Error(`Missing reviewed Windows dependency: ${name}`);

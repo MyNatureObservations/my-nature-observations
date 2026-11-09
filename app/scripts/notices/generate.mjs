@@ -8,7 +8,8 @@ const app = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const rust = resolve(app, 'src-tauri'), registry = resolve(app, 'licensing'), out = resolve(rust, 'notices');
 const json = path => JSON.parse(readFileSync(path));
 const run = (program, args, cwd = rust) => execFileSync(program, args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
-const target = process.env.TAURI_ENV_TARGET_TRIPLE || process.env.CARGO_BUILD_TARGET || (process.platform === 'win32' ? 'x86_64-pc-windows-msvc' : 'aarch64-apple-darwin');
+const defaultTargets = { darwin: 'aarch64-apple-darwin', win32: 'x86_64-pc-windows-msvc', linux: 'x86_64-unknown-linux-gnu' };
+const target = process.env.TAURI_ENV_TARGET_TRIPLE || process.env.CARGO_BUILD_TARGET || defaultTargets[process.platform];
 const native = json(resolve(registry, assertTarget(process.platform, process.arch, target)));
 validateNative(native, target);
 if (native.tauriCliVersion && json(resolve(app, 'node_modules/@tauri-apps/cli/package.json')).version !== native.tauriCliVersion) throw Error('Review Windows native installer tooling for this Tauri CLI');
@@ -16,8 +17,8 @@ if (run('cargo', ['about', '--version']).trim() !== 'cargo-about 0.9.3') throw E
 const compiler = run('rustc', ['-vV']).replace(/\r\n/g, '\n');
 if (!compiler.includes(`release: ${native.rustVersion}\n`) || !compiler.includes(`commit-hash: ${native.rustCommit}\n`)) throw Error('Rust runtime evidence must be reviewed for this compiler');
 evidence(registry, native.sourceLock);
-run('cargo', ['fetch', '--locked', '--target', native.target]);
-const report = JSON.parse(run('cargo', ['about', 'generate', '--manifest-path', 'Cargo.toml', '--config', '../licensing/about.toml', '--locked', '--target', native.target, '--features', 'tauri/custom-protocol', '--format', 'json', '--fail']));
+run('cargo', ['fetch', '--locked', '--target', target]);
+const report = JSON.parse(run('cargo', ['about', 'generate', '--manifest-path', 'Cargo.toml', '--config', '../licensing/about.toml', '--locked', '--target', target, '--features', 'tauri/custom-protocol', '--format', 'json', '--fail']));
 const lock = readFileSync(resolve(rust, 'Cargo.lock'), 'utf8');
 const checksums = new Map(lock.split('[[package]]').slice(1).map(block => {
   const field = key => block.match(new RegExp(`^${key} = "([^"]+)"`, 'm'))?.[1];
@@ -48,10 +49,11 @@ for (const { package: pkg, license: expression } of report.crates) {
   }
   const blocks = report.licenses.filter(l => l.used_by.some(u => u.crate.name === pkg.name && u.crate.version === pkg.version));
   let selected = blocks.map(l => l.id), texts = blocks.map(l => l.text), review;
-  if (texts.some(text => /<year>|<copyright/i.test(text))) {
+  const hasPlaceholder = texts.some(text => /<year>|<copyright/i.test(text));
+  if (hasPlaceholder || !satisfies(expression, selected)) {
     const vcs = json(resolve(directory, '.cargo_vcs_info.json'));
     review = reviewedException(exceptions.find(e => e.name === pkg.name && e.version === pkg.version), pkg, checksums.get(key), vcs.git.sha1);
-    selected = selected.filter(id => id !== 'MIT' && id !== 'BSD-3-Clause');
+    if (hasPlaceholder) selected = selected.filter(id => id !== 'MIT' && id !== 'BSD-3-Clause');
     selected.push(review.selected);
     texts = blocks.filter(l => !/<year>|<copyright/i.test(l.text)).map(l => l.text);
     texts.push(...review.notices.map(item => evidence(registry, item)));
@@ -93,19 +95,25 @@ components.sort((a,b) => `${a.ecosystem}/${a.name}/${a.version}`.localeCompare(`
 sources.sort((a,b) => a.name.localeCompare(b.name));
 const texts = new Map();
 for (const c of components) for (const text of c.texts) texts.set(digest(text), text);
+const scope = {
+  'aarch64-apple-darwin': 'This offline inventory includes macOS arm64 target dependencies and conservative build/runtime notices. System frameworks are provided by macOS and are not bundled here.',
+  'x86_64-pc-windows-msvc': 'This offline inventory includes Windows x86_64 MSVC target dependencies, native loader/runtime and installer notices. Windows and the separately installed Evergreen WebView2 Runtime retain their own terms. Microsoft runtime code is not relicensed under MNO’s MIT license.',
+  'x86_64-unknown-linux-gnu': 'This offline inventory includes Linux x86_64 GNU target dependencies and conservative build/runtime notices. System libraries such as WebKitGTK and GTK are supplied by the distribution.',
+};
 const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>MNO — Third-party notices</title>
 <style>body{max-width:72rem;margin:3rem auto;padding:0 1.5rem;font:16px/1.5 system-ui;color:#20251f;background:#faf9f4}pre{white-space:pre-wrap;overflow-wrap:anywhere}section{margin:2rem 0}a{color:#34573b}</style>
-<h1>My Nature Observations — Third-party notices</h1><p>MNO is MIT-licensed. Third-party components retain their own licenses. ${target === 'aarch64-apple-darwin' ? 'This offline inventory includes macOS arm64 target dependencies and conservative build/runtime notices. System frameworks are provided by macOS and are not bundled here.' : 'This offline inventory includes Windows x86_64 MSVC target dependencies, native loader/runtime and installer notices. Windows and the separately installed Evergreen WebView2 Runtime retain their own terms. Microsoft runtime code is not relicensed under MNO’s MIT license.'}</p>
+<h1>My Nature Observations — Third-party notices</h1><p>MNO is MIT-licensed. Third-party components retain their own licenses. ${scope[target]}</p>
 <h2>MPL source availability</h2><p>The corresponding, unmodified source packages for the MPL-2.0 components are supplied below under their original licenses. Open .crate files with a tar/gzip archive tool. SHA-256 digests are in source-checksums.json. MNO does not modify these components.</p>
 <ul>${sources.map(s => `<li><a href="${s.file}">${h(s.name)} ${h(s.version)} source</a></li>`).join('')}</ul>
 <h2>Components</h2>${components.map(c => `<section><h3>${h(c.name)} ${h(c.version)}</h3><p>${h(c.ecosystem)} · Declared: ${h(c.expression)} · Included license terms: ${h(c.selected.join(', '))}</p>${c.review ? `<p>Reviewed upstream evidence: ${h(c.review.commit)}. ${h(c.review.reason)}</p>` : ''}<ul>${c.texts.map(t => `<li><a href="#text-${digest(t)}">License / notice ${digest(t).slice(0,12)}</a></li>`).join('')}</ul></section>`).join('')}
 <h2>License texts and notices</h2>${[...texts].sort(([a],[b]) => a.localeCompare(b)).map(([id,text]) => `<section id="text-${id}"><h3>${id.slice(0,12)}</h3><pre>${h(text)}</pre></section>`).join('')}</html>\n`;
 writeFileSync(resolve(out, 'THIRD-PARTY-NOTICES.html'), html);
-writeFileSync(resolve(out, 'inventory.json'), JSON.stringify({ format: 1, target: native.target, rustVersion: native.rustVersion, rustCommit: native.rustCommit,
+writeFileSync(resolve(out, 'inventory.json'), JSON.stringify({ format: 1, target, rustVersion: native.rustVersion, rustCommit: native.rustCommit,
   inputs: { cargoLock: digest(lock), npmLock: digest(readFileSync(resolve(app, 'package-lock.json'))), client: digest(readFileSync(resolve(app, '.svelte-kit/notices-client.json'))) }, components }, null, 2) + '\n');
 writeFileSync(resolve(out, 'source-checksums.json'), JSON.stringify(sources, null, 2) + '\n');
 if (native.installerTerms) {
   writeFileSync(resolve(out, 'WINDOWS-INSTALLER-LICENSE.txt'), readFileSync(resolve(app, '../LICENSE'), 'utf8') + '\n\nMicrosoft Visual C++ runtime components only — separate terms follow. MNO source code remains MIT-licensed.\n\n' + evidence(registry, native.installerTerms));
 }
+if (target === 'x86_64-unknown-linux-gnu') copyFileSync(resolve(app, '../LICENSE'), resolve(out, 'LICENSE'));
 validateBundle(out);
 console.log(`Validated ${components.length} components, ${texts.size} distinct notices, ${sources.length} MPL sources; ${Buffer.byteLength(html)} HTML bytes.`);

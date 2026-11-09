@@ -92,6 +92,38 @@
       "sourceChecksum": "1e0e367e4e7da84520dedcac1901e4da967309406d1e51017ae1abfb97adbd38"
     },
     {
+      "name": "dlopen2",
+      "version": "0.8.2",
+      "commit": "cc80e4a0a90d499b677fdf7743699b4b3a43a989",
+      "selected": "MIT",
+      "noCopyrightSupplied": false,
+      "reason": "The crate archive omits the workspace MIT license. Use the license from the exact upstream source commit instead of the synthesized placeholder.",
+      "notices": [
+        {
+          "file": "evidence/39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2.txt",
+          "sha256": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2",
+          "origin": "https://raw.githubusercontent.com/OpenByteDev/dlopen2/cc80e4a0a90d499b677fdf7743699b4b3a43a989/LICENSE"
+        }
+      ],
+      "sourceChecksum": "5e2c5bd4158e66d1e215c49b837e11d62f3267b30c92f1d171c4d3105e3dc4d4"
+    },
+    {
+      "name": "dlopen2_derive",
+      "version": "0.4.3",
+      "commit": "cc80e4a0a90d499b677fdf7743699b4b3a43a989",
+      "selected": "MIT",
+      "noCopyrightSupplied": false,
+      "reason": "The crate archive omits the workspace MIT license. Use the license from the exact upstream source commit instead of the synthesized placeholder.",
+      "notices": [
+        {
+          "file": "evidence/39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2.txt",
+          "sha256": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2",
+          "origin": "https://raw.githubusercontent.com/OpenByteDev/dlopen2/cc80e4a0a90d499b677fdf7743699b4b3a43a989/LICENSE"
+        }
+      ],
+      "sourceChecksum": "0fbbb781877580993a8707ec48672673ec7b81eeba04cfd2310bd28c08e47c8f"
+    },
+    {
       "name": "dpi",
       "version": "0.1.2",
       "commit": "587ade844dfb0eada3696ba1cb263c66eea80581",
@@ -274,6 +306,22 @@
         }
       ],
       "sourceChecksum": "08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8"
+    },
+    {
+      "name": "target-lexicon",
+      "version": "0.12.16",
+      "commit": "7c80d459a9fdd121e9f23feb680c3db13c1baa39",
+      "selected": "Apache-2.0 WITH LLVM-exception",
+      "noCopyrightSupplied": true,
+      "reason": "cargo-about detects only Apache-2.0; the locked crate LICENSE includes the LLVM exception and the manifest declares the full SPDX expression.",
+      "notices": [
+        {
+          "file": "evidence/268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5.txt",
+          "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+          "origin": "https://static.crates.io/crates/target-lexicon/target-lexicon-0.12.16.crate#LICENSE"
+        }
+      ],
+      "sourceChecksum": "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
     },
     {
       "name": "tauri-plugin-dialog",

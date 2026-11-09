@@ -1,7 +1,8 @@
 import { clientInventory } from '../scripts/notices/client-inventory.mjs';
 import { test } from 'node:test';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, rmSync, copyFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -111,4 +112,67 @@ test('client inventory handles Windows separators and retains Paraglide runtime'
   const packages = JSON.parse(readFileSync(resolve(root,'.svelte-kit/notices-client.json')));
   assert.deepEqual(packages.map(p => p.name), ['@inlang/paraglide-js','synthetic']);
   assert.equal(packages.find(p=>p.name==='synthetic').path, 'node_modules/synthetic');
+}));
+
+test('Linux x64 uses the shared Rust evidence and rejects unreviewed targets', () => {
+  const target = 'x86_64-unknown-linux-gnu';
+  const registry = new URL('../licensing/', import.meta.url);
+  const native = JSON.parse(readFileSync(new URL(assertTarget('linux', 'x64', target), registry)));
+  validateNative(native, target);
+  evidence(fileURLToPath(registry), native.sourceLock);
+  for (const component of native.components) {
+    for (const item of component.notices) evidence(fileURLToPath(registry), item);
+  }
+  for (const args of [['linux', 'arm64', target], ['darwin', 'arm64', target], ['linux', 'x64', 'x86_64-unknown-linux-musl']]) {
+    assert.throws(() => assertTarget(...args));
+  }
+  assert.throws(() => validateNative(native, 'x86_64-unknown-linux-musl'));
+});
+
+test('packaged validation supports explicit Linux and preserves Windows and macOS entry points', () => fixture(root => {
+  const scripts = resolve(root, 'app/scripts/notices');
+  mkdirSync(scripts, { recursive: true });
+  for (const file of ['policy.mjs', 'validate.mjs']) {
+    copyFileSync(new URL(`../scripts/notices/${file}`, import.meta.url), resolve(scripts, file));
+  }
+  const license = 'Synthetic MNO license';
+  writeFileSync(resolve(root, 'LICENSE'), license);
+  const generated = resolve(root, 'app/src-tauri/notices');
+  const packaged = resolve(root, 'Extracted.app/Contents/Resources/notices');
+  const component = { name: 'fixture', version: '1', expression: 'MIT', selected: ['MIT'], texts: ['Synthetic notice'] };
+  function writeBundle(dir, target) {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(resolve(dir, 'inventory.json'), JSON.stringify({ target, components: [component] }));
+    writeFileSync(resolve(dir, 'THIRD-PARTY-NOTICES.html'), '<pre>Synthetic notice</pre>');
+    writeFileSync(resolve(dir, 'source-checksums.json'), '[]');
+  }
+  function check(expectedError, ...args) {
+    const result = spawnSync(process.execPath, [resolve(scripts, 'validate.mjs'), ...args], { encoding: 'utf8' });
+    if (expectedError) {
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, expectedError);
+    } else {
+      assert.equal(result.status, 0, result.stderr);
+    }
+  }
+  for (const target of ['aarch64-apple-darwin', 'x86_64-pc-windows-msvc', 'x86_64-unknown-linux-gnu']) {
+    writeBundle(generated, target);
+    writeBundle(packaged, target);
+    if (target === 'aarch64-apple-darwin') {
+      check(null, resolve(root, 'Extracted.app'));
+    } else if (target === 'x86_64-pc-windows-msvc') {
+      check(null, '--resources', packaged);
+    } else {
+      const args = ['--resources', packaged, target];
+      check(/ENOENT.*LICENSE/, ...args);
+      writeFileSync(resolve(generated, 'LICENSE'), license);
+      writeFileSync(resolve(packaged, 'LICENSE'), 'Changed license');
+      check(/Linux resource LICENSE differs/, ...args);
+      writeFileSync(resolve(packaged, 'LICENSE'), license);
+      check(null, ...args);
+      check(/Expected generated and packaged target/, '--resources', packaged);
+      writeBundle(packaged, 'x86_64-pc-windows-msvc');
+      check(/Expected generated and packaged target/, ...args);
+    }
+  }
 }));
