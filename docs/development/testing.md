@@ -159,10 +159,11 @@ Both manual tests used Ubuntu 26.04.1 LTS on x86_64 with a Wayland session.
   The installed app completed a clean first launch with isolated production
   data. A synthetic journal entry was saved and remained available after
   restart. WebKit used a separate directory outside the journal directory.
+  Backup and Export were also exercised successfully in the installed app.
 
-The package result covers first launch, persistence and WebKit separation on
-this Ubuntu VM. Backup and Export evidence comes from the DEV test. Other
-distributions, architectures and desktop sessions are outside this result.
+The package result covers first launch, persistence, WebKit separation,
+Backup and Export on this Ubuntu VM. Other distributions, architectures
+and desktop sessions are outside this result.
 
 ## C1: isolated restore candidate construction
 
