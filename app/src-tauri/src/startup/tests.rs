@@ -91,7 +91,6 @@ fn every_reserved_artifact_blocks_before_initializer_and_preserves_existing_data
         assert!(state.maintenance().is_err());
     }
 }
-#[cfg(target_os = "linux")]
 #[test]
 fn windows_managed_names_block_before_the_initializer() {
     for name in [
@@ -133,7 +132,6 @@ fn windows_managed_names_block_before_the_initializer() {
     }
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 fn copied_windows_admitted_generation_blocks_without_changing_either_journal() {
     use generation_selection::{Phase, Record};
@@ -192,6 +190,7 @@ fn copied_windows_admitted_generation_blocks_without_changing_either_journal() {
     assert_eq!(result.unwrap_err(), "database_recovery_artifact_present");
     assert!(copied.operation(None).is_err());
     assert!(copied.maintenance().is_err());
+    assert!(copied.recovery_session().is_err());
 }
 
 #[test]
