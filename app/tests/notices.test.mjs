@@ -93,7 +93,8 @@ test('internal NSIS config preserves identity and uses explicit current-user ins
   const windows = JSON.parse(readFileSync(new URL('../src-tauri/tauri.windows-test.conf.json', import.meta.url)));
   assert.equal(base.identifier, 'org.mynatureobservations.app');
   assert.equal(base.productName, 'My Nature Observations');
-  assert.equal(base.version, '0.1.0');
+  const app = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
+  assert.equal(base.version, app.version);
   for (const key of ['identifier','productName','version','app','build']) assert.equal(windows[key], undefined);
   assert.equal(windows.bundle.windows.nsis.installMode, 'currentUser');
   assert.equal(windows.bundle.windows.nsis.compression, 'zlib');
