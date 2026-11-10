@@ -58,11 +58,14 @@ pub(crate) fn delete_journal_entry(
 }
 
 pub(crate) fn delete_entry(connection: &mut Connection, id: &str) -> Result<(), String> {
-    let tx = connection.transaction().map_err(|error| error.to_string())?;
+    let tx = connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
     // Weather restricts deletion. Photo previews and place links cascade.
     tx.execute("DELETE FROM journal_weather WHERE entry_id = ?1", [id])
         .map_err(|error| error.to_string())?;
-    let deleted = tx.execute("DELETE FROM journal_entries WHERE id = ?1", [id])
+    let deleted = tx
+        .execute("DELETE FROM journal_entries WHERE id = ?1", [id])
         .map_err(|error| error.to_string())?;
     if deleted != 1 {
         return Err("journal_entry_not_found".into());
@@ -256,7 +259,11 @@ fn save_journal_entry_with_connection(
     validate_document(&content_json)?;
     // Keep the source check and overwrite in one SQLite transaction.
     let transaction = if connection.is_autocommit() {
-        Some(connection.unchecked_transaction().map_err(|e| e.to_string())?)
+        Some(
+            connection
+                .unchecked_transaction()
+                .map_err(|e| e.to_string())?,
+        )
     } else {
         None
     };
@@ -275,11 +282,13 @@ fn save_journal_entry_with_connection(
                 return Err("journal_document_incompatible".into());
             }
             validate_document(&original)?;
-            connection.execute(
-                "UPDATE journal_entries SET entry_date = ?2, title = ?3, content_json = ?4,
+            connection
+                .execute(
+                    "UPDATE journal_entries SET entry_date = ?2, title = ?3, content_json = ?4,
                  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
-                params![id, entry_date, title, content_json],
-            ).map_err(|e| e.to_string())?;
+                    params![id, entry_date, title, content_json],
+                )
+                .map_err(|e| e.to_string())?;
             id
         }
         EntryTarget::New(reserved) => {
@@ -697,7 +706,9 @@ mod tests {
             Some("journal_empty_entry")
         );
         assert_eq!(
-            save(&connection, Some("missing".into()), empty).err().as_deref(),
+            save(&connection, Some("missing".into()), empty)
+                .err()
+                .as_deref(),
             Some("journal_entry_not_found")
         );
         let count: i64 = connection

@@ -353,11 +353,8 @@ mod established_startup_tests {
         assert_eq!(
             Connection::open(&path)
                 .unwrap()
-                .query_row(
-                    "SELECT title FROM journal_entries",
-                    [],
-                    |r| r.get::<_, String>(0)
-                )
+                .query_row("SELECT title FROM journal_entries", [], |r| r
+                    .get::<_, String>(0))
                 .unwrap(),
             "Saved after startup"
         );

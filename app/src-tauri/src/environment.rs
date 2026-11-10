@@ -220,7 +220,8 @@ mod tests {
         let dev_file = development.initialize_startup(&dev).unwrap();
         let json = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"DEV only"}]}]}"#;
         let mut db = rusqlite::Connection::open(&dev_file).unwrap();
-        crate::photographs::save(&mut db, "dev-entry", "2026-10-31", "DEV", json, &[], true).unwrap();
+        crate::photographs::save(&mut db, "dev-entry", "2026-10-31", "DEV", json, &[], true)
+            .unwrap();
         drop(db);
         assert_eq!(
             rusqlite::Connection::open(&prod_file)

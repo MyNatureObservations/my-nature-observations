@@ -273,7 +273,8 @@ fn paging_and_rebuild_after_deleted_row() {
         .with_write(|| {
             let _operation = f.state.operation(Some(1))?;
             let mut db = f.open()?;
-            db.execute_batch(database::weather_schema::DDL).map_err(sql)?;
+            db.execute_batch(database::weather_schema::DDL)
+                .map_err(sql)?;
             journal::delete_entry(&mut db, "00")
         })
         .unwrap();

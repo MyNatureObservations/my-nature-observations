@@ -113,8 +113,26 @@ fn atomic_save_retries_unused_assets_missing_original_and_integrity() {
             .unwrap(),
         0
     );
-    save(&mut db, "entry", "2026-10-30", "", &json, &[asset.clone()], true).unwrap();
-    save(&mut db, "entry", "2026-10-30", "", &json, &[asset.clone()], false).unwrap();
+    save(
+        &mut db,
+        "entry",
+        "2026-10-30",
+        "",
+        &json,
+        &[asset.clone()],
+        true,
+    )
+    .unwrap();
+    save(
+        &mut db,
+        "entry",
+        "2026-10-30",
+        "",
+        &json,
+        &[asset.clone()],
+        false,
+    )
+    .unwrap();
     assert_eq!(fs::read(&asset.original_path).unwrap(), original);
     fs::remove_file(&asset.original_path).unwrap();
     assert_eq!(get(&db, &asset.asset_id).unwrap(), Some(asset.clone()));
@@ -442,7 +460,16 @@ fn interrupted_restore_and_import_preserve_photographs_through_startup_recovery(
         let asset = source(root);
         let json = layout_document(&asset);
         fs::write(root.join("document.json"), &json).unwrap();
-        save(&mut db, "entry", "2026-10-30", "", &json, &[asset.clone()], true).unwrap();
+        save(
+            &mut db,
+            "entry",
+            "2026-10-30",
+            "",
+            &json,
+            &[asset.clone()],
+            true,
+        )
+        .unwrap();
         backup::create_backup(&db, &root.join("incoming.mno-backup"), BackupKind::Manual).unwrap();
         drop(db);
         let mut db =
@@ -680,7 +707,16 @@ fn v2_reopens_as_editable_and_keeps_caption_alt_and_unused_assets() {
     );
     value["content"][0]["attrs"]["caption"] = serde_json::json!("New caption");
     value["content"][0]["attrs"]["alt"] = serde_json::json!("Independent alternative text");
-    save(&mut db, "entry", "2026-10-31", "", &value.to_string(), &[], false).unwrap();
+    save(
+        &mut db,
+        "entry",
+        "2026-10-31",
+        "",
+        &value.to_string(),
+        &[],
+        false,
+    )
+    .unwrap();
     assert_eq!(
         db.query_row("SELECT content_json FROM journal_entries", [], |r| r
             .get::<_, String>(0))
