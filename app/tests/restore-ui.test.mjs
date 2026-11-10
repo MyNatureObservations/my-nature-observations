@@ -5,11 +5,12 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { compile, parse } from 'svelte/compiler';
 const source=readFileSync(new URL('../src/routes/settings/restore/+page.svelte',import.meta.url),'utf8');
-function harness() {
+function harness(available = true) {
   let guard; const calls=[];
   const script=ts.transpileModule(source.match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^  import .*;\n/gm,''),{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
-  const context=vm.createContext({$state:v=>v,beforeNavigate:f=>guard=f,language:{current:'sv'},m:{restore_open:()=> 'Välj'},invoke:(name,args)=>new Promise((resolve,reject)=>calls.push({name,args,resolve,reject}))});
+  const context=vm.createContext({$state:v=>v,onMount:f=>{if (!available) f();},beforeNavigate:f=>guard=f,language:{current:'sv'},m:{restore_open:()=> 'Välj'},invoke:(name,args)=>new Promise((resolve,reject)=>calls.push({name,args,resolve,reject}))});
   vm.runInContext(script,context);
+  if (available) vm.runInContext("available = true", context);
   return {calls,run:code=>vm.runInContext(code,context),guard:()=>{let cancelled=false;guard({cancel(){cancelled=true;}});return cancelled;}};
 }
 const settle=async()=>{await Promise.resolve();await Promise.resolve();};
@@ -19,6 +20,15 @@ test('restore view compiles and settings link uses ordinary guarded navigation',
   assert.match(nav,/href="\/settings\/restore"/);
   const editor=readFileSync(new URL('../src/lib/components/JournalEditor.svelte',import.meta.url),'utf8');
   assert.match(editor,/beforeNavigate/);assert.match(editor,/hasPendingChanges.*isSaving/);
+});
+test('unavailable Restore rejects direct route actions', async () => {
+  const h = harness(false);
+  assert.equal(h.calls[0].name, 'restore_available');
+  h.calls[0].resolve(false);
+  await settle();
+  await h.run('choose()');
+  await h.run('phase = "confirmed"; token = "opaque"; restore()');
+  assert.equal(h.calls.length, 1);
 });
 test('picker cancellation never starts restore; confirmation requires validated token',async()=>{
   const h=harness();await h.run('restore()');assert.equal(h.calls.length,0);
@@ -154,10 +164,10 @@ function layoutHarness() {
   return {calls,destinations,dispose,navigate,event:()=>event(),block:()=>block(),run:code=>vm.runInContext(code,context)};
 }
 
-test('both verified import outcomes return home; restore retains journal navigation',async()=>{
+test('verified Restore and both Import outcomes return Home after recovery succeeds',async()=>{
   for (const [operation,action,destination,result] of [
     ['import','finish_new','/','imported'], ['import','continue','/','imported'],
-    ['restore','finish_new','/journal','restored'], ['import','keep_previous','/','previous'],
+    ['restore','finish_new','/','restored'], ['import','keep_previous','/','previous'],
     ['restore','keep_previous','/journal','previous'], ['unknown','finish_new','/journal','restored'],
   ]) {
     const root=layoutHarness(); await settle();root.calls[0].resolve('recovery');await settle();
@@ -250,7 +260,7 @@ test('leaving home does not consume restore or previous-journal confirmations',a
   for(const restored of [true,false]) {
     const root=layoutHarness();await settle();root.calls[0].resolve('recovery');await settle();
     await root.run(`recoveryFinished(${restored},"restore")`);
-    assert.deepEqual(root.destinations,['/journal']);assert.equal(root.run('result'),restored?'restored':'previous');
+    assert.deepEqual(root.destinations,[restored?'/':'/journal']);assert.equal(root.run('result'),restored?'restored':'previous');
     await root.navigate('/');await root.navigate('/settings/restore');
     assert.equal(root.run('result'),restored?'restored':'previous');assert.equal(root.run('importConfirmationConsumed'),false);
     root.dispose();
@@ -364,4 +374,145 @@ test('prepared replacement shows concise instructions without generic blocked-st
       assert.equal(messages.import_prepared_reopen, 'Avsluta MNO och starta appen igen för att välja vilken journal du vill använda och slutföra bytet.');
     }
   }
+});
+
+test('Windows Recovery confirms a selected backup, retries errors and waits for explicit Quit', async () => {
+  const h = recoveryHarness('windows_recovery');
+  assert.equal(h.calls.length, 0);
+  await h.run('confirmBackup()');
+  assert.equal(h.calls.length, 0);
+  const first = h.run('chooseBackup()');
+  assert.equal(h.calls[0].name, 'choose_recovery_backup');
+  h.calls[0].resolve({ token: 'first' });
+  await first;
+  assert.equal(h.run('windowsPhase'), 'confirmed');
+  const rejected = h.run('confirmBackup()');
+  assert.equal(h.calls[1].name, 'confirm_recovery_backup');
+  assert.equal(h.calls[1].args.token, 'first');
+  h.calls[1].reject('changed');
+  await rejected;
+  assert.equal(h.run('windowsError'), 'invalid');
+  assert.equal(h.run('backupToken'), null);
+  const second = h.run('chooseBackup()');
+  h.calls[2].resolve({ token: 'second' });
+  await second;
+  const publish = h.run('confirmBackup()');
+  assert.equal(h.run('windowsPhase'), 'publishing');
+  await h.run('quit()');
+  assert.equal(h.calls.length, 4);
+  h.calls[3].resolve();
+  await publish;
+  assert.equal(h.run('windowsPhase'), 'pending');
+  assert.deepEqual(h.finished, []);
+  const quit = h.run('quit()');
+  assert.equal(h.calls[4].name, 'quit_after_restore');
+  h.calls[4].resolve();
+  await quit;
+});
+
+test('layout routes managed Windows startup into Recovery without rendering the journal', async () => {
+  const h = layoutHarness();
+  await settle();
+  h.calls[0].resolve('windows_recovery');
+  await settle();
+  assert.equal(h.run('mode'), 'windows_recovery');
+  assert.equal(h.run('mode === "ready"'), false);
+  for (const mode of ['ready', 'blocked', 'recovery']) {
+    const panel = recoveryHarness(mode);
+    const count = panel.calls.length;
+    await panel.run('chooseBackup()');
+    assert.equal(panel.calls.length, count);
+  }
+  for (const locale of ['sv', 'en']) {
+    const messages = JSON.parse(readFileSync(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8'));
+    for (const key of ['confirm', 'confirm_button', 'invalid', 'unavailable', 'failed']) {
+      assert.ok(messages[`windows_recovery_${key}`]);
+    }
+  }
+});
+
+test('Windows Restore handoff uses backend mode even when the event beats the command reply', async () => {
+  for (const [mode, error] of [['windows_restore_pending', null], ['windows_restore_uncertain', 'failed']]) {
+    const root = layoutHarness();
+    await settle();
+    root.calls[0].resolve('ready');
+    await settle();
+    const settings = harness();
+    const selection = settings.run('choose()');
+    settings.calls[0].resolve({ token: 'chosen', preserves_previous: true });
+    await selection;
+    assert.equal(settings.run('preservesPrevious'), true);
+    const prepare = settings.run('restore()');
+    assert.equal(settings.guard(), true);
+    root.event();
+    root.calls[1].resolve(mode);
+    await settle();
+    assert.equal(root.run('mode'), mode);
+    assert.equal(root.run('result'), null);
+    const panel = recoveryHarness(mode);
+    if (error) settings.calls[1].reject(error);
+    else settings.calls[1].resolve();
+    await prepare;
+    const quit = panel.run('quit()');
+    assert.equal(panel.calls[0].name, 'quit_after_restore');
+    panel.calls[0].resolve();
+    await quit;
+    assert.deepEqual(panel.finished, []);
+    panel.dispose();
+    root.dispose();
+  }
+});
+
+test('safe Windows preparation failure leaves a return path to the current journal', async () => {
+  const h = harness();
+  const selection = h.run('choose()');
+  h.calls[0].resolve({ token: 'chosen', preserves_previous: true });
+  await selection;
+  const prepare = h.run('restore()');
+  h.calls[1].reject('preparation_failed');
+  await prepare;
+  assert.equal(h.run('phase'), 'failed');
+  assert.equal(h.run('canReturnHome()'), true);
+  assert.equal(h.guard(), false);
+});
+
+test('failed Restore mode refresh stays blocked and offers Quit without reporting success', async () => {
+  const root = layoutHarness();
+  await settle();
+  root.calls[0].resolve('ready');
+  await settle();
+  root.event();
+  root.calls[1].reject('mode unavailable');
+  await settle();
+  assert.equal(root.run('mode'), 'blocked');
+  assert.equal(root.run('result'), null);
+  assert.deepEqual(root.destinations, []);
+  const panel = recoveryHarness('blocked');
+  const quit = panel.run('quit()');
+  assert.equal(panel.calls[0].name, 'quit_after_restore');
+  panel.calls[0].resolve();
+  await quit;
+  assert.deepEqual(panel.finished, []);
+  root.dispose();
+  panel.dispose();
+});
+
+test('unconfirmed Windows Restore reply without a mode event offers Quit and prevents retry', async () => {
+  const h = harness();
+  const selection = h.run('choose()');
+  h.calls[0].resolve({ token: 'chosen', preserves_previous: true });
+  await selection;
+  const prepare = h.run('restore()');
+  h.calls[1].reject('IPC unavailable');
+  await prepare;
+  assert.equal(h.run('phase'), 'uncertain');
+  assert.equal(h.run('canReturnHome()'), false);
+  assert.equal(h.guard(), true);
+  await h.run('choose()');
+  await h.run('restore()');
+  assert.equal(h.calls.length, 2);
+  const quit = h.run('quit()');
+  assert.equal(h.calls[2].name, 'quit_after_restore');
+  h.calls[2].resolve();
+  await quit;
 });

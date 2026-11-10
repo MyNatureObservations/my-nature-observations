@@ -6,6 +6,19 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Checks to run (full CI remains the default)
+        type: choice
+        required: true
+        default: full
+        options:
+          - full
+          - windows-initialization-probe
+          - windows-test-package
+          - windows-rc1-browser
+          - windows-loader-diagnostic
+          - windows-startup-baseline
 
 permissions:
   contents: read
@@ -21,6 +34,7 @@ env:
 
 jobs:
   quality:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope == 'full' }}
     name: Tests and checks (macOS)
     runs-on: macos-15
     timeout-minutes: 30
@@ -87,6 +101,7 @@ jobs:
           --test database_safety
           --test descriptor_owner
           --test recovery_handoff_prototype
+          --test generation_activation_prototype
 
       - name: Check Rust formatting
         working-directory: app/src-tauri
@@ -109,6 +124,7 @@ jobs:
           git diff --exit-code
 
   notices:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope == 'full' }}
     name: Offline notices (macOS arm64 package)
     runs-on: macos-15
     timeout-minutes: 45
@@ -175,3 +191,442 @@ jobs:
                   print(f'{path}: {arch}, macOS {minimum[0]}')
           assert bundle / 'Contents/MacOS' / info['CFBundleExecutable'] in code
           PYTHON
+
+  cross-platform:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope == 'full' }}
+    name: Rust visibility (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    defaults:
+      run:
+        shell: bash
+        working-directory: app/src-tauri
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install Linux build dependencies
+        id: dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config curl wget file \
+            libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+          pkg-config --modversion webkit2gtk-4.1
+
+      - name: Set up reviewed Rust toolchain
+        id: toolchain
+        # windows-2022 supplies the MSVC build tools; no GUI runtime is launched.
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustc -vV
+          cargo --version
+
+      - name: Cache Rust dependencies and build artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/src-tauri/target
+          key: cross-platform-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+
+      - name: Check Rust compilation (all targets, no packaging)
+        id: compile
+        run: cargo check --locked --all-targets
+
+      - name: Run Rust library tests
+        id: library
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
+        run: cargo test --locked --lib
+
+      - name: Run selected Rust integration tests
+        id: integration
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
+        # Keep the macOS selection; managed_target_probe is compiled, not executed.
+        run: >-
+          cargo test --locked
+          --test database_crash
+          --test database_safety
+          --test descriptor_owner
+          --test recovery_handoff_prototype
+          --test generation_activation_prototype
+
+      - name: Summarize Stage A1 visibility
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## Stage A1: ${{ matrix.os }}
+
+          | Stage | Outcome |
+          | --- | --- |
+          | Linux dependencies (not applicable on Windows) | ${{ steps.dependencies.outcome }} |
+          | Rust toolchain | ${{ steps.toolchain.outcome }} |
+          | Compilation | ${{ steps.compile.outcome }} |
+          | Library tests | ${{ steps.library.outcome }} |
+          | Selected integration tests | ${{ steps.integration.outcome }} |
+
+          Read the failing step's diagnostics to distinguish setup, compilation,
+          test assertions and intentionally unsupported functionality. Failures
+          remain failures; no continue-on-error or production fallback is added.
+          A failed test compilation is not an executed test suite.
+
+          macOS-only cfg gates (including descriptor_owner) exclude tests here.
+          A zero-test target, ignored test or skipped step is not passing coverage.
+          Restore/Import/Recovery support and release packaging are outside A1.
+          These hosted runners do not replace manual OS acceptance.
+          SUMMARY
+
+  windows-initialization-probe:
+    name: C5a Windows initialization probe (not production readiness)
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.scope == 'windows-initialization-probe' || inputs.scope == 'windows-loader-diagnostic' || inputs.scope == 'windows-startup-baseline') }}
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: app/src-tauri
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Set up reviewed Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustc -vV
+          cargo --version
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/src-tauri/target
+          key: cross-platform-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+      - name: Compare Windows library executable imports and loader behavior
+        if: inputs.scope == 'windows-loader-diagnostic'
+        shell: pwsh
+        working-directory: .
+        run: ./.github/scripts/windows-loader-diagnostic.ps1
+      - name: List library tests and run Windows startup regressions
+        if: inputs.scope == 'windows-startup-baseline'
+        run: |
+          cargo test --locked --lib -- --list
+          cargo test --locked --lib startup::windows_tests
+      - name: Compare the Windows library failure baseline
+        if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
+        run: |
+          python ../../.github/scripts/test-windows-library-baseline.py
+          status=0
+          log="$RUNNER_TEMP/mno-windows-library.log"
+          cargo test --locked --lib --color never > "$log" 2>&1 || status=$?
+          cat "$log"
+          python ../../.github/scripts/windows-library-baseline.py "$log" "$status" --require-clean
+      - name: Check default Windows Restore and Recovery
+        if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
+        run: |
+          cargo test --locked --lib restore_app::
+      - name: Run selected Windows integration tests
+        if: ${{ !cancelled() && inputs.scope == 'windows-startup-baseline' }}
+        run: >-
+          cargo test --locked
+          --test database_crash
+          --test database_safety
+          --test descriptor_owner
+          --test recovery_handoff_prototype
+          --test generation_activation_prototype
+      - name: Run isolated schema and Windows persistence probes
+        if: inputs.scope == 'windows-initialization-probe'
+        run: cargo test --locked --lib windows_initialization_probe -- --nocapture
+      - name: Run production Windows startup safety regressions
+        if: ${{ !cancelled() && inputs.scope == 'windows-initialization-probe' }}
+        run: cargo test --locked --lib startup::windows_tests
+      - name: Run isolated C7.1 selection and NTFS replacement checks
+        if: ${{ !cancelled() && inputs.scope == 'windows-initialization-probe' }}
+        run: |
+          cargo test --locked --lib startup::generation_selection
+          cargo test --locked --lib selection_probe
+      - name: Run isolated C1 and C7.2 candidate checks
+        if: ${{ !cancelled() && inputs.scope == 'windows-initialization-probe' }}
+        run: cargo test --locked --lib candidate_builder
+      - name: Explain focused scope
+        if: ${{ always() && inputs.scope == 'windows-initialization-probe' }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          This scope runs Windows initialization, startup safety, selection and candidate checks.
+          No frontend checks or packaging. C5c production safety tests exercise only local NTFS.
+          Read the probe log for NTFS directory open/flush observations.
+          API/process-exit success does not establish power-loss durability.
+          Directory persistence remains explicitly unestablished, even if tests pass.
+          The four known Windows full-library failures are not exercised by this focused
+          run; default full CI and all existing test assertions remain unchanged.
+          SUMMARY
+
+  windows-test-package:
+    name: C6a internal Windows x86_64 NSIS test installer
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scope == 'windows-test-package' }}
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Set up reviewed Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustc -vV
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-about.exe
+            app/src-tauri/target
+          key: windows-nsis-${{ runner.arch }}-${{ env.RUST_VERSION }}-about-0.9.3-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+      - name: Verify native build environment
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'Reviewed Visual Studio 2022 MSVC tools required' }
+          $version = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt").Trim()
+          if ($version -notmatch '^14\.') { throw "Unreviewed MSVC toolset: $version" }
+          "MNO_MSVC_VERSION=$version" >> $env:GITHUB_ENV
+          Write-Output "MSVC $version (Visual Studio 2022)"
+      - name: Install pinned notice generator
+        run: |
+          if ! cargo about --version 2>/dev/null | grep -qx 'cargo-about 0.9.3'; then
+            cargo install cargo-about --version 0.9.3 --locked --features cli
+          fi
+      - name: Prepare frontend and run focused notices tests
+        run: |
+          npm ci
+          npm run i18n:compile
+          node --test tests/notices.test.mjs tests/nsis-executable.test.mjs
+      - name: Build internal current-user NSIS installer
+        run: npm run tauri build -- --ci --no-sign --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.windows-test.conf.json -- --locked
+      - name: Verify installer resources without installation or launch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = 'src-tauri/target/x86_64-pc-windows-msvc/release'
+          $installers = @(Get-ChildItem "$release/bundle/nsis/*.exe")
+          if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
+          $installer = $installers[0]
+          $unpacked = Join-Path $env:RUNNER_TEMP 'mno-c6a-unpacked'
+          & 7z x $installer.FullName "-o$unpacked" -y
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS archive extraction failed' }
+          $notices = @(Get-ChildItem $unpacked -Recurse -Filter THIRD-PARTY-NOTICES.html)
+          if ($notices.Count -ne 1) { throw 'Expected one packaged notices directory' }
+          node scripts/notices/validate.mjs --resources $notices[0].DirectoryName
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged notices validation failed' }
+          $binary = Join-Path $release 'app.exe'
+          $bytes = [IO.File]::ReadAllBytes($binary)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3c)
+          if ([BitConverter]::ToUInt16($bytes, $pe + 4) -ne 0x8664) { throw 'Expected x86_64 PE binary' }
+          $version = (Get-Item $binary).VersionInfo
+          if ($version.ProductVersion -notmatch '^0\.1\.0(?:\.|$)' -or $version.ProductName -ne 'My Nature Observations') { throw 'Unexpected executable metadata' }
+          # NSIS contains the token-patched app; Tauri restores the unpatched
+          # release/app.exe after bundling. Require that exact change ONLY.
+          $packagedBinary = @(Get-ChildItem $unpacked -Recurse -Filter 'app.exe')
+          if ($packagedBinary.Count -ne 1) { throw 'Expected exactly one extracted app.exe' }
+          $verification = node scripts/verify-nsis-executable.mjs $binary $packagedBinary[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS executable integrity verification failed' }
+          $verification | Write-Output
+          $executableCheck = $verification | ConvertFrom-Json
+          $packagedVersion = $packagedBinary[0].VersionInfo
+          if ($packagedVersion.ProductName -ne $version.ProductName -or $packagedVersion.ProductVersion -ne $version.ProductVersion) { throw 'Packaged executable metadata differs' }
+          $icon = [BitConverter]::ToString([IO.File]::ReadAllBytes('src-tauri/icons/icon.ico')[0..3])
+          if ($icon -ne '00-00-01-00') { throw 'Windows icon missing or invalid' }
+          $script = Get-Content "$release/nsis/x64/installer.nsi" -Raw
+          if (!$script.Contains('org.mynatureobservations.app')) { throw 'Application identifier missing from installer script' }
+          New-Item -ItemType Directory -Path 'src-tauri/target/windows-test-artifact' | Out-Null
+          $out = 'src-tauri/target/windows-test-artifact'
+          Copy-Item $installer.FullName $out
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content "$out/SHA256SUMS.txt" -Encoding utf8
+          @{
+            sourceCommit = '${{ github.sha }}'; productName = $version.ProductName; version = $version.ProductVersion
+            identifier = 'org.mynatureobservations.app'; target = 'x86_64-pc-windows-msvc'; msvc = $env:MNO_MSVC_VERSION
+            installer = $installer.Name; sha256 = $hash; signed = $false
+            executableVerification = $executableCheck
+            dataDirectory = '%APPDATA%\org.mynatureobservations.app'
+            acceptance = 'Use a separate ordinary Windows test account and synthetic data only. Do not test Restore/Recovery or migration.'
+            testBaseline = 'C5c: 353 library tests passed, 4 known failures, 2 ignored. Packaging does not rerun or resolve these failures.'
+          } | ConvertTo-Json | Set-Content "$out/BUILD-INFO.json" -Encoding utf8
+          Remove-Item $unpacked -Recurse -Force
+      - name: Upload internal test installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: mno-windows-x86_64-nsis-test-${{ github.sha }}
+          path: app/src-tauri/target/windows-test-artifact/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Explain acceptance boundary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          Internal, unsigned Windows x86_64 NSIS test build; not a release.
+          Current-user installer. Data: %APPDATA%\org.mynatureobservations.app.
+          Use a SEPARATE ordinary Windows test account with synthetic data.
+          No app installation or launch occurs in this job. Four known Windows
+          library failures remain documented; this packaging job does not run them.
+          Restore/Recovery, historical migration and generation activation remain restricted.
+          SUMMARY
+
+  windows-rc1:
+    name: Build and verify Windows x64 RC1
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scope == 'windows-rc1-browser' }}
+    env:
+      RC_SOURCE: '7ae3313677e6c4b45b9742365bcf7567e5ceac67'
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RC_SOURCE }}
+          persist-credentials: false
+      - name: Confirm pinned source and x64 runner
+        run: |
+          test "$(git rev-parse HEAD)" = "$RC_SOURCE"
+          test "$RUNNER_ARCH" = X64
+          git log -1 --format='RC source %H'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Set up reviewed Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustc -vV
+      - name: Verify native build environment
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'Reviewed Visual Studio 2022 MSVC tools required' }
+          $version = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt").Trim()
+          if ($version -notmatch '^14\.') { throw "Unreviewed MSVC toolset: $version" }
+          "MNO_MSVC_VERSION=$version" >> $env:GITHUB_ENV
+          Write-Output "MSVC $version (Visual Studio 2022)"
+      - name: Install pinned notice generator
+        run: |
+          if ! cargo about --version 2>/dev/null | grep -qx 'cargo-about 0.9.3'; then
+            cargo install cargo-about --version 0.9.3 --locked --features cli
+          fi
+      - name: Prepare frontend and run focused notices tests
+        run: |
+          npm ci
+          npm run i18n:compile
+          node --test tests/notices.test.mjs tests/nsis-executable.test.mjs
+      - name: Build unsigned current-user RC1 installer
+        run: npm run tauri build -- --ci --no-sign --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.windows-test.conf.json -- --locked
+      - name: Verify installer resources without installation or launch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = 'src-tauri/target/x86_64-pc-windows-msvc/release'
+          $installers = @(Get-ChildItem "$release/bundle/nsis/*.exe")
+          if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
+          $installer = $installers[0]
+          $unpacked = Join-Path $env:RUNNER_TEMP 'mno-rc1-unpacked'
+          & 7z x $installer.FullName "-o$unpacked" -y
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS archive extraction failed' }
+          $notices = @(Get-ChildItem $unpacked -Recurse -Filter THIRD-PARTY-NOTICES.html)
+          if ($notices.Count -ne 1) { throw 'Expected one packaged notices directory' }
+          node scripts/notices/validate.mjs --resources $notices[0].DirectoryName
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged notices validation failed' }
+          $binary = Join-Path $release 'app.exe'
+          $bytes = [IO.File]::ReadAllBytes($binary)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3c)
+          if ([BitConverter]::ToUInt16($bytes, $pe + 4) -ne 0x8664) { throw 'Expected x86_64 PE binary' }
+          $version = (Get-Item $binary).VersionInfo
+          if ($version.ProductVersion -notmatch '^0\.1\.0(?:\.|$)' -or $version.ProductName -ne 'My Nature Observations') { throw 'Unexpected executable metadata' }
+          # NSIS contains the token-patched app; Tauri restores the unpatched
+          # release/app.exe after bundling. Require that exact change ONLY.
+          $packagedBinary = @(Get-ChildItem $unpacked -Recurse -Filter 'app.exe')
+          if ($packagedBinary.Count -ne 1) { throw 'Expected exactly one extracted app.exe' }
+          $verification = node scripts/verify-nsis-executable.mjs $binary $packagedBinary[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS executable integrity verification failed' }
+          $verification | Write-Output
+          $executableCheck = $verification | ConvertFrom-Json
+          $packagedVersion = $packagedBinary[0].VersionInfo
+          if ($packagedVersion.ProductName -ne $version.ProductName -or $packagedVersion.ProductVersion -ne $version.ProductVersion) { throw 'Packaged executable metadata differs' }
+          $script = Get-Content "$release/nsis/x64/installer.nsi" -Raw
+          function Read-NsisDefine([string] $name) {
+            $pattern = '(?m)^!define ' + [regex]::Escape($name) + ' "([^"\r\n]*)"[ \t]*\r?$'
+            $definitions = [regex]::Matches($script, $pattern)
+            if ($definitions.Count -ne 1) { throw "Expected one NSIS definition for $name, found $($definitions.Count)" }
+            return $definitions[0].Groups[1].Value
+          }
+          $bundleId = Read-NsisDefine 'BUNDLEID'
+          if ($bundleId -cne 'org.mynatureobservations.app') {
+            throw "NSIS BUNDLEID: expected org.mynatureobservations.app, got '$bundleId'"
+          }
+          $installMode = Read-NsisDefine 'INSTALLMODE'
+          if ($installMode -cne 'currentUser') {
+            throw "NSIS INSTALLMODE: expected currentUser, got '$installMode'"
+          }
+          # Tauri stages the installer-page license as a UTF-8 BOM copy.
+          $licenseReference = Read-NsisDefine 'LICENSE'
+          $stagedLicense = (Resolve-Path "$release/nsis/x64").Path + '\license_file'
+          if (![IO.Path]::IsPathFullyQualified($licenseReference) -or
+              [IO.Path]::GetFullPath($licenseReference) -ine $stagedLicense) {
+            throw "NSIS LICENSE: expected '$stagedLicense', got '$licenseReference'"
+          }
+          $originalLicense = (Resolve-Path 'src-tauri/notices/WINDOWS-INSTALLER-LICENSE.txt').Path
+          $expectedLicense = [byte[]](@(0xEF, 0xBB, 0xBF) + [IO.File]::ReadAllBytes($originalLicense))
+          if (!(Test-Path -LiteralPath $stagedLicense -PathType Leaf) -or
+              [Convert]::ToBase64String([IO.File]::ReadAllBytes($stagedLicense)) -cne [Convert]::ToBase64String($expectedLicense)) {
+            throw "NSIS LICENSE: '$stagedLicense' is missing or differs from the generated license plus UTF-8 BOM"
+          }
+          Write-Output "NSIS BUNDLEID=$bundleId INSTALLMODE=$installMode LICENSE=$licenseReference"
+          $license = Join-Path $notices[0].DirectoryName 'WINDOWS-INSTALLER-LICENSE.txt'
+          if (!(Test-Path -LiteralPath $license -PathType Leaf)) { throw 'Packaged installer license resource missing' }
+          if ((Get-FileHash $license).Hash -ne (Get-FileHash 'src-tauri/notices/WINDOWS-INSTALLER-LICENSE.txt').Hash) {
+            throw 'Packaged installer license differs from generated license'
+          }
+          if ((Get-AuthenticodeSignature -FilePath $installer.FullName).Status -ne 'NotSigned') {
+            throw 'Expected unsigned RC1 installer'
+          }
+          New-Item -ItemType Directory -Path 'src-tauri/target/windows-rc1-artifact' | Out-Null
+          $out = 'src-tauri/target/windows-rc1-artifact'
+          $filename = 'My-Nature-Observations-0.1.0-windows-x64-rc1-7ae3313-setup.exe'
+          Copy-Item $installer.FullName (Join-Path $out $filename)
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $filename" | Set-Content "$out/SHA256SUMS.txt" -Encoding utf8
+          Write-Output "Workflow-built RC1 SHA-256: $hash"
+          @{
+            sourceCommit = $env:RC_SOURCE; productName = $version.ProductName; version = $version.ProductVersion
+            identifier = 'org.mynatureobservations.app'; target = 'x86_64-pc-windows-msvc'; msvc = $env:MNO_MSVC_VERSION
+            installer = $filename; sha256 = $hash; signed = $false
+            executableVerification = $executableCheck
+            dataDirectory = '%APPDATA%\org.mynatureobservations.app'
+          } | ConvertTo-Json | Set-Content "$out/BUILD-INFO.json" -Encoding utf8
+      - name: Upload Windows RC1 acceptance artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mno-windows-x64-rc1-7ae3313
+          path: app/src-tauri/target/windows-rc1-artifact/*
+          if-no-files-found: error
+          retention-days: 3

@@ -446,15 +446,31 @@ fn provider_failures_are_classified_without_changing_success_decoding() {
 }
 
 #[test]
-fn refused_connection_remains_a_network_failure() {
+fn disconnected_http_peer_remains_a_network_failure() {
+    use std::io::Read;
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url =
         reqwest::Url::parse(&format!("http://{}/mock", listener.local_addr().unwrap())).unwrap();
-    drop(listener);
     let http = reqwest::blocking::Client::builder()
         .no_proxy()
-        .timeout(Duration::from_secs(1))
+        .timeout(Duration::from_secs(2))
         .build()
         .unwrap();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        // Keep ownership of the port and close only after the request arrives.
+        let mut request = Vec::new();
+        while !request.ends_with(b"\r\n\r\n") {
+            assert!(request.len() < 8192);
+            let mut byte = [0];
+            stream.read_exact(&mut byte).unwrap();
+            request.push(byte[0]);
+        }
+        assert!(request.starts_with(b"GET /mock HTTP/1.1"));
+    });
     assert_eq!(get(&http, url).unwrap_err(), Error::Network);
+    server.join().unwrap();
 }

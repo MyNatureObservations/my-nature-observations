@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import JournalReading from "$lib/components/JournalReading.svelte";
   import { createJournalReader } from "$lib/journal-data";
   import { resolveJournalTarget, type ReadingEntry } from "$lib/journal-reading";
@@ -27,7 +27,9 @@
     const revision = navigationRevision;
     const loading = isLoading;
     const error = errorMessage;
-    const currentEntries = entries;
+    // Reapply URL targets on navigation or initial load, while an in-place
+    // deletion keeps the reader near its current position.
+    const currentEntries = untrack(() => entries);
     const locale = language.current;
     let cancelled = false;
     navigationMessage = "";
@@ -85,7 +87,8 @@
       <p class="navigation-message" role="status">{navigationMessage}</p>
     {/if}
 
-    <JournalReading {generation} {entries} {isLoading} {errorMessage} locale={language.current} />
+    <JournalReading {generation} {entries} {isLoading} {errorMessage} locale={language.current}
+      onEntryDeleted={(id) => { entries = entries.filter(entry => entry.id !== id); }} />
 
     <footer class="journal-footer">
       <span>My Nature Observations</span>

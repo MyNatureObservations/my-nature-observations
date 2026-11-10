@@ -1,7 +1,7 @@
 {
   "rustVersion": "1.99.1",
   "rustCommit": "58cf8f9c35b355199727627d07ae34a4e2846d67",
-  "target": "aarch64-apple-darwin",
+  "targets": ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"],
   "sourceLock": {
     "file": "evidence/53d9ccff0c906de434b65af90d5c30063894b940fc839261f1fb06ef2e69e3d3.txt",
     "sha256": "53d9ccff0c906de434b65af90d5c30063894b940fc839261f1fb06ef2e69e3d3"
@@ -328,5 +328,5 @@
       ]
     }
   ],
-  "scope": "Conservative std/runtime source dependencies present in the macOS toolchain; not a claim that every object survives linking."
+  "scope": "Conservative std/runtime source dependencies from the pinned Rust toolchain; not a claim that every object survives linking."
 }

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": [
+      "nsis"
+    ],
+    "licenseFile": "notices/WINDOWS-INSTALLER-LICENSE.txt",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "compression": "zlib"
+      }
+    }
+  }
+}

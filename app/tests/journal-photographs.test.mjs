@@ -94,13 +94,36 @@ test("preparation inserts only after success and v2 autosave keeps prepared asse
   assert.equal(h.run("documentVersion"), 2);
   await h.tick(); assert.equal(h.writes[0].command, "save_journal_with_photographs");
   assert.equal(h.writes[0].assets[0].entry_id, h.writes[0].entryId);
+  assert.equal(h.writes[0].createEntry, true);
   await h.succeed(0);
   assert.equal(h.pending(), false);
   const current = h.run("editor.state"), { pos, node } = image(current);
   h.run("editor").view.dispatch(current.tr.delete(pos, pos + node.nodeSize));
   await h.tick(); assert.equal(h.writes[1].assets.length, 0);
+  assert.equal(h.writes[1].createEntry, false);
   assert.equal(h.run("preparedPhotographs.size"), 1);
   await h.succeed(1); h.cleanup();
+});
+
+test("text saved while a first photo is preparing keeps the reserved photo owner", async () => {
+  const { h, pending, owner } = await photoHarness();
+  const preparing = h.run("insertPhoto()");
+  await h.flush();
+  const current = h.run("editor.state");
+  h.run("editor").view.dispatch(current.tr.insertText("new", 1));
+  await h.tick();
+  assert.equal(h.writes[0].command, "save_journal_entry");
+  assert.equal(h.writes[0].id, null);
+  assert.equal(h.writes[0].newEntryId, owner());
+  h.writes[0].resolve({ id: owner() });
+  await h.flush();
+  pending.resolve(asset(owner()));
+  await preparing;
+  await h.tick();
+  assert.equal(h.writes[1].entryId, owner());
+  assert.equal(h.writes[1].createEntry, false);
+  await h.succeed(1);
+  h.cleanup();
 });
 
 for (const reason of ["failure", "destroy", "discard", "generation"]) test(`asynchronous preparation is safe after ${reason}`, async () => {

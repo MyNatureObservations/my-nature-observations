@@ -32,6 +32,8 @@ pub(crate) struct DatabaseState {
     generation: RwLock<u32>,
     maintenance: AtomicBool,
     recovery_required: AtomicBool,
+    #[cfg(windows)]
+    windows_restore_acknowledged: AtomicBool,
     #[cfg(test)]
     legacy_protocol_fixture: AtomicBool,
     #[cfg(test)]
@@ -48,6 +50,8 @@ impl Default for DatabaseState {
             generation: RwLock::new(1),
             maintenance: AtomicBool::new(false),
             recovery_required: AtomicBool::new(false),
+            #[cfg(windows)]
+            windows_restore_acknowledged: AtomicBool::new(false),
             #[cfg(test)]
             legacy_protocol_fixture: AtomicBool::new(false),
             #[cfg(test)]
@@ -101,6 +105,10 @@ impl DatabaseState {
             crate::startup::StartupOutcome::Ready(ready) => {
                 (Phase::Ready, Some(ready.database_path()))
             }
+            #[cfg(windows)]
+            crate::startup::StartupOutcome::Recovery(gate) if gate.managed_windows() => {
+                (Phase::Blocked, None)
+            }
             crate::startup::StartupOutcome::Recovery(_) => (Phase::Recovery, None),
         };
         self.directory
@@ -109,6 +117,49 @@ impl DatabaseState {
         self.phase.store(phase as u8, Ordering::Release);
         path.ok_or(blocked_reason)
     }
+    #[cfg(windows)]
+    pub(crate) fn windows_recovery_available(&self) -> bool {
+        !self.recovery_required.load(Ordering::Acquire)
+            && matches!(
+                self.directory.get(),
+                Some(crate::startup::StartupOutcome::Recovery(gate)) if gate.windows_recovery_available()
+            )
+    }
+
+    // The desktop boundary supplies the digest from its one-use selection.
+    #[cfg(windows)]
+    pub(crate) fn confirm_windows_recovery(
+        &self,
+        archive: &std::path::Path,
+        confirmed_digest: Option<&str>,
+    ) -> Result<(), String> {
+        let digest = confirmed_digest.ok_or("database_recovery_confirmation_required")?;
+        let _exclusive = self
+            .generation
+            .try_write()
+            .map_err(|_| "database_recovery_busy")?;
+        let Some(crate::startup::StartupOutcome::Recovery(gate)) = self.directory.get() else {
+            return Err("database_recovery_unsupported".into());
+        };
+        if !gate.managed_windows() || self.recovery_required.load(Ordering::Acquire) {
+            return Err("database_recovery_unsupported".into());
+        }
+        let (candidate, _) = crate::backup::restore::prepare_windows_backup(archive, Some(digest))
+            .map_err(|e| e.to_string())?;
+        gate.supersede_windows(&candidate)?;
+        self.recovery_required.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn windows_restore_outcome(&self) -> Option<bool> {
+        (matches!(
+            self.directory.get(),
+            Some(crate::startup::StartupOutcome::Ready(_))
+        ) && self.recovery_required.load(Ordering::Acquire))
+        .then(|| self.windows_restore_acknowledged.load(Ordering::Acquire))
+    }
+
     // Shell status only; neither method changes phase or grants admission.
     pub(crate) fn startup_recovery_pending(&self) -> bool {
         self.phase.load(Ordering::Acquire) == Phase::Recovery as u8
@@ -120,7 +171,13 @@ impl DatabaseState {
     }
     pub(crate) fn ready_database_path(&self) -> Result<std::path::PathBuf, String> {
         let _operation = self.operation(None)?;
-        Ok(self.lease()?.database_path())
+        match self.directory.get().ok_or("database_startup_blocked")? {
+            crate::startup::StartupOutcome::Ready(ready) => {
+                ready.lease()?;
+                Ok(ready.database_path())
+            }
+            crate::startup::StartupOutcome::Recovery(gate) => Ok(gate.lease()?.database_path()),
+        }
     }
     fn lease(&self) -> Result<&crate::startup::DirectoryLease, String> {
         match self.directory.get().ok_or("database_startup_blocked")? {
@@ -335,6 +392,22 @@ impl<'s> Maintenance<'s> {
         self.require_recovery();
         Ok(session)
     }
+    #[cfg(windows)]
+    pub(crate) fn publish_windows_restore(
+        &self,
+        candidate: &crate::backup::restore::WindowsCandidate,
+    ) -> Result<(), String> {
+        self.ensure_usable()?;
+        let Some(crate::startup::StartupOutcome::Ready(ready)) = self.state.directory.get() else {
+            return Err("database_startup_blocked".into());
+        };
+        ready.publish_windows_restore(candidate, || self.require_recovery())?;
+        self.state
+            .windows_restore_acknowledged
+            .store(true, Ordering::Release);
+        Ok(())
+    }
+
     pub(crate) fn operation_id(&self) -> uuid::Uuid {
         self.operation_id
     }

@@ -1,36 +1,52 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { beforeNavigate } from "$app/navigation";
   import { language } from "$lib/language.svelte";
   import * as m from "$lib/paraglide/messages.js";
+  let available = $state(false);
+  onMount(() => {
+    void invoke<boolean>("restore_available").then((enabled) => { available = enabled; }).catch(() => {});
+  });
+  let preservesPrevious = $state(false);
   let token = $state<string | null>(null);
-  let phase = $state<"idle" | "checking" | "confirmed" | "writing" | "awaiting_exit" | "failed">("idle");
+  let phase = $state<"idle" | "checking" | "confirmed" | "writing" | "awaiting_exit" | "uncertain" | "failed">("idle");
   let error = $state("");
-  beforeNavigate((navigation) => { if (phase === "writing" || phase === "awaiting_exit") navigation.cancel(); });
+  beforeNavigate((navigation) => { if (phase === "writing" || phase === "awaiting_exit" || phase === "uncertain") navigation.cancel(); });
   function canReturnHome() {
     return phase === "idle" || phase === "checking" || phase === "confirmed" ||
-      (phase === "failed" && error === "invalid");
+      (phase === "failed" && (error === "invalid" || error === "preparation_failed"));
   }
   async function choose() {
-    if (phase === "checking" || phase === "writing" || phase === "awaiting_exit") return;
+    if (!available || phase === "checking" || phase === "writing" || phase === "awaiting_exit" || phase === "uncertain") return;
     token = null; error = ""; phase = "checking";
     try {
-      const selection = await invoke<{ token: string } | null>("choose_restore_backup", { dialogTitle: m.restore_open({}, { locale: language.current }) });
+      const selection = await invoke<{ token: string; preserves_previous?: boolean } | null>("choose_restore_backup", { dialogTitle: m.restore_open({}, { locale: language.current }) });
       token = selection?.token ?? null;
+      preservesPrevious = selection?.preserves_previous ?? false;
       phase = token ? "confirmed" : "idle";
     } catch { phase = "failed"; error = "invalid"; }
   }
   async function restore() {
-    if (phase !== "confirmed" || !token) return;
+    if (!available || phase !== "confirmed" || !token) return;
     phase = "writing";
     try {
       await invoke("restore_selected_backup", { token });
       token = null;
       phase = "awaiting_exit";
-    } catch { phase = "failed"; error = "failed"; token = null; }
+    } catch (reason) {
+      token = null;
+      if (preservesPrevious && reason !== "preparation_failed") {
+        // The mode event or reply may have been lost after the write latch.
+        phase = "uncertain";
+      } else {
+        phase = "failed";
+        error = reason === "preparation_failed" ? reason : "failed";
+      }
+    }
   }
   async function quit() {
-    if (phase !== "awaiting_exit") return;
+    if (phase !== "awaiting_exit" && phase !== "uncertain") return;
     try { await invoke("quit_after_restore"); }
     catch { error = "quit_failed"; }
   }
@@ -40,20 +56,25 @@
     <a class="back-link" href="/">← {m.restore_back_to_home({}, { locale: language.current })}</a>
   {/if}
   <h1>{m.restore_open({}, { locale: language.current })}</h1>
-  <p>{m.restore_intro({}, { locale: language.current })}</p>
-  {#if phase === "confirmed"}
-    <p>{m.restore_confirm({}, { locale: language.current })}</p>
-    <button onclick={restore}>{m.restore_confirm_button({}, { locale: language.current })}</button>
-    <button onclick={() => { token = null; phase = "idle"; }}>{m.restore_cancel({}, { locale: language.current })}</button>
-  {:else if phase === "awaiting_exit"}
-    <p role="status">{m.restore_reopen_instructions({}, { locale: language.current })}</p>
-    <button onclick={quit}>{m.restore_quit({}, { locale: language.current })}</button>
-  {:else if phase === "writing" || phase === "checking"}
-    <p role="status">{phase === "writing" ? m.restore_working({}, { locale: language.current }) : m.restore_checking({}, { locale: language.current })}</p>
-  {:else}
-    <button onclick={choose}>{m.restore_choose({}, { locale: language.current })}</button>
+  {#if available}
+    <p>{m.restore_intro({}, { locale: language.current })}</p>
+    {#if phase === "confirmed"}
+      <p>{preservesPrevious ? m.windows_recovery_confirm({}, { locale: language.current }) : m.restore_confirm({}, { locale: language.current })}</p>
+      <button onclick={restore}>{preservesPrevious ? m.windows_restore_prepare({}, { locale: language.current }) : m.restore_confirm_button({}, { locale: language.current })}</button>
+      <button onclick={() => { token = null; phase = "idle"; }}>{m.restore_cancel({}, { locale: language.current })}</button>
+    {:else if phase === "uncertain"}
+      <p role="alert">{m.windows_restore_uncertain({}, { locale: language.current })}</p>
+      <button onclick={quit}>{m.restore_quit({}, { locale: language.current })}</button>
+    {:else if phase === "awaiting_exit"}
+      <p role="status">{m.restore_reopen_instructions({}, { locale: language.current })}</p>
+      <button onclick={quit}>{m.restore_quit({}, { locale: language.current })}</button>
+    {:else if phase === "writing" || phase === "checking"}
+      <p role="status">{phase === "writing" ? m.restore_working({}, { locale: language.current }) : m.restore_checking({}, { locale: language.current })}</p>
+    {:else}
+      <button onclick={choose}>{m.restore_choose({}, { locale: language.current })}</button>
+    {/if}
+    {#if error}<p role="alert">{error === "invalid" ? m.restore_invalid({}, { locale: language.current }) : error === "quit_failed" ? m.restore_quit_failed({}, { locale: language.current }) : error === "preparation_failed" ? m.windows_restore_failed({}, { locale: language.current }) : m.restore_failed({}, { locale: language.current })}</p>{/if}
   {/if}
-  {#if error}<p role="alert">{error === "invalid" ? m.restore_invalid({}, { locale: language.current }) : error === "quit_failed" ? m.restore_quit_failed({}, { locale: language.current }) : m.restore_failed({}, { locale: language.current })}</p>{/if}
 </main>
 <style>
   main { max-width: 640px; margin: 64px auto; padding: 0 28px; color: #343530; line-height: 1.7; }

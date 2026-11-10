@@ -3,12 +3,26 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
 
 export function assertTarget(platform, arch, target) {
-  if (platform !== 'darwin' || arch !== 'arm64' || target !== 'aarch64-apple-darwin') throw Error('Notices are reviewed for macOS arm64 only; review native components before another target.');
+  if (platform === 'darwin' && arch === 'arm64' && target === 'aarch64-apple-darwin') return 'native.json';
+  if (platform === 'win32' && arch === 'x64' && target === 'x86_64-pc-windows-msvc') return 'native.windows.json';
+  if (platform === 'linux' && arch === 'x64' && target === 'x86_64-unknown-linux-gnu') return 'native.json';
+  throw Error('Notices require a reviewed matching macOS arm64, Windows x86_64 MSVC or Linux x86_64 GNU host/target.');
+}
+export function validateNative(native, target) {
+  if (!(native.targets ?? [native.target]).includes(target) || !native.rustVersion || !native.rustCommit || !native.sourceLock || !native.components?.length) throw Error('Missing or mismatched native dependency information');
+  if (target === 'x86_64-pc-windows-msvc') {
+    for (const name of ['Microsoft WebView2 Loader', 'Microsoft Visual C++ runtime', 'NSIS installer stub and standard plugins', 'Tauri NSIS helper']) {
+      if (!native.components.some(c => c.name === name && c.notices?.length)) throw Error(`Missing reviewed Windows dependency: ${name}`);
+    }
+    if (!native.tauriCliVersion || !native.installerTerms || native.bundledFiles?.length !== 1 || native.bundledFiles[0].crate !== 'webview2-com-sys' || !native.bundledFiles[0].sha256 || !native.bundledFiles[0].sourceChecksum) throw Error('Missing Windows loader provenance or installer terms');
+  }
 }
 
 export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
-export const allowed = new Set(['MIT','Apache-2.0','BSD-2-Clause','BSD-3-Clause','ISC','MPL-2.0','Unicode-3.0','Zlib','BSL-1.0','0BSD','Unlicense','CC0-1.0','MIT-0','CDLA-Permissive-2.0','Apache-2.0 WITH LLVM-exception']);
+// The explicit Microsoft LicenseRef is reviewed native runtime evidence only;
+// cargo-about's open-source acceptance policy remains unchanged.
+export const allowed = new Set(['MIT','Apache-2.0','BSD-2-Clause','BSD-3-Clause','ISC','MPL-2.0','Unicode-3.0','Zlib','BSL-1.0','0BSD','Unlicense','CC0-1.0','MIT-0','CDLA-Permissive-2.0','Apache-2.0 WITH LLVM-exception','LicenseRef-Microsoft-Visual-Studio-2022']);
 
 // SPDX AND binds more tightly than OR; WITH belongs to one license atom.
 export function satisfies(expression, selected) {

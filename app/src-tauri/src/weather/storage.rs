@@ -446,14 +446,67 @@ mod legacy_tests {
             "weather_schema_upgrade_requires_restart"
         );
         assert_eq!(std::fs::read(&path).unwrap(), before);
+        #[cfg(not(windows))]
         crate::database::initialize_schema1_database_for_test(&path).unwrap();
+        #[cfg(windows)]
+        let (state, path) = {
+            assert_eq!(
+                crate::database::initialize_schema1_database_for_test(&path).unwrap_err(),
+                "database_migration_platform_unsupported"
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            let current = DatabaseState::default();
+            assert!(
+                update(
+                    &current,
+                    1,
+                    || panic!("unadmitted write must not open SQLite"),
+                    "e",
+                    0,
+                    Source::Manual,
+                    Some(weather)
+                )
+                .is_err()
+            );
+            let path = current
+                .initialize_startup(&d.path().join("current"))
+                .unwrap();
+            let db = Connection::open(&path).unwrap();
+            db.execute(
+                "INSERT INTO journal_entries VALUES ('e','2026-10-25','',?1,1,'','')",
+                [r#"{"type":"doc","content":[{"type":"paragraph"}]}"#],
+            )
+            .unwrap();
+            db.close().unwrap();
+            (current, path)
+        };
+        #[cfg(windows)]
+        let open = || Connection::open(&path).map_err(|e| e.to_string());
         update(&state, 1, open, "e", 0, Source::Manual, Some(weather)).unwrap();
         let db = Connection::open(&path).unwrap();
+        #[cfg(not(windows))]
         assert!(crate::database::validate_supported_schema(&db).unwrap());
+        #[cfg(windows)]
+        assert_eq!(
+            db.pragma_query_value(None, "user_version", |row| row.get::<_, u32>(0))
+                .unwrap(),
+            crate::database::SCHEMA_VERSION
+        );
         let json: String = db
             .query_row("SELECT content_json FROM journal_entries", [], |r| r.get(0))
             .unwrap();
+        #[cfg(not(windows))]
         assert_eq!(json, r#"{"unknown":true}"#);
+        #[cfg(windows)]
+        assert_eq!(json, r#"{"type":"doc","content":[{"type":"paragraph"}]}"#);
+        assert_eq!(
+            load(&state, 1, open, "e")
+                .unwrap()
+                .data
+                .manual_json
+                .as_deref(),
+            Some(weather)
+        );
         db.close().unwrap();
     }
 }

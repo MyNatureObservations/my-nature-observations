@@ -8,12 +8,14 @@ const component = readFileSync(new URL('../src/lib/components/AppNavigation.svel
 const script = ts.transpileModule(component.match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^  import .*;\n/gm, ''), { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
 const reader = ts.transpileModule(readFileSync(new URL('../src/lib/journal-data.ts', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, ''), { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
 const translations = Object.fromEntries(['sv','en'].map(locale => [locale, JSON.parse(readFileSync(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8'))]));
-function harness() {
+function harness(restoreAvailable = true, importAvailable = true) {
   const calls = [];
-  const context = vm.createContext({ $state: v => v, $derived: v => v, $effect() {}, afterNavigate() {}, language: { current: 'sv' },
+  const context = vm.createContext({ $state: v => v, $derived: v => v, $effect() {}, afterNavigate() {}, onMount: mount => mount(), language: { current: 'sv' },
     PLACE_MAP: 'mno:place-map', getContext: () => ({ close() {} }),
     m: new Proxy({}, { get: (_, key) => (_args, options) => translations[options.locale][key] }),
     invoke: (name, args) => {
+      if (name === 'restore_available') return Promise.resolve(restoreAvailable);
+      if (name === 'open_import_available') return Promise.resolve(importAvailable);
       assert.equal(name, 'create_open_export');
       return new Promise((resolve, reject) => calls.push({ name, args, resolve, reject }));
     },
@@ -119,7 +121,7 @@ test('new export clears prior backup success but preserves errors and blocks con
 });
 
 
-test('settings actions share one quiet button style while navigation remains native links', () => {
+test('settings actions share one quiet button style while navigation remains native links', async () => {
   const ast = parse(component, { modern: true }); const rows = [];
   function walk(value) {
     if (!value || typeof value !== 'object') return;
@@ -130,7 +132,13 @@ test('settings actions share one quiet button style while navigation remains nat
   }
   walk(ast.fragment);assert.equal(rows.length, 2);
   for (const [index,row] of rows.entries()) {
-    const actions=row.fragment.nodes.filter(n=>n.type==='RegularElement');
+    const actions=row.fragment.nodes.flatMap(node => {
+      if (node.type === 'RegularElement') return [node];
+      if (node.type !== 'IfBlock') return [];
+      const condition = component.slice(node.test.start, node.test.end);
+      assert.equal(condition, index === 0 ? 'restoreAvailable' : 'importAvailable');
+      return node.consequent.nodes.filter(n => n.type === 'RegularElement');
+    });
     assert.deepEqual(actions.map(n=>n.name), ['button','a']);
     for (const action of actions) {
       assert.equal(action.attributes.find(a=>a.name==='class').value[0].data,'backup-button');
@@ -141,6 +149,14 @@ test('settings actions share one quiet button style while navigation remains nat
     assert.match(component.slice(actions[1].start,actions[1].end),/onclick=\{clearCompletedStatuses\}/);
     assert.match(component.slice(actions[0].start,actions[0].end), index===0?/m\.backup_create/:/m\.settings_export/);
     assert.match(component.slice(actions[1].start,actions[1].end), index===0?/m\.settings_restore/:/m\.settings_import/);
+  }
+  for (const [restore, openImport] of [[true, true], [true, false], [false, false]]) {
+    const h = harness(restore, openImport);
+    assert.equal(h.run('restoreAvailable'), false);
+    assert.equal(h.run('importAvailable'), false);
+    await Promise.resolve();
+    assert.equal(h.run('restoreAvailable'), restore);
+    assert.equal(h.run('importAvailable'), openImport);
   }
   assert.match(component,/\.data-actions\s*\{[^}]*flex-wrap: wrap/);
   assert.match(component,/\.backup-button\s*\{[^}]*text-decoration: none/);

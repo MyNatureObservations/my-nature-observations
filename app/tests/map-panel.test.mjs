@@ -522,7 +522,7 @@ test('usage link closes dialog and map before normal navigation and blocks a cha
 });
 test('usage navigation respects the real editor guard and preserves an unsaved draft when navigation is cancelled',async()=>{
  const editor=read('JournalEditor');const body=editor.match(/beforeNavigate\(\(navigation\) => \{([\s\S]*?)\n  \}\);/)[1];
- const c=vm.createContext({photoDraft:false,hasPendingChanges:true,isSaving:false,weatherDirty:false,weatherBusy:false,placeDirty:false,placeBusy:false,allowDiscardNavigation:false,pendingNavigationUrl:null,showLeaveConfirmation:false,draft:'Unsaved journal text'});
+ const c=vm.createContext({deletingEntry:false,photoDraft:false,hasPendingChanges:true,isSaving:false,weatherDirty:false,weatherBusy:false,placeDirty:false,placeBusy:false,allowDiscardNavigation:false,pendingNavigationUrl:null,showLeaveConfirmation:false,draft:'Unsaved journal text'});
  vm.runInContext(`function guard(navigation){${body}}`,c);let cancelled=false;
  const h=harness(undefined,{},undefined,[lake],{goto:async path=>{c.navigation={to:{url:new URL(path,'https://mno.invalid')},cancel(){cancelled=true;}};vm.runInContext('guard(navigation)',c);}});
  await h.run('loadCenter()');h.context.value=usageData;h.run('usage=value;blockedOpen=true');await h.run('openUsageEntry("entry-one")');

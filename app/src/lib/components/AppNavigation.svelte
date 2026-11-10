@@ -1,6 +1,6 @@
 <script lang="ts">
   import PlaceMapPanel from "$lib/components/PlaceMapPanel.svelte";
-  import { getContext } from "svelte";
+  import { getContext, onMount } from "svelte";
   import { PLACE_MAP, type PlaceMapController } from "$lib/place-map.svelte";
   const placeMap = getContext<PlaceMapController>(PLACE_MAP);
   import AboutMno from "$lib/components/AboutMno.svelte";
@@ -16,6 +16,13 @@
 
   const readJournal = createJournalReader();
   type Panel = "left" | "top" | "right";
+
+  let restoreAvailable = $state(false);
+  let importAvailable = $state(false);
+  onMount(() => {
+    void invoke<boolean>("open_import_available").then((available) => { importAvailable = available; }).catch(() => {});
+    void invoke<boolean>("restore_available").then((available) => { restoreAvailable = available; }).catch(() => {});
+  });
 
   let isCreatingBackup = $state(false);
   let backupStatus = $state("idle");
@@ -494,7 +501,9 @@
             <button class="backup-button" type="button" onclick={createManualBackup} disabled={isCreatingBackup || isExporting}>
               {m.backup_create({}, { locale: language.current })}
             </button>
-            <a class="backup-button" href="/settings/restore" onclick={clearCompletedStatuses}>{m.settings_restore({}, { locale: language.current })}</a>
+            {#if restoreAvailable}
+              <a class="backup-button" href="/settings/restore" onclick={clearCompletedStatuses}>{m.settings_restore({}, { locale: language.current })}</a>
+            {/if}
           </div>
           {#if backupStatus !== "idle"}
             <p class="backup-status" class:error={!["creating", "created"].includes(backupStatus)} role={["creating", "created"].includes(backupStatus) ? "status" : "alert"}>{backupStatusMessage()}</p>
@@ -504,12 +513,14 @@
           <h3 id="transfer-heading" class="panel-section-heading">
             {m.settings_transfer_heading({}, { locale: language.current })}
           </h3>
-          <p class="data-description">{m.settings_transfer_description({}, { locale: language.current })}</p>
+          <p class="data-description">{importAvailable ? m.settings_transfer_description({}, { locale: language.current }) : m.settings_export_only_description({}, { locale: language.current })}</p>
           <div class="data-actions">
             <button class="backup-button" type="button" onclick={createOpenExport} disabled={isExporting || isCreatingBackup} aria-describedby="open-export-description">
               {m.settings_export({}, { locale: language.current })}
             </button>
-            <a class="backup-button" href="/settings/import" onclick={clearCompletedStatuses}>{m.settings_import({}, { locale: language.current })}</a>
+            {#if importAvailable}
+              <a class="backup-button" href="/settings/import" onclick={clearCompletedStatuses}>{m.settings_import({}, { locale: language.current })}</a>
+            {/if}
           </div>
           {#if exportStatus !== "idle"}
             <p class="backup-status" class:error={!["creating", "created"].includes(exportStatus)} role={["creating", "created"].includes(exportStatus) ? "status" : "alert"}>{exportStatusMessage()}</p>

@@ -1,9 +1,12 @@
+import { clientInventory } from '../scripts/notices/client-inventory.mjs';
 import { test } from 'node:test';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, rmSync, copyFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { assertTarget, satisfies, assertText, digest, reviewedException, evidence, escapeHtml, validateBundle } from '../scripts/notices/policy.mjs';
+import { assertTarget, validateNative, satisfies, assertText, digest, reviewedException, evidence, escapeHtml, validateBundle } from '../scripts/notices/policy.mjs';
 
 test('SPDX alternatives, conjunctions, nesting and exceptions keep their meaning', () => {
   assert.equal(satisfies('MIT OR Apache-2.0', ['MIT']), true);
@@ -62,7 +65,114 @@ test('offline bundle rejects missing/lost notices, sources and network resources
   component.selected=['MIT']; saveInventory(); assert.throws(() => validateBundle(dir),/Unsatisfied/);
 }));
 
-test('macOS-only evidence cannot silently ship for another host or cross target', () => {
+test('macOS evidence rejects unmatched hosts and cross targets', () => {
   assert.doesNotThrow(() => assertTarget('darwin', 'arm64', 'aarch64-apple-darwin'));
   for (const args of [['linux', 'arm64', 'aarch64-apple-darwin'], ['darwin', 'x64', 'aarch64-apple-darwin'], ['darwin', 'arm64', 'x86_64-apple-darwin']]) assert.throws(() => assertTarget(...args));
 });
+
+test('reviewed host/target selection keeps macOS and Windows inventories separate', () => {
+  assert.equal(assertTarget('darwin', 'arm64', 'aarch64-apple-darwin'), 'native.json');
+  assert.equal(assertTarget('win32', 'x64', 'x86_64-pc-windows-msvc'), 'native.windows.json');
+  for (const args of [['win32','arm64','x86_64-pc-windows-msvc'], ['win32','x64','aarch64-apple-darwin'], ['darwin','arm64','x86_64-pc-windows-msvc'], ['win32','x64','x86_64-pc-windows-gnu']]) assert.throws(() => assertTarget(...args));
+});
+test('Windows native review rejects missing dependencies, provenance and terms', () => {
+  const native = JSON.parse(readFileSync(new URL('../licensing/native.windows.json', import.meta.url)));
+  assert.doesNotThrow(() => validateNative(native, native.target));
+  for (const name of ['Microsoft WebView2 Loader', 'Microsoft Visual C++ runtime', 'NSIS installer stub and standard plugins', 'Tauri NSIS helper']) {
+    assert.throws(() => validateNative({...native, components: native.components.filter(c => c.name !== name)}, native.target), /Missing reviewed Windows/);
+  }
+  for (const change of [{bundledFiles: []}, {installerTerms: null}, {tauriCliVersion: null}, {sourceLock: null}, {target: 'aarch64-apple-darwin'}]) assert.throws(() => validateNative({...native, ...change}, native.target));
+  const registry = new URL('../licensing/', import.meta.url);
+  const root = fileURLToPath(registry);
+  for (const component of native.components) for (const item of component.notices) assertText(evidence(root, item));
+  const mac = JSON.parse(readFileSync(new URL('../licensing/native.json', import.meta.url)));
+  assert.doesNotThrow(() => validateNative(mac, 'aarch64-apple-darwin'));
+});
+test('internal NSIS config preserves identity and uses explicit current-user installation', () => {
+  const base = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url)));
+  const windows = JSON.parse(readFileSync(new URL('../src-tauri/tauri.windows-test.conf.json', import.meta.url)));
+  assert.equal(base.identifier, 'org.mynatureobservations.app');
+  assert.equal(base.productName, 'My Nature Observations');
+  assert.equal(base.version, '0.1.0');
+  for (const key of ['identifier','productName','version','app','build']) assert.equal(windows[key], undefined);
+  assert.equal(windows.bundle.windows.nsis.installMode, 'currentUser');
+  assert.equal(windows.bundle.windows.nsis.compression, 'zlib');
+  assert.equal(windows.bundle.licenseFile, 'notices/WINDOWS-INSTALLER-LICENSE.txt');
+});
+
+test('client inventory handles Windows separators and retains Paraglide runtime', () => fixture(root => {
+  for (const [path, name] of [['node_modules/synthetic','synthetic'], ['node_modules/@inlang/paraglide-js','@inlang/paraglide-js']]) {
+    mkdirSync(resolve(root,path), {recursive:true});
+    writeFileSync(resolve(root,path,'package.json'), JSON.stringify({name,version:'1.0.0'}));
+  }
+  const plugin = clientInventory();
+  const windows = path => path.replaceAll('/', '\\');
+  plugin.configResolved({root: windows(root), build:{ssr:false}});
+  plugin.generateBundle.call({getModuleIds: () => []}, {}, {chunk:{type:'chunk',modules:{[windows(resolve(root,'node_modules/synthetic/index.js'))]:{renderedLength:1}}}});
+  const packages = JSON.parse(readFileSync(resolve(root,'.svelte-kit/notices-client.json')));
+  assert.deepEqual(packages.map(p => p.name), ['@inlang/paraglide-js','synthetic']);
+  assert.equal(packages.find(p=>p.name==='synthetic').path, 'node_modules/synthetic');
+}));
+
+test('Linux x64 uses the shared Rust evidence and rejects unreviewed targets', () => {
+  const target = 'x86_64-unknown-linux-gnu';
+  const registry = new URL('../licensing/', import.meta.url);
+  const native = JSON.parse(readFileSync(new URL(assertTarget('linux', 'x64', target), registry)));
+  validateNative(native, target);
+  evidence(fileURLToPath(registry), native.sourceLock);
+  for (const component of native.components) {
+    for (const item of component.notices) evidence(fileURLToPath(registry), item);
+  }
+  for (const args of [['linux', 'arm64', target], ['darwin', 'arm64', target], ['linux', 'x64', 'x86_64-unknown-linux-musl']]) {
+    assert.throws(() => assertTarget(...args));
+  }
+  assert.throws(() => validateNative(native, 'x86_64-unknown-linux-musl'));
+});
+
+test('packaged validation supports explicit Linux and preserves Windows and macOS entry points', () => fixture(root => {
+  const scripts = resolve(root, 'app/scripts/notices');
+  mkdirSync(scripts, { recursive: true });
+  for (const file of ['policy.mjs', 'validate.mjs']) {
+    copyFileSync(new URL(`../scripts/notices/${file}`, import.meta.url), resolve(scripts, file));
+  }
+  const license = 'Synthetic MNO license';
+  writeFileSync(resolve(root, 'LICENSE'), license);
+  const generated = resolve(root, 'app/src-tauri/notices');
+  const packaged = resolve(root, 'Extracted.app/Contents/Resources/notices');
+  const component = { name: 'fixture', version: '1', expression: 'MIT', selected: ['MIT'], texts: ['Synthetic notice'] };
+  function writeBundle(dir, target) {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(resolve(dir, 'inventory.json'), JSON.stringify({ target, components: [component] }));
+    writeFileSync(resolve(dir, 'THIRD-PARTY-NOTICES.html'), '<pre>Synthetic notice</pre>');
+    writeFileSync(resolve(dir, 'source-checksums.json'), '[]');
+  }
+  function check(expectedError, ...args) {
+    const result = spawnSync(process.execPath, [resolve(scripts, 'validate.mjs'), ...args], { encoding: 'utf8' });
+    if (expectedError) {
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, expectedError);
+    } else {
+      assert.equal(result.status, 0, result.stderr);
+    }
+  }
+  for (const target of ['aarch64-apple-darwin', 'x86_64-pc-windows-msvc', 'x86_64-unknown-linux-gnu']) {
+    writeBundle(generated, target);
+    writeBundle(packaged, target);
+    if (target === 'aarch64-apple-darwin') {
+      check(null, resolve(root, 'Extracted.app'));
+    } else if (target === 'x86_64-pc-windows-msvc') {
+      check(null, '--resources', packaged);
+    } else {
+      const args = ['--resources', packaged, target];
+      check(/ENOENT.*LICENSE/, ...args);
+      writeFileSync(resolve(generated, 'LICENSE'), license);
+      writeFileSync(resolve(packaged, 'LICENSE'), 'Changed license');
+      check(/Linux resource LICENSE differs/, ...args);
+      writeFileSync(resolve(packaged, 'LICENSE'), license);
+      check(null, ...args);
+      check(/Expected generated and packaged target/, '--resources', packaged);
+      writeBundle(packaged, 'x86_64-pc-windows-msvc');
+      check(/Expected generated and packaged target/, ...args);
+    }
+  }
+}));

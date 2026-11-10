@@ -58,6 +58,18 @@ pub fn run() {
     environment::validate_identity(&context.config().identifier, environment::DEVELOPMENT_BUILD)
         .expect("unsafe application environment");
 
+    #[cfg(target_os = "linux")]
+    let (context, linux_windows) = {
+        let mut context = context;
+        let windows = &mut context.config_mut().app.windows;
+        let mut linux_windows = Vec::new();
+        for window in windows.iter_mut().filter(|window| window.create) {
+            linux_windows.push(window.clone());
+            window.create = false;
+        }
+        (context, linux_windows)
+    };
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             use tauri::Manager;
@@ -76,11 +88,26 @@ pub fn run() {
         .manage(import_app::ImportState::default())
         .manage(database_state::DatabaseState::default())
         .manage(weather::historical::saving::PreviewState::default())
-        .setup(|app| {
+        .setup(move |app| {
             #[cfg(target_os = "macos")]
             macos_menu::install_guarded_quit(app)?;
 
             use tauri::Manager;
+            #[cfg(target_os = "linux")]
+            for window in &linux_windows {
+                // The runtime does not carry WindowConfig::data_directory into
+                // WebviewAttributes. Set it directly before the WebView is built.
+                let webview_data = app
+                    .path()
+                    .local_data_dir()?
+                    .join(&window.label)
+                    .join(&app.config().identifier)
+                    .join("webview");
+                tauri::WebviewWindowBuilder::from_config(app.handle(), window)?
+                    .data_directory(webview_data)
+                    .build()?;
+            }
+
             let directory = match database::resolve_data_directory(app.handle()) {
                 Ok(directory) => directory,
                 Err(error) => {
@@ -96,23 +123,13 @@ pub fn run() {
                 eprintln!("MNO DEV data directory: {}", directory.display());
             }
             let state = app.state::<database_state::DatabaseState>();
-            match startup_error::initialize(&state, &directory) {
-                Ok(Some(path)) => {
-                    if !app.manage(database::DataLocation::new(path)) {
-                        return Err(
-                            std::io::Error::other("database_location_already_installed").into()
-                        );
-                    }
+            match install_journal_location(&state, &directory, |location| app.manage(location)) {
+                Ok(true) => (),
+                Ok(false) => {
+                    return Err(std::io::Error::other("database_location_already_installed").into());
                 }
-                Ok(None) => {
-                    // Keep the same lease/gate. No DataLocation and no journal access.
-                }
-                Err(failure) => {
-                    startup_error::show(app.handle(), failure);
-                    return Ok(());
-                }
+                Err(failure) => startup_error::show(app.handle(), failure),
             }
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -123,9 +140,13 @@ pub fn run() {
             recovery::database_mode,
             recovery::recovery_status,
             recovery::run_recovery,
+            import_app::open_import_available,
             import_app::choose_open_import,
             import_app::cancel_open_import,
             import_app::activate_open_import,
+            restore_app::choose_recovery_backup,
+            restore_app::confirm_recovery_backup,
+            restore_app::restore_available,
             restore_app::choose_restore_backup,
             restore_app::restore_selected_backup,
             restore_app::quit_after_restore,
@@ -137,6 +158,7 @@ pub fn run() {
             journal_history::journal_history_overview,
             journal_history::journal_history_entries,
             journal::save_journal_entry,
+            journal::delete_journal_entry,
             photographs::prepare_journal_photograph,
             photographs::select_journal_photograph,
             photographs::save_journal_with_photographs,
@@ -186,3 +208,15 @@ pub fn run() {
 mod schema_v1;
 
 mod storage_content;
+
+// Shared startup-to-state boundary. Only app setup supplies Tauri's state installer.
+fn install_journal_location(
+    state: &database_state::DatabaseState,
+    directory: &std::path::Path,
+    install: impl FnOnce(database::DataLocation) -> bool,
+) -> Result<bool, startup_error::Failure> {
+    match startup_error::initialize(state, directory)? {
+        Some(path) => Ok(install(database::DataLocation::new(path))),
+        None => Ok(true),
+    }
+}

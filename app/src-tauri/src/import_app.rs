@@ -123,6 +123,7 @@ fn setting_count(path: &Path, private_candidate: bool) -> Result<u64, Error> {
     db.close().map_err(|_| Error::Failed)?;
     count.try_into().map_err(|_| Error::Failed)
 }
+#[cfg(target_os = "macos")]
 fn prepare(state: &DatabaseState, path: &Path) -> Result<Choice, Error> {
     let active = state.ready_database_path().map_err(|_| Error::Busy)?;
     let permit = state.operation(None).map_err(|_| Error::Busy)?;
@@ -352,6 +353,11 @@ fn report(
         mode,
     }
 }
+#[tauri::command]
+pub(crate) fn open_import_available() -> bool {
+    cfg!(target_os = "macos")
+}
+
 #[tauri::command]
 pub(crate) async fn choose_open_import(
     app: tauri::AppHandle,

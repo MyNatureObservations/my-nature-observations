@@ -557,7 +557,7 @@ fn prepare_file_in(
     Ok(candidate)
 }
 fn handle_digest(file: &File) -> io::Result<String> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         use std::os::unix::fs::FileExt;
         // source() may run while SQLite holds this inode's read lock. Closing
@@ -575,7 +575,7 @@ fn handle_digest(file: &File) -> io::Result<String> {
         }
         Ok(format!("{:x}", hash.finalize()))
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         use std::io::{Seek, SeekFrom};
         let mut reader = file.try_clone()?;
@@ -593,7 +593,7 @@ fn handle_digest(file: &File) -> io::Result<String> {
     }
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
 #[test]
 fn handle_digest_borrows_full_file_without_changing_position() {
     use std::io::{Seek, SeekFrom};
@@ -826,5 +826,211 @@ pub(crate) fn preservation_error(error: crate::storage_content::Error) -> Prepar
         crate::storage_content::Error::Limit => PrepareError::ResourceLimit,
         crate::storage_content::Error::Cancelled => PrepareError::Cancelled,
         _ => PrepareError::InvalidDatabase,
+    }
+}
+
+#[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+mod digest_lock_tests {
+    use super::*;
+    use std::{
+        io::{BufRead, BufReader},
+        net::{TcpListener, TcpStream},
+        process::{Child, Command, Stdio},
+        time::{Duration, Instant},
+    };
+
+    // Kill/reap even when an assertion fails; the synthetic directory outlives this owner.
+    struct Writer(Child);
+    impl Drop for Writer {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    #[test]
+    fn writer_process() {
+        let Some(address) = std::env::var_os("MNO_DIGEST_LOCK_ADDRESS") else {
+            return;
+        };
+        let db = Connection::open(std::env::var_os("MNO_DIGEST_LOCK_DATABASE").unwrap()).unwrap();
+        db.busy_timeout(Duration::ZERO).unwrap();
+        let stream = TcpStream::connect(address.to_str().unwrap()).unwrap();
+        stream.set_nonblocking(false).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let mut reader = BufReader::new(stream);
+        loop {
+            let mut command = String::new();
+            assert_ne!(reader.read_line(&mut command).unwrap(), 0);
+            if command == "stop\n" {
+                break;
+            }
+            assert_eq!(command, "probe\n");
+            let result = match db.execute_batch("BEGIN EXCLUSIVE") {
+                Ok(()) => {
+                    db.execute_batch("UPDATE probe SET value = value + 1; COMMIT")
+                        .unwrap();
+                    "wrote\n"
+                }
+                Err(rusqlite::Error::SqliteFailure(error, _))
+                    if error.code == rusqlite::ErrorCode::DatabaseBusy =>
+                {
+                    "busy\n"
+                }
+                other => panic!("unexpected lock result: {other:?}"),
+            };
+            reader.get_mut().write_all(result.as_bytes()).unwrap();
+        }
+    }
+
+    #[test]
+    fn retained_hash_preserves_sqlite_read_lock_across_processes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("synthetic.sqlite");
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch("PRAGMA journal_mode=DELETE; CREATE TABLE probe(value INTEGER); INSERT INTO probe VALUES(0);").unwrap();
+        // Open the retained descriptor before the read transaction; never close it during it.
+        let retained = File::open(&path).unwrap();
+        db.execute_batch("BEGIN").unwrap();
+        assert_eq!(
+            db.query_row("SELECT value FROM probe", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert!(!db.is_autocommit());
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let mut writer = Writer(
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "backup::restore::digest_lock_tests::writer_process",
+                    "--nocapture",
+                ])
+                .env(
+                    "MNO_DIGEST_LOCK_ADDRESS",
+                    listener.local_addr().unwrap().to_string(),
+                )
+                .env("MNO_DIGEST_LOCK_DATABASE", &path)
+                .stdout(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let stream = loop {
+            match listener.accept() {
+                Ok((stream, _)) => break stream,
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    assert!(
+                        writer.0.try_wait().unwrap().is_none(),
+                        "writer exited before connecting"
+                    );
+                    assert!(Instant::now() < deadline, "writer connection timed out");
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("accept: {error}"),
+            }
+        };
+        stream.set_nonblocking(false).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut probe = |expected: &str| {
+            reader.get_mut().write_all(b"probe\n").unwrap();
+            let mut response = String::new();
+            reader.read_line(&mut response).unwrap();
+            assert_eq!(response, expected);
+        };
+        probe("busy\n"); // Positive evidence that the SELECT acquired a conflicting lock.
+        handle_digest(&retained).unwrap();
+        assert!(!db.is_autocommit());
+        probe("busy\n"); // A duplicate-and-close hash would release POSIX locks here.
+        db.execute_batch("ROLLBACK").unwrap();
+        probe("wrote\n"); // The same process/connection can write once the reader ends.
+        reader.get_mut().write_all(b"stop\n").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Some(status) = writer.0.try_wait().unwrap() {
+                assert!(status.success());
+                break;
+            }
+            assert!(Instant::now() < deadline, "writer exit timed out");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            db.query_row("SELECT value FROM probe", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+    }
+}
+
+#[cfg(windows)]
+pub(crate) struct WindowsCandidate(ClosedPreparedRestore);
+
+#[cfg(windows)]
+pub(crate) fn prepare_windows_backup(
+    path: &Path,
+    expected: Option<&str>,
+) -> Result<(WindowsCandidate, String)> {
+    use std::{io::Seek, os::windows::fs::OpenOptionsExt};
+    use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ};
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .map_err(io_error)?;
+    if !file.metadata().map_err(io_error)?.is_file() {
+        return Err(PrepareError::DamagedArchive);
+    }
+    use std::os::windows::fs::MetadataExt;
+    if file.metadata().map_err(io_error)?.file_attributes() & 0x400 != 0 {
+        return Err(PrepareError::DamagedArchive);
+    }
+    let hash = handle_digest(&file).map_err(io_error)?;
+    if expected.is_some_and(|expected| expected != hash) {
+        return Err(PrepareError::CandidateChanged);
+    }
+    file.rewind().map_err(io_error)?;
+    let prepared = prepare_open_file(file, Arc::new(AtomicBool::new(false)))?;
+    let manifest = prepared.manifest();
+    if manifest.format_version != 5
+        || manifest.database_schema_version != crate::database::SCHEMA_VERSION
+    {
+        return Err(PrepareError::IncompatibleSchema);
+    }
+    let closed = prepared
+        .try_close()
+        .map_err(|_| PrepareError::InvalidDatabase)?;
+    Ok((WindowsCandidate(closed), hash))
+}
+
+#[cfg(windows)]
+impl WindowsCandidate {
+    pub(crate) fn create_directory(path: &Path) -> io::Result<()> {
+        private::create_retained_directory(path)
+    }
+    pub(crate) fn digest(&self) -> &str {
+        &self.0._manifest.database_sha256
+    }
+    pub(crate) fn copy_to(&self, path: &Path) -> io::Result<File> {
+        use std::io::Seek;
+        let mut output = private::create_file(path)?;
+        let mut input = &self.0._file;
+        input.rewind()?;
+        io::copy(&mut input, &mut output)?;
+        output.sync_all()?;
+        Ok(output)
     }
 }
