@@ -48,7 +48,7 @@
 <main class="journal">
   <div class="journal-content">
     <header class="journal-header">
-      <a href="/journal/entries" class="back-link">
+      <a href="/journal?latest=true" class="back-link">
         ← {m.journal_all_entries({}, { locale: language.current })}
       </a>
 

@@ -19,17 +19,23 @@ pub fn save_journal_entry(
     state: State<'_, DatabaseState>,
     search: State<'_, crate::journal_search::SearchState>,
     id: Option<String>,
+    new_entry_id: Option<String>,
     entry_date: String,
     title: String,
     content_json: String,
     generation: u32,
 ) -> Result<SavedJournalEntry, String> {
+    let target = match (id, new_entry_id) {
+        (Some(id), None) => EntryTarget::Existing(id),
+        (None, reserved) => EntryTarget::New(reserved),
+        _ => return Err("journal_entry_target_invalid".into()),
+    };
     search.with_write(|| {
         save_in_session(
             &state,
             generation,
             || database::open_database(&app),
-            id,
+            target,
             entry_date,
             title,
             content_json,
@@ -37,22 +43,54 @@ pub fn save_journal_entry(
     })
 }
 
+#[tauri::command]
+pub(crate) fn delete_journal_entry(
+    app: AppHandle,
+    state: State<'_, DatabaseState>,
+    search: State<'_, crate::journal_search::SearchState>,
+    id: String,
+    generation: u32,
+) -> Result<(), String> {
+    search.with_write(|| {
+        let _operation = state.operation(Some(generation))?;
+        delete_entry(&mut database::open_database(&app)?, &id)
+    })
+}
+
+pub(crate) fn delete_entry(connection: &mut Connection, id: &str) -> Result<(), String> {
+    let tx = connection.transaction().map_err(|error| error.to_string())?;
+    // Weather restricts deletion. Photo previews and place links cascade.
+    tx.execute("DELETE FROM journal_weather WHERE entry_id = ?1", [id])
+        .map_err(|error| error.to_string())?;
+    let deleted = tx.execute("DELETE FROM journal_entries WHERE id = ?1", [id])
+        .map_err(|error| error.to_string())?;
+    if deleted != 1 {
+        return Err("journal_entry_not_found".into());
+    }
+    tx.commit().map_err(|error| error.to_string())
+}
+
+pub(crate) enum EntryTarget {
+    Existing(String),
+    New(Option<String>),
+}
+
 pub(crate) fn save_in_session(
     state: &DatabaseState,
     generation: u32,
     open: impl FnOnce() -> Result<Connection, String>,
-    id: Option<String>,
+    target: EntryTarget,
     entry_date: String,
     title: String,
     content_json: String,
 ) -> Result<SavedJournalEntry, String> {
     let _operation = state.operation(Some(generation))?;
-    if id.is_none() && is_definitely_empty_journal_json(&content_json) {
+    if matches!(target, EntryTarget::New(_)) && is_definitely_empty_journal_json(&content_json) {
         return Err("journal_empty_entry".into());
     }
     validate_document(&content_json)?;
     let connection = open()?;
-    save_journal_entry_with_connection(&connection, id, entry_date, title, content_json)
+    save_journal_entry_with_connection(&connection, target, entry_date, title, content_json)
 }
 
 fn validate_document(content_json: &str) -> Result<(), String> {
@@ -207,73 +245,53 @@ fn is_definitely_empty_journal_json(content: &str) -> bool {
 
 fn save_journal_entry_with_connection(
     connection: &Connection,
-    id: Option<String>,
+    target: EntryTarget,
     entry_date: String,
     title: String,
     content_json: String,
 ) -> Result<SavedJournalEntry, String> {
-    let empty = is_definitely_empty_journal_json(&content_json);
-    if id.is_none() && empty {
+    if matches!(target, EntryTarget::New(_)) && is_definitely_empty_journal_json(&content_json) {
         return Err("journal_empty_entry".into());
     }
     validate_document(&content_json)?;
-    // Keep the source check and overwrite in one SQLite transaction. Callers
-    // already inside a transaction retain ownership of their outer transaction.
+    // Keep the source check and overwrite in one SQLite transaction.
     let transaction = if connection.is_autocommit() {
-        Some(
-            connection
-                .unchecked_transaction()
-                .map_err(|e| e.to_string())?,
-        )
+        Some(connection.unchecked_transaction().map_err(|e| e.to_string())?)
     } else {
         None
     };
-    if let Some(id) = &id {
-        let stored: Option<(String, i64)> = connection
-            .query_row(
-                "SELECT content_json, document_version FROM journal_entries WHERE id = ?1",
-                [id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .optional()
-            .map_err(|e| e.to_string())?;
-        if let Some((original, version)) = stored {
+    let id = match target {
+        EntryTarget::Existing(id) => {
+            let (original, version): (String, i64) = connection
+                .query_row(
+                    "SELECT content_json, document_version FROM journal_entries WHERE id = ?1",
+                    [&id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()
+                .map_err(|e| e.to_string())?
+                .ok_or("journal_entry_not_found")?;
             if version != 1 {
                 return Err("journal_document_incompatible".into());
             }
             validate_document(&original)?;
+            connection.execute(
+                "UPDATE journal_entries SET entry_date = ?2, title = ?3, content_json = ?4,
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                params![id, entry_date, title, content_json],
+            ).map_err(|e| e.to_string())?;
+            id
         }
-    }
-    let id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-
-    let changed = connection
-        .execute(
-            "
-            INSERT INTO journal_entries (
-                id,
-                entry_date,
-                title,
-                content_json,
-                created_at,
-                updated_at
-            )
-            SELECT ?1, ?2, ?3, ?4,
-                strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-            WHERE ?5 = 0 OR EXISTS (SELECT 1 FROM journal_entries WHERE id = ?1)
-            ON CONFLICT(id) DO UPDATE SET
-                entry_date = excluded.entry_date,
-                title = excluded.title,
-                content_json = excluded.content_json,
-                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-            ",
-            params![id, entry_date, title, content_json, empty],
-        )
-        .map_err(|error| error.to_string())?;
-
-    if changed == 0 {
-        return Err("journal_empty_entry".into());
-    }
+        EntryTarget::New(reserved) => {
+            let id = reserved.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            connection.execute(
+                "INSERT INTO journal_entries (id, entry_date, title, content_json, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+                params![id, entry_date, title, content_json],
+            ).map_err(|e| e.to_string())?;
+            id
+        }
+    };
     if let Some(transaction) = transaction {
         transaction.commit().map_err(|e| e.to_string())?;
     }
@@ -522,7 +540,7 @@ mod tests {
     ) -> Result<SavedJournalEntry, String> {
         save_journal_entry_with_connection(
             connection,
-            id,
+            id.map_or(EntryTarget::New(None), EntryTarget::Existing),
             "2026-10-16".into(),
             "Testanteckning".into(),
             content.into(),
@@ -674,12 +692,14 @@ mod tests {
     fn empty_new_entries_with_generated_or_missing_explicit_id_never_insert() {
         let connection = test_database();
         let empty = r#"{"type":"doc","content":[{"type":"paragraph"}]}"#;
-        for id in [None, Some("missing".into())] {
-            assert_eq!(
-                save(&connection, id, empty).err().as_deref(),
-                Some("journal_empty_entry")
-            );
-        }
+        assert_eq!(
+            save(&connection, None, empty).err().as_deref(),
+            Some("journal_empty_entry")
+        );
+        assert_eq!(
+            save(&connection, Some("missing".into()), empty).err().as_deref(),
+            Some("journal_entry_not_found")
+        );
         let count: i64 = connection
             .query_row("SELECT count(*) FROM journal_entries", [], |r| r.get(0))
             .unwrap();
@@ -722,7 +742,7 @@ mod tests {
             &state,
             1,
             || panic!("must not open"),
-            None,
+            EntryTarget::New(None),
             "2026-10-21".into(),
             String::new(),
             r#"{"type":"doc","content":[]}"#.into(),
@@ -836,7 +856,7 @@ mod tests {
             &state,
             generation,
             || Connection::open(&path).map_err(|e| e.to_string()),
-            None,
+            EntryTarget::New(None),
             "2026-10-17".into(),
             "Test".into(),
             r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Original"}]}]}"#.into(),
@@ -849,7 +869,7 @@ mod tests {
                 &state,
                 generation,
                 || panic!("stale save must not open database"),
-                Some(saved.id.clone()),
+                EntryTarget::Existing(saved.id.clone()),
                 "2026-10-17".into(),
                 "Old session".into(),
                 r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Original"}]}]}"#.into(),
@@ -873,7 +893,7 @@ mod tests {
             &state,
             generation + 1,
             || Connection::open(&path).map_err(|e| e.to_string()),
-            Some(saved.id.clone()),
+            EntryTarget::Existing(saved.id.clone()),
             "2026-10-17".into(),
             "Current session".into(),
             r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"new"}]}]}"#.into(),
@@ -892,7 +912,7 @@ mod tests {
         let path = dir.path().join("journal.sqlite");
         let connection = Connection::open(&path).unwrap();
         database::initialize_schema(&connection).unwrap();
-        save(&connection, Some("entry".into()), r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Original"}]}]}"#).unwrap();
+        let saved = save(&connection, None, r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Original"}]}]}"#).unwrap();
         drop(connection);
         let original = std::fs::read(&path).unwrap();
         let mut maintenance = state.maintenance().unwrap();
@@ -904,7 +924,7 @@ mod tests {
                 &other,
                 1,
                 || panic!("queued stale save must not open database"),
-                Some("entry".into()),
+                EntryTarget::Existing(saved.id),
                 "2026-10-17".into(),
                 "Stale".into(),
                 r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Original"}]}]}"#.into(),
@@ -935,7 +955,7 @@ mod startup_gate_tests {
             &state,
             1,
             || panic!("database must not open"),
-            None,
+            EntryTarget::New(None),
             "2026-10-17".into(),
             "title".into(),
             r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Original"}]}]}"#.into(),
@@ -952,7 +972,7 @@ pub(crate) fn save_started_fixture(
     path: &std::path::Path,
 ) -> Result<(), String> {
     let generation = state.operation(None)?.snapshot(()).generation;
-    save_in_session(state,generation,||Connection::open_with_flags(path,rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE).map_err(|e|e.to_string()),Some("startup-entry".into()),"2026-10-17".into(),"Saved after startup".into(),r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Säker journal"}]}]}"#.into()).map(|_|())
+    save_in_session(state,generation,||Connection::open_with_flags(path,rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE).map_err(|e|e.to_string()),EntryTarget::New(None),"2026-10-17".into(),"Saved after startup".into(),r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Säker journal"}]}]}"#.into()).map(|_|())
 }
 
 #[cfg(test)]
@@ -992,7 +1012,7 @@ mod normal_open_contract_tests {
                 hit.set(true);
                 Ok(connection)
             },
-            None,
+            EntryTarget::New(None),
             "2026-10-20".into(),
             "Normal".into(),
             r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Original"}]}]}"#.into(),
@@ -1036,7 +1056,7 @@ mod normal_open_contract_tests {
                         "expected normal open failure".to_owned()
                     })
             },
-            None,
+            EntryTarget::New(None),
             "2026-10-20".into(),
             "Normal".into(),
             r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Original"}]}]}"#.into(),
@@ -1076,7 +1096,7 @@ mod normal_open_contract_tests {
                     hit.set(true);
                     panic!("normal open unwind");
                 },
-                None,
+                EntryTarget::New(None),
                 "2026-10-20".into(),
                 "Normal".into(),
                 r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Original"}]}]}"#.into(),
@@ -1141,7 +1161,7 @@ mod compatibility_tests {
             for replacement in [VALID, original] {
                 let error = save_journal_entry_with_connection(
                     &db,
-                    Some("protected".into()),
+                    EntryTarget::Existing("protected".into()),
                     "2000-01-01".into(),
                     "Changed title".into(),
                     replacement.into(),
@@ -1173,7 +1193,7 @@ mod compatibility_tests {
         let db = database();
         let id = save_journal_entry_with_connection(
             &db,
-            None,
+            EntryTarget::New(None),
             "2026-10-25".into(),
             "Title".into(),
             VALID.into(),
@@ -1184,7 +1204,7 @@ mod compatibility_tests {
         let changed = r#"{ "type":"doc", "content":[{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"New"}]}]}"#;
         save_journal_entry_with_connection(
             &db,
-            Some(id),
+            EntryTarget::Existing(id),
             "2026-10-26".into(),
             "New".into(),
             changed.into(),

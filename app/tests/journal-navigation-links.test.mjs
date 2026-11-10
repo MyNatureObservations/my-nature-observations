@@ -71,14 +71,39 @@ async function harness(responses) {
 }
 const snapshot = entries => ({ generation: 1, data: entries });
 
-test("Continue uses latest experience-date target, keeps New and removes the temporary test link", () => {
+test("Continue and All entries open the same journal at the latest experience date", () => {
   const home = source("../src/routes/+page.svelte");
+  const newEntry = source("../src/routes/journal/new/+page.svelte");
   assert.match(home, /href="\/journal\?latest=true" class="journal-card"/);
+  assert.match(newEntry, /href="\/journal\?latest=true" class="back-link">\s*← \{m\.journal_all_entries\(/);
   assert.match(home, /href="\/journal\/new" class="journal-card"/);
   assert.doesNotMatch(home, /Visa journalens läsvy|journal-reading-test-link/);
   assert.equal(compile(home, { filename: "+page.svelte", generate: "client" }).warnings.length, 0);
   const target = reading.resolveJournalTarget([entry("old-created-last", "2020-01-01"), entry("latest-experience", "2026-10-21")], new URLSearchParams("latest=true"));
   assert.equal(target.anchor, "journal-date-2026-10-21");
+});
+
+test("saved entry returns to the reading view or its originating Search or History", async () => {
+  const path = "../src/routes/journal/entries/[id]/+page.svelte";
+  const compiled = compile(source(path), { filename: path, generate: "server" });
+  for (const [query, href] of [
+    ["", "/journal?latest=true"],
+    ["?from=search&q=red+fox", "/search?q=red%20fox"],
+    ["?from=history&year=2026&month=10", "/history?year=2026&amp;month=10"],
+    ["?from=history&undated=true", "/history?undated=true"],
+  ]) {
+    const stub = url("export default function Stub() {}");
+    const component = await import(url(resolveImports(compiled.js.code, {
+      "$app/state": url(`export const page = { params: { id: "saved" }, url: new URL(${JSON.stringify(`https://example.invalid/journal/entries/saved${query}`)}) };`),
+      "$lib/journal-data": url('export function createJournalReader() { return () => { throw new Error("SSR must not read"); }; }'),
+      "$lib/components/JournalEditor.svelte": stub,
+      "$lib/components/DatePicker.svelte": stub,
+      "$lib/components/EntryPlace.svelte": stub,
+      "$lib/language.svelte": languageUrl,
+      "$lib/paraglide/messages.js": messagesUrl,
+    })));
+    assert.ok(render(component.default).body.includes(`href="${href}"`), query || "saved entry without an origin");
+  }
 });
 
 test("day panel shares visibility filtering, keeps same-day order and never writes", async () => {

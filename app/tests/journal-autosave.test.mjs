@@ -997,3 +997,58 @@ for(const weatherSaved of [true,false]) {
     h.cleanup();
   });
 }
+
+test("deletion waits for a saved read-mode entry and refreshes only after commit", async () => {
+  const effects = [];
+  let finishDelete;
+  const h = await harness({
+    journalEntryId: "entry",
+    onGoto: path => effects.push(path),
+    browserGlobals: { recordEffect: value => effects.push(value) },
+    photoInvoke(command, args) {
+      if (command !== "delete_journal_entry") return;
+      assert.equal(args.id, "entry");
+      assert.equal(args.generation, 1);
+      assert.equal(finishDelete, undefined, "only one deletion may run");
+      return new Promise(resolve => { finishDelete = resolve; });
+    },
+  });
+  assert.equal(h.run("canDeleteEntry()"), false);
+  h.edit("B");
+  const finishing = h.run("finishEditing()");
+  assert.equal(h.run("canDeleteEntry()"), false);
+  await h.succeed(0);
+  await finishing;
+  assert.equal(h.run("canDeleteEntry()"), true);
+  h.run('window.dispatchEvent = event => recordEffect(event.type)');
+  // Verify cancel never invokes the command, and confirmation waits for commit.
+  await h.run("deleteSavedEntry()");
+  assert.equal(finishDelete, undefined);
+  h.run("showDeleteConfirmation = true");
+  const deleting = h.run("deleteSavedEntry()");
+  assert.equal(h.canLeave(), false);
+  await h.run("deleteSavedEntry()");
+  assert.deepEqual(effects, []);
+  finishDelete();
+  await deleting;
+  assert.equal(h.run("canDeleteEntry()"), false);
+  assert.deepEqual(effects, ["mno:journal-changed", "/journal?latest=true"]);
+  h.cleanup();
+});
+
+test("failed deletion keeps the saved entry detail available", async () => {
+  const h = await harness({
+    journalEntryId: "entry",
+    manuallyStartEditing: false,
+    onGoto: () => assert.fail("must stay on the detail page"),
+    photoInvoke(command) {
+      if (command === "delete_journal_entry") return Promise.reject("write failed");
+    },
+  });
+  h.run("showDeleteConfirmation = true");
+  await h.run("deleteSavedEntry()");
+  assert.equal(h.run("deleteFailed"), true);
+  assert.equal(h.run("entryDeleted"), false);
+  assert.equal(h.run("canDeleteEntry()"), true);
+  h.cleanup();
+});

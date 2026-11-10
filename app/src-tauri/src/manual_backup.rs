@@ -354,7 +354,7 @@ mod established_startup_tests {
             Connection::open(&path)
                 .unwrap()
                 .query_row(
-                    "SELECT title FROM journal_entries WHERE id='startup-entry'",
+                    "SELECT title FROM journal_entries",
                     [],
                     |r| r.get::<_, String>(0)
                 )

@@ -106,28 +106,28 @@ fn atomic_save_retries_unused_assets_missing_original_and_integrity() {
     let asset = source(dir.path());
     let original = fs::read(&asset.original_path).unwrap();
     let json = document(&asset);
-    assert!(save(&mut db, "entry", "2026-10-30", "", &json, &[]).is_err());
+    assert!(save(&mut db, "entry", "2026-10-30", "", &json, &[], true).is_err());
     assert_eq!(
         db.query_row("SELECT count(*) FROM journal_entries", [], |r| r
             .get::<_, i64>(0))
             .unwrap(),
         0
     );
-    save(&mut db, "entry", "2026-10-30", "", &json, &[asset.clone()]).unwrap();
-    save(&mut db, "entry", "2026-10-30", "", &json, &[asset.clone()]).unwrap();
+    save(&mut db, "entry", "2026-10-30", "", &json, &[asset.clone()], true).unwrap();
+    save(&mut db, "entry", "2026-10-30", "", &json, &[asset.clone()], false).unwrap();
     assert_eq!(fs::read(&asset.original_path).unwrap(), original);
     fs::remove_file(&asset.original_path).unwrap();
     assert_eq!(get(&db, &asset.asset_id).unwrap(), Some(asset.clone()));
-    save(&mut db, "entry", "2026-10-30", "", TEXT, &[]).unwrap();
+    save(&mut db, "entry", "2026-10-30", "", TEXT, &[], false).unwrap();
     assert_eq!(get(&db, &asset.asset_id).unwrap(), Some(asset.clone()));
-    save(&mut db, "entry", "2026-10-30", "", &json, &[]).unwrap();
+    save(&mut db, "entry", "2026-10-30", "", &json, &[], false).unwrap();
     for placement in ["left", "right", "row"] {
         for size in ["small", "medium", "large"] {
             let mut properties: serde_json::Value = serde_json::from_str(&json).unwrap();
             properties["content"][0]["attrs"]["placement"] = placement.into();
             properties["content"][0]["attrs"]["size"] = size.into();
             let content = properties.to_string();
-            save(&mut db, "entry", "2026-10-30", "", &content, &[]).unwrap();
+            save(&mut db, "entry", "2026-10-30", "", &content, &[], false).unwrap();
             let stored: String = db
                 .query_row(
                     "SELECT content_json FROM journal_entries WHERE id='entry'",
@@ -141,8 +141,8 @@ fn atomic_save_retries_unused_assets_missing_original_and_integrity() {
     }
     let mut changed = asset.clone();
     changed.original_path.push_str("changed");
-    assert!(save(&mut db, "entry", "2026-10-30", "", &json, &[changed]).is_err());
-    assert!(save(&mut db, "other", "2026-10-30", "", &json, &[]).is_err());
+    assert!(save(&mut db, "entry", "2026-10-30", "", &json, &[changed], false).is_err());
+    assert!(save(&mut db, "other", "2026-10-30", "", &json, &[], true).is_err());
     assert!(storage_content::verify_v5(&mut db, &AtomicBool::new(false)).is_ok());
     let proof = storage_content::verify_v5(&mut db, &AtomicBool::new(false)).unwrap();
     db.execute(
@@ -177,10 +177,11 @@ fn open_archive_and_backup_round_trip_all_assets_without_originals() {
         "",
         &json,
         &[asset.clone(), unused.clone()],
+        true,
     )
     .unwrap();
-    save(&mut db, "entry", "2026-10-30", "", TEXT, &[]).unwrap();
-    save(&mut db, "entry", "2026-10-30", "", &json, &[]).unwrap();
+    save(&mut db, "entry", "2026-10-30", "", TEXT, &[], false).unwrap();
+    save(&mut db, "entry", "2026-10-30", "", &json, &[], false).unwrap();
     fs::remove_file(&asset.original_path).unwrap();
     let flag = AtomicBool::new(false);
     let before = storage_content::verify_v5(&mut db, &flag).unwrap();
@@ -306,6 +307,7 @@ fn preparation_measurements() {
             "",
             &document(&asset),
             &[asset.clone()],
+            true,
         )
         .unwrap();
         println!(
@@ -353,7 +355,7 @@ fn recovery_child() {
         let mut asset = source(&root.join("previous-original"));
         fs::remove_file(&asset.original_path).unwrap();
         asset.entry_id = "previous".into();
-        save(&mut db, "previous", "2026-10-30", "", TEXT, &[asset]).unwrap();
+        save(&mut db, "previous", "2026-10-30", "", TEXT, &[asset], true).unwrap();
         drop(db);
         let maintenance = state.maintenance().unwrap();
         let result = backup::restore_context::activation::activate(
@@ -440,7 +442,7 @@ fn interrupted_restore_and_import_preserve_photographs_through_startup_recovery(
         let asset = source(root);
         let json = layout_document(&asset);
         fs::write(root.join("document.json"), &json).unwrap();
-        save(&mut db, "entry", "2026-10-30", "", &json, &[asset.clone()]).unwrap();
+        save(&mut db, "entry", "2026-10-30", "", &json, &[asset.clone()], true).unwrap();
         backup::create_backup(&db, &root.join("incoming.mno-backup"), BackupKind::Manual).unwrap();
         drop(db);
         let mut db =
@@ -523,6 +525,7 @@ fn import_rejects_invalid_image_payloads_even_with_recomputed_checksums() {
         "",
         &document(&asset),
         &[asset],
+        true,
     )
     .unwrap();
     drop(db);
@@ -650,6 +653,7 @@ fn v2_reopens_as_editable_and_keeps_caption_alt_and_unused_assets() {
         "",
         &value.to_string(),
         &[asset.clone()],
+        true,
     )
     .unwrap();
     fs::remove_file(&asset.original_path).unwrap();
@@ -665,7 +669,7 @@ fn v2_reopens_as_editable_and_keeps_caption_alt_and_unused_assets() {
             &state,
             1,
             || Connection::open(&path).map_err(|e| e.to_string()),
-            Some("entry".into()),
+            crate::journal::EntryTarget::Existing("entry".into()),
             "2026-10-31".into(),
             "".into(),
             TEXT.into()
@@ -676,14 +680,14 @@ fn v2_reopens_as_editable_and_keeps_caption_alt_and_unused_assets() {
     );
     value["content"][0]["attrs"]["caption"] = serde_json::json!("New caption");
     value["content"][0]["attrs"]["alt"] = serde_json::json!("Independent alternative text");
-    save(&mut db, "entry", "2026-10-31", "", &value.to_string(), &[]).unwrap();
+    save(&mut db, "entry", "2026-10-31", "", &value.to_string(), &[], false).unwrap();
     assert_eq!(
         db.query_row("SELECT content_json FROM journal_entries", [], |r| r
             .get::<_, String>(0))
             .unwrap(),
         value.to_string()
     );
-    save(&mut db, "entry", "2026-10-31", "", TEXT, &[]).unwrap();
+    save(&mut db, "entry", "2026-10-31", "", TEXT, &[], false).unwrap();
     assert_eq!(get(&db, &asset.asset_id).unwrap(), Some(asset));
     db.execute("UPDATE journal_entries SET document_version=3", [])
         .unwrap();
@@ -691,5 +695,82 @@ fn v2_reopens_as_editable_and_keeps_caption_alt_and_unused_assets() {
         serde_json::to_value(crate::journal::read_journal_entries_with_connection(&db).unwrap())
             .unwrap();
     assert_eq!(rows[0]["editable"], false);
-    assert!(save(&mut db, "entry", "2026-10-31", "", TEXT, &[]).is_err());
+    assert!(save(&mut db, "entry", "2026-10-31", "", TEXT, &[], false).is_err());
+}
+
+#[test]
+fn delete_entry_is_atomic_and_late_saves_cannot_recreate_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (path, mut db) = fixture(dir.path(), "journal.sqlite");
+    let asset = source(dir.path());
+    let original = fs::read(&asset.original_path).unwrap();
+    let json = document(&asset);
+    let date = "2026-10-30";
+    save(
+        &mut db,
+        "entry",
+        date,
+        "",
+        &json,
+        std::slice::from_ref(&asset),
+        true,
+    )
+    .unwrap();
+    save(&mut db, "other", date, "", TEXT, &[], true).unwrap();
+    db.execute_batch(
+        "INSERT INTO places(id,name,revision) VALUES ('shared','Forest',1);
+         INSERT INTO journal_places(entry_id,place_id,place_name_snapshot,place_revision_snapshot,revision)
+           VALUES ('entry','shared','Forest',1,1), ('other','shared','Forest',1,1);
+         INSERT INTO journal_weather(entry_id,format_version,revision) VALUES ('entry',1,1);
+         CREATE TRIGGER reject_delete AFTER DELETE ON journal_entries
+           BEGIN SELECT RAISE(ABORT, 'injected delete failure'); END;",
+    ).unwrap();
+    let count = |db: &Connection, table: &str| {
+        db.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .unwrap()
+    };
+    assert!(
+        crate::journal::delete_entry(&mut db, "entry")
+            .unwrap_err()
+            .contains("injected delete failure")
+    );
+    assert_eq!(count(&db, "journal_entries"), 2);
+    assert_eq!(count(&db, "journal_weather"), 1);
+    assert_eq!(count(&db, "journal_image_assets"), 1);
+    assert_eq!(count(&db, "journal_places"), 2);
+
+    db.execute_batch("DROP TRIGGER reject_delete").unwrap();
+    crate::journal::delete_entry(&mut db, "entry").unwrap();
+    assert_eq!(count(&db, "journal_entries"), 1);
+    assert_eq!(count(&db, "journal_weather"), 0);
+    assert_eq!(count(&db, "journal_image_assets"), 0);
+    assert_eq!(count(&db, "journal_places"), 1);
+    assert_eq!(count(&db, "places"), 1);
+    assert_eq!(fs::read(&asset.original_path).unwrap(), original);
+
+    let state = crate::database_state::DatabaseState::ready_for_test();
+    let late_text = crate::journal::save_in_session(
+        &state,
+        1,
+        || Connection::open(&path).map_err(|error| error.to_string()),
+        crate::journal::EntryTarget::Existing("entry".into()),
+        date.into(),
+        "Late text".into(),
+        TEXT.into(),
+    );
+    assert_eq!(late_text.err().as_deref(), Some("journal_entry_not_found"));
+    let late_photo = save(
+        &mut db,
+        "entry",
+        date,
+        "",
+        &json,
+        std::slice::from_ref(&asset),
+        false,
+    );
+    assert_eq!(late_photo.err().as_deref(), Some("journal_entry_not_found"));
+    assert_eq!(count(&db, "journal_entries"), 1);
+    assert_eq!(count(&db, "journal_image_assets"), 0);
 }

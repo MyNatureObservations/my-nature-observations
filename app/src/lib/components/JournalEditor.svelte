@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, untrack, tick, type Snippet } from "svelte";
+  import DeleteEntryDialog from "$lib/components/DeleteEntryDialog.svelte";
+  import EntryOptions from "$lib/components/EntryOptions.svelte";
   import EntryWeather from "$lib/components/EntryWeather.svelte";
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
@@ -26,7 +28,7 @@
     onSessionChange,
     metadata,
   }: {
-    metadata?:Snippet<[Snippet]>;
+    metadata?: Snippet<[Snippet, Snippet | undefined]>;
     entryDate: string;
     isNew?: boolean;
     journalEntryId?: string | null;
@@ -130,6 +132,11 @@
   let pendingNavigationUrl = $state<string | null>(null);
   let allowDiscardNavigation = false;
   let savedContentJson = "";
+  let savedTitle = $state("");
+  let showDeleteConfirmation = $state(false);
+  let deletingEntry = $state(false);
+  let entryDeleted = $state(false);
+  let deleteFailed = $state(false);
   let savedEntryDate = $state("");
   let hasPendingChanges = $derived(
     generationConflict || hasUnsavedChanges ||
@@ -144,6 +151,32 @@
       dialog.close();
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true });
     } };
+  }
+
+  function canDeleteEntry() {
+    return !!journalEntryId && !!entryId && sessionGeneration !== null
+      && !isLoading && !loadError && !isEditing && !entryDeleted
+      && !hasPendingChanges && !currentSave && !isSaving && !photoDraft
+      && !photoBusy && !placeDirty && !placeBusy && !weatherDirty && !weatherBusy;
+  }
+
+  async function deleteSavedEntry() {
+    if (!showDeleteConfirmation || deletingEntry || !canDeleteEntry()) return;
+    deletingEntry = true;
+    deleteFailed = false;
+    try {
+      await invoke("delete_journal_entry", { id: entryId, generation: sessionGeneration });
+      entryDeleted = true;
+    } catch {
+      deleteFailed = true;
+    } finally {
+      deletingEntry = false;
+      showDeleteConfirmation = false;
+    }
+    if (entryDeleted) {
+      window.dispatchEvent(new Event("mno:journal-changed"));
+      await goto("/journal?latest=true");
+    }
   }
 
   function cancelLeaveConfirmation() {
@@ -172,6 +205,7 @@
   }
 
   beforeNavigate((navigation) => {
+    if (deletingEntry) { navigation.cancel(); return; }
     if (photoDraft) { navigation.cancel(); focusPhotoDraft?.(); return; }
     // Do not leave while changes are unsaved or a database write is running.
     if ((!hasPendingChanges && !isSaving && !weatherDirty && !weatherBusy && !placeDirty && !placeBusy && !photoBusy) || allowDiscardNavigation) return;
@@ -260,6 +294,7 @@ for (const block of blocks) {
         // Tauri otherwise calls destroy() after this listener, bypassing Rust's
         // CloseRequested guard. Only the reserved backend path may close us.
         event.preventDefault();
+        if (deletingEntry) return;
         if (photoDraft) { focusPhotoDraft?.(); return; }
         if (hasPendingChanges || isSaving || weatherDirty || weatherBusy || placeDirty || placeBusy || photoBusy) {
           pendingClose = true;
@@ -342,6 +377,7 @@ for (const block of blocks) {
           entryId = entry.id;
           savedContentJson = JSON.stringify(editor.getJSON());
           savedEntryDate = entry.entryDate;
+          savedTitle = entry.title;
           isLoading = false;
           if (startInEditMode) startEditing();
         }
@@ -431,7 +467,7 @@ for (const block of blocks) {
   }
 
   function startEditing() {
-    if (!editor || isLoading || loadError || documentProtected) return;
+    if (!editor || isLoading || loadError || documentProtected || deletingEntry || entryDeleted) return;
     saveMessage = "";
     saveError = false;
 
@@ -549,15 +585,16 @@ for (const block of blocks) {
 
         try {
           const result = versionToSave === 2
-            ? await invoke("save_journal_with_photographs", { entryId: ownerToSave, entryDate: dateToSave, title: titleToSave, contentJson, assets: assetsToSave, generation: generationToSave }).then(() => ({ id: ownerToSave! }))
+            ? await invoke("save_journal_with_photographs", { entryId: ownerToSave, entryDate: dateToSave, title: titleToSave, contentJson, assets: assetsToSave, generation: generationToSave, createEntry: entryId === null }).then(() => ({ id: ownerToSave! }))
             : await invoke<{ id: string }>("save_journal_entry", {
-                id: entryId ?? draftEntryId, entryDate: dateToSave, title: titleToSave, contentJson, generation: generationToSave,
+                id: entryId, newEntryId: entryId ? null : draftEntryId, entryDate: dateToSave, title: titleToSave, contentJson, generation: generationToSave,
               });
           if (versionToSave === 2) assetsToSave.forEach(asset => storedPhotographs.add(asset.asset_id));
 
           entryId = result.id;
           savedContentJson = contentJson;
           savedEntryDate = dateToSave;
+          savedTitle = titleToSave;
 
           window.dispatchEvent(new Event("mno:journal-changed"));
 
@@ -742,7 +779,27 @@ for (const block of blocks) {
 {#snippet weatherHeader()}
   <EntryWeather bind:this={weatherControl} ensureEntry={ensureWeatherEntry} {entryId} contextPending={hasPendingChanges || isSaving || placeDirty || placeBusy || photoBusy} editing={isEditing} date={entryDate} generation={sessionGeneration} locale={language.current} onDraft={(dirty, busy) => { weatherDirty = dirty; weatherBusy = busy; if (!dirty) weatherWarning = false; if (!dirty && !busy && documentProtected && isEditing) { isEditing = false; onEditingChange?.(false); } }} />
 {/snippet}
-{#if metadata}{@render metadata(weatherHeader)}{:else}{@render weatherHeader()}{/if}
+{#snippet savedEntryOptions()}
+  <EntryOptions locale={language.current}>
+    {#snippet children(closeAndFocus)}
+      <button type="button" onclick={() => { closeAndFocus(); startEditing(); }} disabled={deletingEntry}>
+        {m.journal_edit({}, { locale: language.current })}
+      </button>
+      {#if canDeleteEntry()}
+        <button type="button" onclick={() => { closeAndFocus(); deleteFailed = false; showDeleteConfirmation = true; }}>
+          {m.journal_delete_entry({}, { locale: language.current })}
+        </button>
+      {/if}
+    {/snippet}
+  </EntryOptions>
+{/snippet}
+{#if metadata}
+  {@render metadata(weatherHeader,
+    journalEntryId && !isEditing && !isLoading && !loadError && !documentProtected && !entryDeleted
+      ? savedEntryOptions : undefined)}
+{:else}
+  {@render weatherHeader()}
+{/if}
 
 <div class="editor">
   {#if isLoading}
@@ -753,6 +810,8 @@ for (const block of blocks) {
     <p class="load-status error" role="alert">{loadError}</p>
   {/if}
 
+  {#if deleteFailed}<p role="alert">{m.journal_delete_failed({}, { locale: language.current })}</p>{/if}
+
   {#if weatherWarning}<p role="alert">{m.weather_form_finishFirst({}, { locale: language.current })}</p>{/if}
   {#if placeWarning}<p role="alert">{m.place_finish_first({}, { locale: language.current })}</p>{/if}
 
@@ -760,7 +819,7 @@ for (const block of blocks) {
     <p class="load-status error" role="alert">{m.journal_document_protected({}, { locale: language.current })}</p>
   {/if}
 
-  {#if !isEditing}
+  {#if !isEditing && (!journalEntryId || saveMessage)}
     <div class="editor-actions">
       {#if saveMessage}
         <p
@@ -773,9 +832,11 @@ for (const block of blocks) {
         </p>
       {/if}
 
-      <button onclick={startEditing} disabled={isLoading || !!loadError || documentProtected}>
-        {m.journal_edit({}, { locale: language.current })}
-      </button>
+      {#if !journalEntryId}
+        <button type="button" onclick={startEditing} disabled={isLoading || !!loadError || documentProtected}>
+          {m.journal_edit({}, { locale: language.current })}
+        </button>
+      {/if}
     </div>
   {/if}
 
@@ -873,6 +934,7 @@ for (const block of blocks) {
 
     <div bind:this={editorElement}></div>
   </article>
+
 </div>
 
 {#if showLeaveConfirmation}
@@ -912,6 +974,11 @@ for (const block of blocks) {
         </button>
       </div>
   </dialog>
+{/if}
+
+{#if showDeleteConfirmation}
+  <DeleteEntryDialog title={savedTitle} date={savedEntryDate} locale={language.current} busy={deletingEntry}
+    oncancel={() => { showDeleteConfirmation = false; }} onconfirm={deleteSavedEntry} />
 {/if}
 
 <style>
@@ -991,23 +1058,6 @@ for (const block of blocks) {
     background: #d9d8d1;
   }
 
-  .editor-actions button {
-    border: none;
-    background: transparent;
-    color: #435b47;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 15px;
-    padding: 6px 10px;
-  }
-
-  .editor-actions button:hover:not(:disabled) {
-    background: #eef1eb;
-  }
-
-  .editor-actions button:disabled {
-    opacity: 0.6;
-    cursor: wait;
-  }
 
   .save-status {
     margin: 0;

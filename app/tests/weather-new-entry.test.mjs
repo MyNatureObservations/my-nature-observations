@@ -42,7 +42,7 @@ test('flush submits the actual weather form and a failed write retains the dirty
 test('header renders the sole weather control next to date/place and keeps it outside editor JSON',()=>{
  const source=read('../src/lib/components/JournalEditor.svelte');assert.equal((source.match(/<EntryWeather\s/g)||[]).length,1);
  assert.ok(source.indexOf('<EntryWeather')<source.indexOf('<article class="journal-entry">'));
- for(const p of ['../src/routes/journal/new/+page.svelte','../src/routes/journal/entries/[id]/+page.svelte']){const s=read(p);assert.match(s,/snippet metadata\(weather: Snippet\)/);assert.match(s,/@render weather\(\)/);}
+ for(const p of ['../src/routes/journal/new/+page.svelte','../src/routes/journal/entries/[id]/+page.svelte']){const s=read(p);assert.match(s,/snippet metadata\(weather: Snippet(?:, options: Snippet \| undefined)?\)/);assert.match(s,/@render weather\(\)/);}
  assert.match(read('../src/lib/components/WeatherTile.svelte'),/if\(editing && status.kind==='ready' && !status.data.manual\)form=true/);
  assert.match(read('../src/lib/components/WeatherTile.svelte'),/position:sticky;top:0/);
 });
