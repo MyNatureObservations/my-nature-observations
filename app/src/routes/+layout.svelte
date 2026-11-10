@@ -30,7 +30,7 @@
     const imported = restored && operation === "import";
     if (imported && importConfirmationConsumed) return;
     result = imported ? "imported" : restored ? "restored" : "previous";
-    await goto(operation === "import" ? "/" : "/journal");
+    await goto(operation === "import" || (restored && operation === "restore") ? "/" : "/journal");
   }
   let mode = $state<"checking" | "ready" | "recovery" | "blocked" | "windows_recovery" | "windows_restore_pending" | "windows_restore_uncertain">("checking");
   let locallyBlocked = false;

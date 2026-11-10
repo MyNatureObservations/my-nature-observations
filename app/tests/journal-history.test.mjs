@@ -98,11 +98,11 @@ function entryContext(query = "", date = "") {
   vm.runInContext(script(entry.replace('let entryDate = $state("")', `let entryDate = $state(${JSON.stringify(date)})`).replace('let isLoading = $state(true)', 'let isLoading = $state(false)')), context);
   return code => vm.runInContext(code,context);
 }
-test("entry return links preserve only safe timeline periods and leave normal/search navigation intact", () => {
+test("entry return links preserve safe timeline periods, Search queries and the default reading view", () => {
   assert.equal(entryContext("?from=history&year=2024&month=2")("backHref"), "/history?year=2024&month=2");
   assert.equal(entryContext("?from=history&undated=true")("backHref"), "/history?undated=true");
   assert.equal(entryContext("?from=history&year=https://other&month=1")("backHref"), "/history");
-  assert.equal(entryContext()("backHref"), "/journal/entries");
+  assert.equal(entryContext()("backHref"), "/journal?latest=true");
   assert.equal(entryContext("?from=search&q=%C3%B6rn")("backHref"), "/search?q=%C3%B6rn");
 });
 test("strict date fallback rejects normalized invalid dates without changing the stored string", () => {

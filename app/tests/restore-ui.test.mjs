@@ -164,10 +164,10 @@ function layoutHarness() {
   return {calls,destinations,dispose,navigate,event:()=>event(),block:()=>block(),run:code=>vm.runInContext(code,context)};
 }
 
-test('both verified import outcomes return home; restore retains journal navigation',async()=>{
+test('verified Restore and both Import outcomes return Home after recovery succeeds',async()=>{
   for (const [operation,action,destination,result] of [
     ['import','finish_new','/','imported'], ['import','continue','/','imported'],
-    ['restore','finish_new','/journal','restored'], ['import','keep_previous','/','previous'],
+    ['restore','finish_new','/','restored'], ['import','keep_previous','/','previous'],
     ['restore','keep_previous','/journal','previous'], ['unknown','finish_new','/journal','restored'],
   ]) {
     const root=layoutHarness(); await settle();root.calls[0].resolve('recovery');await settle();
@@ -260,7 +260,7 @@ test('leaving home does not consume restore or previous-journal confirmations',a
   for(const restored of [true,false]) {
     const root=layoutHarness();await settle();root.calls[0].resolve('recovery');await settle();
     await root.run(`recoveryFinished(${restored},"restore")`);
-    assert.deepEqual(root.destinations,['/journal']);assert.equal(root.run('result'),restored?'restored':'previous');
+    assert.deepEqual(root.destinations,[restored?'/':'/journal']);assert.equal(root.run('result'),restored?'restored':'previous');
     await root.navigate('/');await root.navigate('/settings/restore');
     assert.equal(root.run('result'),restored?'restored':'previous');assert.equal(root.run('importConfirmationConsumed'),false);
     root.dispose();

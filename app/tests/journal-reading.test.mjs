@@ -50,13 +50,15 @@ const placeUrl = componentUrl('../src/lib/components/EntryPlace.svelte', {
 const photographUrl = componentUrl("../src/lib/components/JournalPhotograph.svelte", { "$lib/journal-photographs": photographsUrl, "@tauri-apps/api/core": moduleUrl('export async function invoke(){throw new Error("SSR must not read photographs")}') });
 const contentUrl = componentUrl("../src/lib/components/JournalContent.svelte", { "$lib/components/JournalPhotograph.svelte": photographUrl });
 const { default: JournalReading } = await import(componentUrl("../src/lib/components/JournalReading.svelte", {
+  "$lib/components/DeleteEntryDialog.svelte": componentUrl("../src/lib/components/DeleteEntryDialog.svelte"),
+  "$lib/components/EntryOptions.svelte": componentUrl("../src/lib/components/EntryOptions.svelte"),
   "$lib/components/EntryPlace.svelte": placeUrl,
   "$lib/components/JournalContent.svelte": contentUrl,
   "$lib/components/WeatherTile.svelte": tileUrl,
   "$lib/weather": weatherUrl,
 }));
 const show = props => render(JournalReading, { props: {
-  entries: [], isLoading: false, errorMessage: "", locale: "sv", ...props,
+  entries: [], isLoading: false, errorMessage: "", locale: "sv", onEntryDeleted() {}, ...props,
 } }).body.replace(/<!--[\s\S]*?-->/g, "");
 const text = value => ({ type: "text", text: value });
 const paragraph = value => ({ type: "paragraph", content: [text(value)] });
@@ -77,6 +79,7 @@ async function routeHarness(response, generation = 1, { url = "https://example.i
   const context = vm.createContext({
     $state: value => value,
     $effect: callback => { effect = callback; },
+    untrack: callback => callback(),
     page: pageState,
     afterNavigate: callback => { afterNavigation = callback; },
     resolveJournalTarget: reading.resolveJournalTarget,
@@ -204,12 +207,200 @@ test("loading, empty journal and read failure are distinct states", () => {
   assert.doesNotMatch(failed, /första berättelse/);
 });
 
-test("each entry has a stable ID anchor and its own existing editing route", () => {
+test("each entry has a stable ID anchor and a native detail link and closed options above the content", () => {
   const html = show({ entries: [entry("A", "2026-10-21"), entry("B", "2026-10-21")] });
   for (const id of ["A", "B"]) {
     assert.match(html, new RegExp(`id="journal-entry-${id}"`));
+    const article = html.match(new RegExp(`<article id="journal-entry-${id}"[\\s\\S]*?</article>`))[0];
+    assert.ok(article.indexOf('class="journal-text') > article.indexOf('aria-label="Anteckningsalternativ"'));
+    assert.match(article, /aria-label="Anteckningsalternativ" aria-expanded="false"/);
+    assert.match(article, /class="actions[^"]*" hidden/);
+    assert.match(html, new RegExp(`class="entry-open[^"]*" href="/journal/entries/${id}"`));
     assert.match(html, new RegExp(`href="/journal/entries/${id}\\?edit=true&amp;from=journal"`));
   }
+});
+
+test("photo-only entries retain a keyboard-accessible native detail link", () => {
+  const photo = { type: "journalImage", attrs: {
+    nodeId: "d581b905-b692-498d-8955-830251b82825",
+    assetId: "b7d05577-9248-49b7-af7b-2a240ee52bd7",
+    placement: "row", size: "large",
+  } };
+  const html = show({ entries: [{ ...entry("photo", "2026-10-21", [photo]), documentVersion: 2 }], locale: "en" });
+  assert.match(html, /<a class="entry-open[^"]*" href="\/journal\/entries\/photo">View entry/);
+  assert.match(html, /<figure/);
+});
+
+test("entry clicks preserve selection, photos, inline links and menu interactions", () => {
+  const script = source("../src/lib/components/JournalReading.svelte")
+    .split("  function openEntryFromClick")[1].split("  $effect")[0];
+  let opens = 0;
+  let selected = false;
+  class Element {
+    constructor(selector) { this.selector = selector; }
+    closest(selectors) { return selectors.split(", ").includes(this.selector) ? this : null; }
+  }
+  const article = { querySelector: selector => {
+    assert.equal(selector, ".entry-open");
+    return { click: () => { opens++; } };
+  } };
+  const window = { getSelection: () => ({
+    isCollapsed: !selected,
+    containsNode: node => node === article,
+  }) };
+  const handler = vm.runInNewContext(ts.transpileModule(
+    `function openEntryFromClick${script}
+openEntryFromClick;`,
+    { compilerOptions: { target: ts.ScriptTarget.ESNext } },
+  ).outputText, { Element, window });
+  const click = (selector, overrides = {}) => handler({
+    button: 0, currentTarget: article, target: new Element(selector), ...overrides,
+  });
+  for (const selector of ["a", "button", ".mno-photograph", ".entry-metadata", ".entry-options"]) click(selector);
+  click("p", { metaKey: true });
+  click("p", { defaultPrevented: true });
+  selected = true;
+  click("p");
+  assert.equal(opens, 0);
+  selected = false;
+  click("p");
+  assert.equal(opens, 1);
+});
+
+test("reading menus offer Delete only for editable entries with a loaded generation", () => {
+  const saved = entry("saved", "2026-10-21");
+  assert.match(show({ entries: [saved], generation: 7, locale: "en" }), /Delete entry/);
+  assert.doesNotMatch(show({ entries: [saved], locale: "en" }), /Delete entry/);
+  assert.doesNotMatch(show({ entries: [{ ...saved, editable: false }], generation: 7, locale: "en" }), /Delete entry/);
+});
+
+test("shared confirmation identifies the selected entry and focuses Cancel first", async () => {
+  const path = "../src/lib/components/DeleteEntryDialog.svelte";
+  const component = await import(componentUrl(path));
+  const html = render(component.default, { props: {
+    title: "A lake walk", date: "2026-10-21", locale: "en", busy: false,
+    oncancel() {}, onconfirm() {},
+  } }).body.replace(/<!--[\s\S]*?-->/g, "");
+  assert.match(html, /Permanently delete “A lake walk” \(2026-10-21\)\? Original photo files will be kept[.]/);
+  assert.match(html.match(/<button[^>]*>[^<]*<\/button>/)[0], />Cancel</);
+  const script = source(path).match(/  function mountDialog[\s\S]*?\n  }/)[0];
+  const focused = [];
+  class HTMLElement {
+    isConnected = true;
+    focus() { focused.push("trigger"); }
+  }
+  const mount = vm.runInNewContext(ts.transpileModule(
+    `${script}\nmountDialog;`, { compilerOptions: { target: ts.ScriptTarget.ESNext } },
+  ).outputText, { document: { activeElement: new HTMLElement() }, HTMLElement });
+  const lifecycle = mount({
+    showModal: () => focused.push("modal"),
+    querySelector: selector => {
+      assert.equal(selector, "button");
+      return { focus: () => focused.push("Cancel") };
+    },
+    close: () => focused.push("closed"),
+  });
+  lifecycle.destroy();
+  assert.deepEqual(focused, ["modal", "Cancel", "closed", "trigger"]);
+});
+
+test("reading deletion cancels safely, reports failure on the selected entry, and commits only that entry", async () => {
+  const component = source("../src/lib/components/JournalReading.svelte");
+  const script = component.slice(component.indexOf("  let deleteTarget"), component.indexOf("  function openEntryFromClick"));
+  const first = entry("first", "2026-10-22");
+  const selected = entry("selected", "2026-10-21");
+  const next = entry("next", "2026-10-20");
+  const calls = [], effects = [];
+  let fail = true;
+  let complete;
+  const context = vm.createContext({
+    $state: value => value,
+    groups: [{ entries: [first, selected, next] }],
+    generation: 7, first, selected, next,
+    closeAndFocus: () => effects.push("trigger"),
+    invoke(command, args) {
+      calls.push([command, { ...args }]);
+      if (fail) return Promise.reject(new Error("synthetic deletion failure"));
+      return new Promise(resolve => { complete = resolve; });
+    },
+    onEntryDeleted: id => effects.push(id),
+    window: { dispatchEvent: event => effects.push(event.type) },
+    tick: async () => {},
+    Event,
+    journalEntryAnchor: reading.journalEntryAnchor,
+    document: { getElementById: id => ({ querySelector: () => ({ focus: () => effects.push(id) }) }) },
+  });
+  vm.runInContext(ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText, context);
+  const run = code => vm.runInContext(code, context);
+  run("requestDelete(selected, closeAndFocus); cancelDelete()");
+  await run("confirmDelete()");
+  assert.deepEqual(calls, []);
+
+  run("requestDelete(selected, closeAndFocus)");
+  await run("confirmDelete()");
+  assert.equal(run("deleteFailedId"), "selected");
+  assert.deepEqual(effects, ["trigger", "trigger"]);
+
+  fail = false;
+  run("requestDelete(selected, closeAndFocus); requestDelete(first, closeAndFocus)");
+  const deletion = run("confirmDelete()");
+  await run("confirmDelete()");
+  run("cancelDelete()");
+  assert.equal(run("deleteTarget.id"), "selected");
+  assert.deepEqual(effects, ["trigger", "trigger", "trigger"]);
+  complete();
+  await deletion;
+  assert.deepEqual(calls, [
+    ["delete_journal_entry", { id: "selected", generation: 7 }],
+    ["delete_journal_entry", { id: "selected", generation: 7 }],
+  ]);
+  assert.deepEqual(effects, ["trigger", "trigger", "trigger", "selected", "mno:journal-changed", "journal-entry-next"]);
+});
+
+test("entry options leave Tab available and Escape closes and focuses the trigger", () => {
+  const options = source("../src/lib/components/EntryOptions.svelte");
+  const script = options.match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^  import .*;\n/gm, "");
+  const listeners = new Map();
+  let startEffect;
+  let focusCount = 0;
+  const Node = class {};
+  const item = new Node();
+  const button = Object.assign(new Node(), {
+    focus: () => { focusCount++; },
+    parentElement: { contains: target => target === item || target === button },
+  });
+  const props = Object.assign(() => ({ locale: "en", children() {} }), { id: () => "fixture" });
+  const context = vm.createContext({
+    $props: props,
+    $state: value => value,
+    $effect: callback => { startEffect = callback; },
+    Node, button,
+    document: {
+      addEventListener: (name, handler) => listeners.set(name, handler),
+      removeEventListener: name => listeners.delete(name),
+    },
+  });
+  vm.runInContext(ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText, context);
+  const run = code => vm.runInContext(code, context);
+  assert.match(options, /<button[\s\S]*?onclick=\{toggle\}/);
+  run("trigger = button; toggle()");
+  assert.equal(run("open"), true);
+  const stop = startEffect();
+  let prevented = 0;
+  const key = value => listeners.get("keydown")({
+    key: value, target: item,
+    preventDefault: () => { prevented++; },
+    stopPropagation() {},
+  });
+  key("Tab");
+  assert.equal(prevented, 0);
+  assert.equal(run("open"), true);
+  key("Escape");
+  assert.equal(prevented, 1);
+  assert.equal(run("open"), false);
+  assert.equal(focusCount, 2, "opening and Escape focus the trigger");
+  stop();
+  assert.equal(listeners.size, 0);
 });
 
 test("actual page reads once through generation protection and never invokes saving", async () => {

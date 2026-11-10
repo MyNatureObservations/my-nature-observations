@@ -357,6 +357,7 @@ pub(crate) fn save(
     title: &str,
     json: &str,
     assets: &[Asset],
+    create_entry: bool,
 ) -> Result<(), String> {
     use rusqlite::OptionalExtension;
     if entry_id.is_empty() {
@@ -372,6 +373,12 @@ pub(crate) fn save(
         )
         .optional()
         .map_err(|e| e.to_string())?;
+    if create_entry && previous.is_some() {
+        return Err("journal_entry_already_exists".into());
+    }
+    if !create_entry && previous.is_none() {
+        return Err("journal_entry_not_found".into());
+    }
     if let Some((version, original)) = previous {
         let valid = match version {
             1 => crate::backup::restore::document_is_editable(&original),
@@ -408,6 +415,7 @@ pub(crate) fn save_journal_with_photographs(
     title: String,
     content_json: String,
     assets: Vec<Asset>,
+    create_entry: bool,
 ) -> Result<(), String> {
     search.with_write(|| {
         let _operation = state.operation(Some(generation))?;
@@ -419,6 +427,7 @@ pub(crate) fn save_journal_with_photographs(
             &title,
             &content_json,
             &assets,
+            create_entry,
         )
     })
 }

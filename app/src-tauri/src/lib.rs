@@ -158,6 +158,7 @@ pub fn run() {
             journal_history::journal_history_overview,
             journal_history::journal_history_entries,
             journal::save_journal_entry,
+            journal::delete_journal_entry,
             photographs::prepare_journal_photograph,
             photographs::select_journal_photograph,
             photographs::save_journal_with_photographs,

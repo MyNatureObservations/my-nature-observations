@@ -54,7 +54,7 @@ impl Fixture {
                 &self.state,
                 generation,
                 || self.open(),
-                Some(id.into()),
+                crate::journal::EntryTarget::Existing(id.into()),
                 "2026-10-26".into(),
                 "Saved title".into(),
                 document(text),
@@ -245,7 +245,7 @@ fn maintenance_recovery_and_stale_generation_never_open_source() {
             &f.state,
             1,
             || panic!("old generation"),
-            Some("entry".into()),
+            crate::journal::EntryTarget::Existing("entry".into()),
             "2026-01-01".into(),
             "title".into(),
             document("changed"),
@@ -271,10 +271,11 @@ fn paging_and_rebuild_after_deleted_row() {
     assert!(!second.more);
     f.search
         .with_write(|| {
-            f.open()?
-                .execute("DELETE FROM journal_entries WHERE id='00'", [])
+            let _operation = f.state.operation(Some(1))?;
+            let mut db = f.open()?;
+            db.execute_batch(database::weather_schema::DDL)
                 .map_err(sql)?;
-            Ok(())
+            journal::delete_entry(&mut db, "00")
         })
         .unwrap();
     assert_eq!(f.find("fågel").entries[0].id, "01");

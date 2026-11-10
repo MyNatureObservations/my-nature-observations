@@ -29,7 +29,7 @@
     }
     return page.url.searchParams.get("undated") === "true" ? "/history?undated=true" : "/history";
   }
-  const backHref = $derived(fromHistory ? historyBackHref() : fromSearch ? `/search?q=${encodeURIComponent(page.url.searchParams.get("q") ?? "")}` : "/journal/entries");
+  const backHref = $derived(fromHistory ? historyBackHref() : fromSearch ? `/search?q=${encodeURIComponent(page.url.searchParams.get("q") ?? "")}` : "/journal?latest=true");
 
   let entryDate = $state("");
   let isEditing = $state(false);
@@ -110,7 +110,7 @@
       <p class="message error" role="alert">{errorMessage}</p>
     {:else}
       <section class="journal-entry">
-        {#snippet metadata(weather: Snippet)}
+        {#snippet metadata(weather: Snippet, options: Snippet | undefined)}
         <div class="entry-metadata">
           {#if isEditing && validEntryDate}
             <DatePicker bind:value={entryDate} />
@@ -119,6 +119,9 @@
           {/if}
           <EntryPlace entryId={editorEntryId} {generation} editing={isEditing} locale={language.current} onDraft={(dirty, busy) => { placeDirty = dirty; placeBusy = busy; }} />
           {@render weather()}
+          {#if options}
+            <div class="entry-options-slot">{@render options()}</div>
+          {/if}
         </div>
         {/snippet}
 
@@ -211,6 +214,8 @@
     flex-wrap: wrap;
     margin-bottom: 20px;
   }
+
+  .entry-options-slot { margin-inline-start: auto; flex: none; }
 
   .entry-metadata :global(.date-picker) { margin-bottom: 0; }
 
