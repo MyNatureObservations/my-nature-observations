@@ -274,7 +274,7 @@ copying personal data into test profiles.
 ## OpenStreetMap identification and v0.1 acceptance
 
 The shared window `userAgent` is
-`MyNatureObservations/0.1.0 (+https://github.com/MyNatureObservations/my-nature-observations)`.
+`MyNatureObservations/0.1.1 (+https://github.com/MyNatureObservations/my-nature-observations)`.
 Tauri 2.12.3 passes this to Wry 0.57.0's WKWebView `customUserAgent`, including
 packaged builds. DEV inherits it. It applies to webview HTTP traffic, including
 Leaflet images, not Rust's weather client. Keep the version aligned on releases.
