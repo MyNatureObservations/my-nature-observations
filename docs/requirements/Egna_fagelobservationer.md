@@ -6,7 +6,14 @@
 
 - Användaren kan registrera egna fågelobservationer lokalt i MNO.
 - Artval utgår från AviList-taxonomi med svenska och engelska namn. Tillgången till data och namn behöver klarläggas före implementation.
-- Observationer kan kopplas till journalanteckningar när användaren har nytta av det. Kopplingen är frivillig.
+- Det finns en observationslista per plats och datum.
+- Varje återanvändbar plats har ett namn och koordinater. En position gäller för hela listan. Användaren kan skapa fler platser för andra positioner.
+- Besöket kan ha frivillig start- och sluttid.
+- Varje fågelrad kräver art och antal. En kommentar och ett foto är frivilliga. Originalfotofiler bevaras.
+- Artinmatning stöder svenska och engelska namn.
+- Användaren kan lägga till arter en i taget eller klistra in rader som ”Talgoxe 6st”. Tolkade rader granskas och rättas före sparande. Båda inmatningssätten kan användas i samma lista.
+- En lista kan sparas fristående och kopplas till en journalanteckning direkt eller senare. En journalanteckning kan länka till flera listor från olika platser.
+- Journaltexten skrivs av användaren. Automatiska sammanfattningar och statistik skjuts upp.
 - Registrering kräver inget externt konto och inget exportsteg. Tjänsteintegrationer och exportfunktioner hör till separat prioritering.
 
 ## Relevanta principer från konceptet
@@ -23,13 +30,19 @@ Konceptets fristående bibliotek, relationsgraf, analysverkstad, presentationsla
 ## Öppna frågor för beslut
 
 - **AviList och namn.** Vilken utgåva och åtkomstväg ska användas? Vilka villkor gäller för lokal distribution och uppdatering? Varifrån kommer svenska och engelska namn, hur kopplas de till AviList och vad visas när ett namn saknas? Detta är ännu inte verifierat.
-- **Observationens minsta innehåll.** Vilka uppgifter är obligatoriska respektive frivilliga, exempelvis art, datum, plats, antal och kommentar? Hur ska osäker identifiering uttryckas?
-- **Journalens länkar.** Hur ska en kopplad observation visas i journalen och hur hittar användaren tillbaka? Ska flera observationer kunna kopplas till samma anteckning, och en observation till flera anteckningar?
-- **Avlänkning och radering.** Vad händer med observationen när en journalanteckning raderas eller en länk tas bort? Vad händer i journalen när en observation raderas? Förslag att granska är att avlänkning bevarar båda objekten och att permanent radering kräver ett separat tydligt beslut.
+- **Journalens länkar.** Hur ska en kopplad lista visas i journalen och hur hittar användaren tillbaka? Ska en lista kunna länkas till flera journalanteckningar?
+- **Avlänkning och radering.** Vad händer med listan och dess observationer när en journalanteckning raderas eller en länk tas bort? Vad händer med journalens länkar när en lista eller en observation raderas? Förslag att granska är att avlänkning bevarar båda objekten och att permanent radering kräver ett separat tydligt beslut.
 - **Bevarande.** Hur ska nya observationer och deras kopplingar omfattas av MNO:s backup och återställning? Kravet på bevarande behöver avgränsas innan leverans.
 
 ## Underlag och senare acceptans
 
-Underlaget är roadmapkortet ”Egna fågelobservationer” och Concept v0.5. Vid genomgång av tillgängligt projektmaterial hittades inget separat fågelvisionsdokument. Ett sådant dokument var därför inte tillgängligt för jämförelse. Eventuella ytterligare krav därifrån behöver granskas separat.
+Underlaget är roadmapkortet ”Egna fågelobservationer”, Concept v0.5 och den överenskomna produktdiskussion som återges i arbetsordern för denna uppdatering. Produktdiskussionen fastställer listans innehåll, inmatningssätt och frivilliga journalkopplingar. Vid genomgång av tillgängligt projektmaterial hittades inget separat fågelvisionsdokument. Ett sådant dokument var därför inte tillgängligt för jämförelse. Eventuella ytterligare krav därifrån behöver granskas separat.
 
-Efter produktbesluten bör acceptansen omfatta lokal registrering utan externt konto, artval med beslutad namnvisning och en frivillig journalkoppling. Testerna ska också verifiera beslutade konsekvenser för avlänkning, radering och bevarande med syntetiska observationer.
+Acceptansen ska använda syntetiska observationer och omfatta följande.
+
+- Skapa och återöppna en fristående lista för en plats och ett datum. Återanvänd en namngiven plats med koordinater och använd en separat plats för en annan position. Kontrollera att positionen gäller hela listan.
+- Spara besök både med och utan start- och sluttid.
+- Kräv art och antal på varje fågelrad. Spara rader både med och utan kommentar och foto. Kontrollera att originalfotofilen bevaras.
+- Mata in arter med svenska och engelska namn. Blanda enskild registrering och inklistrade rader i samma lista. Granska och rätta tolkningen av exempelvis ”Talgoxe 6st” före sparande.
+- Koppla en lista till journalen direkt och i efterhand. Länka flera listor från olika platser till samma journalanteckning. Kontrollera att journaltexten förblir användarskriven.
+- Komplettera acceptansen efter beslut om AviList-underlag, länkvisning, en lista i flera anteckningar, avlänkning, radering samt backup och återställning.
