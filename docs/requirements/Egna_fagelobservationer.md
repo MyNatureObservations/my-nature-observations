@@ -5,7 +5,7 @@
 ## Överenskommen omfattning
 
 - Användaren kan registrera egna fågelobservationer lokalt i MNO.
-- Artval utgår från AviList-taxonomi med svenska och engelska namn. Tillgången till data och namn behöver klarläggas före implementation.
+- Artval utgår från AviList-taxonomi med svenska och engelska namn. Den granskade exportens version samt de svenska namnens källa och återdistributionsvillkor behöver verifieras före användning.
 - Det finns en observationslista per plats och datum.
 - Varje återanvändbar plats har ett namn och koordinater. En position gäller för hela listan. Användaren kan skapa fler platser för andra positioner.
 - Besöket kan ha frivillig start- och sluttid.
@@ -35,9 +35,19 @@
 
 Konceptets fristående bibliotek, relationsgraf, analysverkstad, presentationslager, AI-hjälp, synk och tjänsteintegrationer ingår inte i detta kravförslag.
 
+## Granskat dataunderlag
+
+CSV-exporten `avilist-extended-33698-taxa.csv` granskades den 11 november 2026. Den innehåller 33 698 taxonrader totalt. Av dessa har 11 172 rangen `species`. Samtliga 11 172 arter har engelskt AviList-namn och ett ifyllt, unikt Avibase-ID. Svenska namn finns för 11 144 arter och saknas för 28. Namnen och identifierarna finns på samma rader i denna export.
+
+Föreslagen reservvisning för de 28 arterna utan svenskt namn är det engelska AviList-namnet tillsammans med det vetenskapliga namnet. Förslaget anger ingen ny svensk översättning.
+
+Exportens innehåll visar namnens täckning men fastställer inte version, proveniens eller återdistributionsrätt. Kolumnrubrikerna för Clements och BirdLife innehåller dessutom platshållare för versionsvärden. Versions- och rättighetskontrollen nedan kvarstår.
+
+Granskad fils SHA-256 är `be9df523541c42736f21696be902eb9adabfcc4b9f4501c2562c88eac4d81ed5`.
+
 ## Öppna frågor för beslut
 
-- **AviList och namn.** Vilken utgåva och åtkomstväg ska användas? Vilka villkor gäller för lokal distribution och uppdatering? Varifrån kommer svenska och engelska namn, hur kopplas de till AviList och vad visas när ett namn saknas? Detta är ännu inte verifierat.
+- **Exportens version och svenska namn.** Fastställ den granskade exportens AviList-version samt de svenska namnens källa och villkor för återdistribution i MNO. Kontrollen är öppen tills uppgifterna har verifierats. En separat utredning av mappning till en annan svensk namnlista ersätts av denna avgränsade kontroll.
 - **Journalens länkar.** Hur hittar användaren tillbaka från den fullständiga listan till journalanteckningen?
 
 ## Underlag och senare acceptans
@@ -60,4 +70,5 @@ Acceptansen ska använda syntetiska observationer och omfatta följande.
 - Säkerhetskopiera och återställ både länkade och fristående listor. Kontrollera att samtliga listor, artidentifieringar, antal, kommentarer, platser och koordinater, besökstider och väder finns kvar.
 - Kontrollera efter återställning att lagrade fotoförhandsvisningar och referenser till originalfiler bevaras och att originalfotofiler hanteras enligt MNO:s befintliga backuppolicy.
 - Återställ en lista som är länkad till flera journalanteckningar. Kontrollera att alla kopplingar finns kvar och refererar till samma återställda lista samt att dess förhandsvisningar visar rätt innehåll.
-- Komplettera acceptansen efter beslut om AviList-underlag och återgång till journalen.
+- Kontrollera det granskade underlagets artantal, engelska namn och unika Avibase-ID:n samt svensk namntäckning. Om reservvisningen antas, kontrollera engelskt och vetenskapligt namn för arter utan svenskt namn.
+- Komplettera acceptansen efter verifiering av exportens version och de svenska namnens källa och återdistributionsvillkor samt beslut om återgång till journalen.
