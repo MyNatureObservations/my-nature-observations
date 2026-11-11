@@ -17,7 +17,8 @@
 - Varje lista kan ha frivilligt väder för sin egen plats och sitt besök. Vädret gäller listans fågelrader och är oberoende av journalanteckningens väder. Användaren kan ange vädret manuellt eller hämta det när lämpliga data finns tillgängliga. Vädret kan visas kompakt tillsammans med plats och tid.
 - Listor kan redigeras och raderas oberoende av journalanteckningar.
 - När en journalanteckning raderas bevaras dess länkade observationslistor.
-- Avlänkning bevarar både listan och journalanteckningen.
+- En observationslista kan länkas till flera journalanteckningar. Alla förhandsvisningar refererar till samma lista, så redigeringar återspeglas överallt där den är länkad.
+- Avlänkning bevarar både listan och journalanteckningen. Om en länk tas bort bevaras också listans övriga länkar.
 - Att radera en lista kräver bekräftelse. Listans förhandsvisningar tas bort från journalen, medan journaltext och originalfotofiler bevaras.
 - Journaltexten skrivs av användaren. Automatiska sammanfattningar och statistik skjuts upp.
 - Registrering kräver inget externt konto och inget exportsteg. Tjänsteintegrationer och exportfunktioner hör till separat prioritering.
@@ -36,12 +37,12 @@ Konceptets fristående bibliotek, relationsgraf, analysverkstad, presentationsla
 ## Öppna frågor för beslut
 
 - **AviList och namn.** Vilken utgåva och åtkomstväg ska användas? Vilka villkor gäller för lokal distribution och uppdatering? Varifrån kommer svenska och engelska namn, hur kopplas de till AviList och vad visas när ett namn saknas? Detta är ännu inte verifierat.
-- **Journalens länkar.** Hur hittar användaren tillbaka från den fullständiga listan till journalanteckningen? Ska en lista kunna länkas till flera journalanteckningar?
+- **Journalens länkar.** Hur hittar användaren tillbaka från den fullständiga listan till journalanteckningen?
 - **Bevarande.** Hur ska nya observationer och deras kopplingar omfattas av MNO:s backup och återställning? Kravet på bevarande behöver avgränsas innan leverans.
 
 ## Underlag och senare acceptans
 
-Underlaget är roadmapkortet ”Egna fågelobservationer”, Concept v0.5 och den överenskomna produktdiskussion som återges i arbetsordern för denna uppdatering. Produktdiskussionen fastställer listans innehåll, inmatningssätt, frivilliga journalkopplingar, kompakta förhandsvisningar, listans eget väder samt regler för redigering, avlänkning och radering. Vid genomgång av tillgängligt projektmaterial hittades inget separat fågelvisionsdokument. Ett sådant dokument var därför inte tillgängligt för jämförelse. Eventuella ytterligare krav därifrån behöver granskas separat.
+Underlaget är roadmapkortet ”Egna fågelobservationer”, Concept v0.5 och den överenskomna produktdiskussion som återges i arbetsordern för denna uppdatering. Produktdiskussionen fastställer listans innehåll, inmatningssätt, frivilliga journalkopplingar, kompakta förhandsvisningar, listans eget väder samt regler för redigering, flera journalkopplingar, avlänkning och radering. Vid genomgång av tillgängligt projektmaterial hittades inget separat fågelvisionsdokument. Ett sådant dokument var därför inte tillgängligt för jämförelse. Eventuella ytterligare krav därifrån behöver granskas separat.
 
 Acceptansen ska använda syntetiska observationer och omfatta följande.
 
@@ -54,6 +55,6 @@ Acceptansen ska använda syntetiska observationer och omfatta följande.
 - Spara en lista utan väder, med manuellt väder och med hämtat väder när lämpliga data finns. Kontrollera att vädret avser listans plats och besök, delas av dess fågelrader och kan skilja sig från journalanteckningens väder utan att det senare ändras.
 - Redigera och radera fristående listor. Redigera även en länkad lista oberoende av journalanteckningen.
 - Radera en journalanteckning med länkade listor och kontrollera att listorna och deras observationer finns kvar.
-- Ta bort en journalkoppling och kontrollera att både listan och journalanteckningen finns kvar.
+- Länka samma lista till flera journalanteckningar. Redigera listan och kontrollera att samtliga förhandsvisningar visar ändringarna. Ta bort en av kopplingarna och kontrollera att listan, journalanteckningen och listans övriga kopplingar finns kvar.
 - Avbryt bekräftelsen för radering av en lista och kontrollera att listan och dess förhandsvisningar finns kvar. Bekräfta sedan raderingen och kontrollera att listan och dess journalförhandsvisningar försvinner, medan journaltext och originalfotofiler bevaras.
-- Komplettera acceptansen efter beslut om AviList-underlag, återgång till journalen, en lista i flera anteckningar samt backup och återställning.
+- Komplettera acceptansen efter beslut om AviList-underlag, återgång till journalen samt backup och återställning.
