@@ -5,7 +5,7 @@
 ## Överenskommen omfattning
 
 - Användaren kan registrera egna fågelobservationer lokalt i MNO.
-- Artval utgår från AviList-taxonomi med svenska och engelska namn. Den granskade exportens version samt de svenska namnens källa och återdistributionsvillkor behöver verifieras före användning.
+- Artval utgår från AviList-taxonomi med svenska och engelska namn. Den granskade exporten matchar AviList v2026. Återdistributionsvillkoren för dess svenska namn behöver klarläggas före paketering.
 - Det finns en observationslista per plats och datum.
 - Varje återanvändbar plats har ett namn och koordinater. En position gäller för hela listan. Användaren kan skapa fler platser för andra positioner.
 - Besöket kan ha frivillig start- och sluttid.
@@ -27,6 +27,10 @@
 - Journaltexten skrivs av användaren. Automatiska sammanfattningar och statistik skjuts upp.
 - Registrering kräver inget externt konto och inget exportsteg. Tjänsteintegrationer och exportfunktioner hör till separat prioritering.
 
+## Överenskommen utgångspunkt för gränssnittet
+
+Skissen journal → observationslista är överenskommen utgångspunkt för gränssnittet. Från journalanteckningen skapar användaren en lista eller länkar en befintlig. En ny lista får redigerbara förslag från journalens datum och plats och länkas efter lyckat sparande. Den öppnade listan har egna frivilliga besökstider och eget väder. Journalen visar listans kompakta förhandsvisning under texten. Den fristående ingången kompletterar detta flöde. Detaljerad utformning och tekniska val återstår.
+
 ## Relevanta principer från konceptet
 
 [Concept v0.5](../vision/MNO_CONCEPT_v0.5.md) ger följande vägledning för denna avgränsning.
@@ -44,13 +48,21 @@ CSV-exporten `avilist-extended-33698-taxa.csv` granskades den 11 november 2026. 
 
 Föreslagen reservvisning för de 28 arterna utan svenskt namn är det engelska AviList-namnet tillsammans med det vetenskapliga namnet. Förslaget anger ingen ny svensk översättning.
 
-Exportens innehåll visar namnens täckning men fastställer inte version, proveniens eller återdistributionsrätt. Kolumnrubrikerna för Clements och BirdLife innehåller dessutom platshållare för versionsvärden. Versions- och rättighetskontrollen nedan kvarstår.
+### Verifierad version och namnproveniens
+
+Den 11 november 2026 jämfördes samtliga 33 698 rader och 26 taxonomikolumner med Explorers officiella v2026-data enligt dess exportkonvertering. Alla 876 148 celler matchade. Två rich-text-värden i beslutssammanfattningarna exporteras som `[object Object]`; detta är en begränsning i exportens innehåll. CSV-filens taxonomidel är därmed verifierad mot v2026. Versionsmetadata anger publicering den 20 oktober 2026. Rubrikernas kvarvarande versionsplatshållare fastställer inte utgåvan. [Explorers metadata](https://explore.avilist.org/versions.json) · [v2026-data](https://explore.avilist.org/data/avilist-2026.json)
+
+Explorers publicerade klient hämtar alternativa namn från eBirds taxonomi-API med språkparametern `sv`. Den svenska exportkolumnen fylls på artnivå genom uppslag på Cornell-artkod. AviLists officiella beskrivning bekräftar eBird som källa för alternativa namn. eBird anger Erling Jirle, Örjan Sjögren och Markus Lagerqvist som leverantörer och förvaltare av de svenska namnen. Detta verifierar källkedjan, men fastställer inte exakt datum eller revision för namnsvaret när den granskade CSV-filen skapades. [Explorer](https://explore.avilist.org/) · [AviLists beskrivning](https://www.avilist.org/avilist-updates-june-2026/) · [eBirds namndokumentation](https://support.ebird.org/en/support/solutions/articles/48000804865)
+
+AviList v2026 är publicerad under CC BY 4.0 och kan distribueras offline med angiven upphovskälla, version, licens och bearbetningar. Den licensuppgiften verifierar inte separat rätt att återdistribuera den tillagda svenska eBird-kolumnen. eBirds API-villkor hänvisar till dess dataåtkomstvillkor. Dessa begränsar bland annat kommersiellt bruk och distribution av originaldata till tredje part. Något särskilt tillstånd eller undantag för offlinepaketering av denna svenska namnkolumn har inte verifierats. MNO behöver klarlägga den rättigheten med Cornell/eBird innan kolumnen paketeras eller publiceras som appdata. [AviList v2026](https://www.avilist.org/checklist/v2026/) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) · [API-villkor](https://www.birds.cornell.edu/home/ebird-api-terms-of-use/) · [Dataåtkomstvillkor](https://www.birds.cornell.edu/home/ebird-data-access-terms-of-use/)
+
+eBird dokumenterar att svenska namn kan omfatta snedstreckskombinationer där taxonomiernas artgränser skiljer sig. Namntäckningen i exporten bevisar därför inte att varje svenskt namn entydigt avser exakt samma taxonkoncept. Sådana etiketter behöver bevaras och granskas utan att MNO gissar en snävare identifiering. [eBirds namndokumentation](https://support.ebird.org/en/support/solutions/articles/48000804865)
 
 Granskad fils SHA-256 är `be9df523541c42736f21696be902eb9adabfcc4b9f4501c2562c88eac4d81ed5`.
 
 ## Öppna frågor för beslut
 
-- **Exportens version och svenska namn.** Fastställ den granskade exportens AviList-version samt de svenska namnens källa och villkor för återdistribution i MNO. Kontrollen är öppen tills uppgifterna har verifierats. En separat utredning av mappning till en annan svensk namnlista ersätts av denna avgränsade kontroll.
+- **Svenska namnens återdistribution.** Klarlägg tillstånd och villkor för att paketera och återdistribuera den granskade exportens svenska eBird-namn offline i MNO och som offentliga appdata. Frågan är öppen tills detta har verifierats. Version och källkedja är verifierade ovan.
 - **Journalens länkar.** Hur hittar användaren tillbaka från den fullständiga listan till journalanteckningen?
 
 ## Underlag och senare acceptans
@@ -78,4 +90,4 @@ Acceptansen ska använda syntetiska observationer och omfatta följande.
 - Kontrollera efter återställning att lagrade fotoförhandsvisningar och referenser till originalfiler bevaras och att originalfotofiler hanteras enligt MNO:s befintliga backuppolicy.
 - Återställ en lista som är länkad till flera journalanteckningar. Kontrollera att alla kopplingar finns kvar och refererar till samma återställda lista samt att dess förhandsvisningar visar rätt innehåll.
 - Kontrollera det granskade underlagets artantal, engelska namn och unika Avibase-ID:n samt svensk namntäckning. Om reservvisningen antas, kontrollera engelskt och vetenskapligt namn för arter utan svenskt namn.
-- Komplettera acceptansen efter verifiering av exportens version och de svenska namnens källa och återdistributionsvillkor samt beslut om återgång till journalen.
+- Komplettera acceptansen efter klarläggande av de svenska namnens återdistributionsvillkor samt beslut om återgång till journalen.
