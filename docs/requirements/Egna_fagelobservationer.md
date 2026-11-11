@@ -10,10 +10,11 @@
 - Varje återanvändbar plats har ett namn och koordinater. En position gäller för hela listan. Användaren kan skapa fler platser för andra positioner.
 - Besöket kan ha frivillig start- och sluttid.
 - Varje fågelrad kräver art och antal. En kommentar och ett foto är frivilliga. Originalfotofiler bevaras.
-- Artinmatning stöder svenska och engelska namn.
+- Artinmatning stöder svenska och engelska namn. När svenskt namn saknas visas engelskt och vetenskapligt namn med en diskret markering att svenskt namn saknas. Arten är fortsatt tillgänglig för registrering.
 - Användaren kan lägga till arter en i taget eller klistra in rader som ”Talgoxe 6st”. Tolkade rader granskas och rättas före sparande. Båda inmatningssätten kan användas i samma lista.
 - Från en journalanteckning kan användaren skapa en ny observationslista eller länka en befintlig lista.
 - Användaren kan också skapa en fristående observationslista och vid behov länka den till journalanteckningar senare.
+- Återgång från en lista som öppnats via en journalanteckning går till den ursprungliga anteckningen, oavsett andra journalkopplingar. Återgång från en fristående öppnad lista går till observationsöversikten.
 - En lista som skapas från en journalanteckning länkas till den anteckningen när listan har sparats framgångsrikt. Journalanteckningens datum och plats föreslås som redigerbara standardvärden där de finns tillgängliga. Användaren kan ändra dem för listan. Listan behåller sina egna frivilliga besökstider och sitt eget frivilliga väder.
 - En lista kan sparas fristående och kopplas till en journalanteckning direkt eller senare. En journalanteckning kan länka till flera listor från olika platser.
 - Varje länkad lista visas under journaltexten som en kompakt förhandsvisning med plats, datum, eventuella besökstider och de tre första arterna med antal. Om listan har fler rader framgår det. Ett klick på förhandsvisningen öppnar hela listan. En förhandsvisning visas per lista.
@@ -46,7 +47,7 @@ Konceptets fristående bibliotek, relationsgraf, analysverkstad, presentationsla
 
 CSV-exporten `avilist-extended-33698-taxa.csv` granskades den 11 november 2026. Den innehåller 33 698 taxonrader totalt. Av dessa har 11 172 rangen `species`. Samtliga 11 172 arter har engelskt AviList-namn och ett ifyllt, unikt Avibase-ID. Svenska namn finns för 11 144 arter och saknas för 28. Namnen och identifierarna finns på samma rader i denna export.
 
-Föreslagen reservvisning för de 28 arterna utan svenskt namn är det engelska AviList-namnet tillsammans med det vetenskapliga namnet. Förslaget anger ingen ny svensk översättning.
+Godkänd reservvisning för de 28 arterna utan svenskt namn är det engelska AviList-namnet tillsammans med det vetenskapliga namnet och en diskret markering att svenskt namn saknas. Arterna är fortsatt tillgängliga för registrering.
 
 ### Verifierad version och namnproveniens
 
@@ -65,10 +66,6 @@ De tidigare granskade eBird-villkoren och avsaknaden av ett separat bekräftat t
 eBird dokumenterar att svenska namn kan omfatta snedstreckskombinationer där taxonomiernas artgränser skiljer sig. Namntäckningen i exporten bevisar därför inte att varje svenskt namn entydigt avser exakt samma taxonkoncept. Sådana etiketter behöver bevaras och granskas utan att MNO gissar en snävare identifiering. [eBirds namndokumentation](https://support.ebird.org/en/support/solutions/articles/48000804865)
 
 Granskad fils SHA-256 är `be9df523541c42736f21696be902eb9adabfcc4b9f4501c2562c88eac4d81ed5`.
-
-## Öppna frågor för beslut
-
-- **Journalens länkar.** Hur hittar användaren tillbaka från den fullständiga listan till journalanteckningen?
 
 ## Underlag och senare acceptans
 
@@ -94,7 +91,7 @@ Acceptansen ska använda syntetiska observationer och omfatta följande.
 - Säkerhetskopiera och återställ både länkade och fristående listor. Kontrollera att samtliga listor, artidentifieringar, antal, kommentarer, platser och koordinater, besökstider och väder finns kvar.
 - Kontrollera efter återställning att lagrade fotoförhandsvisningar och referenser till originalfiler bevaras och att originalfotofiler hanteras enligt MNO:s befintliga backuppolicy.
 - Återställ en lista som är länkad till flera journalanteckningar. Kontrollera att alla kopplingar finns kvar och refererar till samma återställda lista samt att dess förhandsvisningar visar rätt innehåll.
-- Kontrollera det granskade underlagets artantal, engelska namn och unika Avibase-ID:n samt svensk namntäckning. Om reservvisningen antas, kontrollera engelskt och vetenskapligt namn för arter utan svenskt namn.
+- Kontrollera det granskade underlagets artantal, engelska namn och unika Avibase-ID:n samt svensk namntäckning. Kontrollera engelskt och vetenskapligt namn, diskret markering för saknat svenskt namn och lyckad registrering av sådana arter.
 - Kontrollera attribution, AviList-version, käll-URL, licenshänvisning och exportdatum där det är känt samt dokumentation av MNO:s filtrering och formatkonvertering. Kontrollera att ägarens licenstolkning är spårbar.
 - Granska svenska etiketter med taxonomiska snedstreckskombinationer och andra avvikande artkopplingar utan att automatiskt anta en snävare identifiering.
-- Komplettera acceptansen efter beslut om återgång till journalen.
+- Öppna samma lista från två olika journalanteckningar och kontrollera återgång till den ursprungliga anteckningen i respektive fall. Öppna listan fristående och kontrollera återgång till observationsöversikten även när listan har journalkopplingar.

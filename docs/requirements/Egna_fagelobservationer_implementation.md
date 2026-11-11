@@ -4,7 +4,7 @@
 
 ## Små modulgränser i befintlig modulär monolit
 
-- **Artregistret** äger det versionsangivna, skrivskyddade AviList-underlaget, Avibase-identitet, namnuppslag och sökning på svenska och engelska. Det äger även källmetadata och attribution. Observationsrader bevarar taxonidentitet och använd artregisterversion så att senare registerbyten inte tyst ändrar identifieringar. Den granskade exporten och ägarens licenstolkning styr urvalet. De 28 svenska namnluckorna, föreslagen reservvisning och taxonomiska snedstreckskombinationer behöver egna kontroller.
+- **Artregistret** äger det versionsangivna, skrivskyddade AviList-underlaget, Avibase-identitet, namnuppslag och sökning på svenska och engelska. Det äger även källmetadata och attribution. Observationsrader bevarar taxonidentitet och använd artregisterversion så att senare registerbyten inte tyst ändrar identifieringar. Den granskade exporten och ägarens licenstolkning styr urvalet. De 28 svenska namnluckorna, godkänd reservvisning och taxonomiska snedstreckskombinationer behöver egna kontroller.
 - **Fågelobservationslistor** äger listans datum, platsreferens, besökstider, rader, kommentarer, egna bilder och väder samt kopplingarna till journalen. Det erbjuder avgränsade operationer för spara, läsa, redigera, länka, avlänka och radera. Listan finns oberoende av journalanteckningens livslängd.
 - **Journalen** äger fortsatt journaltext och visar listförhandsvisningar genom listmodulens läsgräns. Den lagrar inte kopior av listinnehållet. Samma lista kan förekomma i flera anteckningar.
 - **Befintliga gemensamma funktioner** äger platser, vädervärden och hämtning, bildbearbetning, databasåtkomst och backup. Listmodulen använder dem genom små uttryckliga anrop. Inga separata databaser eller tjänster behövs för denna avgränsning.
@@ -26,7 +26,7 @@ Kostnaden är tydliga list- och artregistergränser, några nya kommandon och fr
 
 ### 1. Första hela flödet från journalen med säkert bevarande
 
-Skapa, spara och återöppna en lista från en sparad journalanteckning. Använd enskilt artval från det granskade AviList-underlaget, svenska/engelska namn och obligatoriskt antal. Välj återanvändbar plats med namn och koordinater samt datum. Föreslå journalens datum och plats där de finns och låt användaren ändra dem utan att ändra journalen. Frivilliga besökstider kan ingå direkt. Skapa journallänken först vid lyckat sparande. Avbrutet skapande lämnar ingen lista eller länk. Visa en kompakt klickbar förhandsvisning och återöppna efter omstart.
+Skapa, spara och återöppna en lista från en sparad journalanteckning. Använd enskilt artval från det granskade AviList-underlaget, svenska/engelska namn och obligatoriskt antal. Välj återanvändbar plats med namn och koordinater samt datum. Föreslå journalens datum och plats där de finns och låt användaren ändra dem utan att ändra journalen. Frivilliga besökstider kan ingå direkt. Skapa journallänken först vid lyckat sparande. Avbrutet skapande lämnar ingen lista eller länk. Visa en kompakt klickbar förhandsvisning och återöppna efter omstart. Återgång från listan går till den journalanteckning som öppnade den. Saknat svenskt namn visas med engelskt och vetenskapligt namn samt en diskret markering; arten kan registreras.
 
 Detta steg omfattar den första nödvändiga schemaändringen för listor, fågelrader, artidentifiering och journallänkar, med en lista per plats/datum och självständig listidentitet. Inför inga sparbara tomma ersättningsobjekt vid fel. Databas-, plats- och innehållsvaliderare behöver uppdateras samordnat. Journalradering ska redan nu bevara listan. Nya sparade data måste kunna hittas igen även efter att en länk försvunnit, exempelvis genom en enkel listöversikt.
 
@@ -36,9 +36,9 @@ Detta steg omfattar den första nödvändiga schemaändringen för listor, fåge
 
 ### 2. Fristående användning, delade länkar och hela livscykeln
 
-Lägg till fristående skapande, länkning av befintlig lista från journalen och senare länkning från listan. Samma lista kan länkas till flera journalanteckningar och en anteckning kan länka till flera listor. Redigering uppdaterar alla förhandsvisningar. Avlänkning bevarar båda objekten och andra länkar. Radering av lista kräver bekräftelse och tar bort dess förhandsvisningar utan att röra journaltext eller originalbilder.
+Lägg till fristående skapande, länkning av befintlig lista från journalen och senare länkning från listan. Samma lista kan länkas till flera journalanteckningar och en anteckning kan länka till flera listor. Återgång går till den ursprungliga journalanteckningen när listan öppnades därifrån, oavsett övriga länkar. Fristående öppning ger återgång till observationsöversikten. Redigering uppdaterar alla förhandsvisningar. Avlänkning bevarar båda objekten och andra länkar. Radering av lista kräver bekräftelse och tar bort dess förhandsvisningar utan att röra journaltext eller originalbilder.
 
-**Tester och klartkriterium.** Återöppna olänkad lista, avbryt från båda ingångarna, inga dubbla länkar, delad redigering, avlänkning, journalradering, avbruten och bekräftad listradering, rollback och sena sparanrop efter radering. Återställ en lista med flera journallänkar och kontrollera samma listidentitet. Behåll befintligt journalbeteende och tangentbordsåtkomst.
+**Tester och klartkriterium.** Återöppna olänkad lista, verifiera återgång till rätt ursprungsanteckning från båda länkarna till samma lista och till observationsöversikten efter fristående öppning, avbryt från båda ingångarna, inga dubbla länkar, delad redigering, avlänkning, journalradering, avbruten och bekräftad listradering, rollback och sena sparanrop efter radering. Återställ en lista med flera journallänkar och kontrollera samma listidentitet. Behåll befintligt journalbeteende och tangentbordsåtkomst.
 
 ### 3. Effektiv registrering, kommentarer och ett foto per rad
 
@@ -66,8 +66,8 @@ Godkänn steg 1 med dess schema- och bevarandekontroller som en vertikal leveran
 
 1. Starta macOS DEV med en isolerad syntetisk journal vars sista katalog ännu inte finns. Använd befintlig DEV-konfiguration och `MNO_TEST_DATA_DIR`. Skapa en journalanteckning med datum och plats.
 2. Skapa en lista därifrån. Kontrollera föreslagna värden, ändra listans datum eller plats och lägg till arter och antal med svenska och engelska namn. Spara och kontrollera att journalen behåller sina värden.
-3. Öppna hela listan från förhandsvisningen. Kontrollera tre första arter, antal och markering för fler rader. Starta om och kontrollera innehållet.
+3. Öppna hela listan från förhandsvisningen och återgå till den ursprungliga journalanteckningen. Kontrollera tre första arter, antal och markering för fler rader. Starta om och kontrollera innehållet.
 4. Avbryt ett nytt skapande och kontrollera att inget nytt objekt eller länk finns kvar.
 5. Skapa extern backup, återställ endast till en separat syntetisk målprofil och kontrollera listor och länkar. Kör samma automatiserade bevarandekontroll för olänkad lista och verifiera att journalradering inte tar bort listan.
 
-Återgång från listan till rätt journalanteckning är fortfarande en öppen produktfråga, särskilt vid flera länkar. Den behöver beslutas inför steg 1:s navigationsacceptans. Reservvisningen för saknade svenska namn behöver godkännas. Ägarens dokumenterade licenstolkning, okänt exportdatum och taxonomiska namnkontroller följer med artregistrets underlag.
+Navigationsacceptansen ska verifiera den godkända återgången utifrån var listan öppnades. Steg 1 ska också verifiera registrering med engelskt och vetenskapligt namn och diskret markering när svenskt namn saknas. Ägarens dokumenterade licenstolkning, okänt exportdatum och taxonomiska namnkontroller följer med artregistrets underlag.
