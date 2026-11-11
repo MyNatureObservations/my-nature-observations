@@ -12,6 +12,9 @@
 - Varje fågelrad kräver art och antal. En kommentar och ett foto är frivilliga. Originalfotofiler bevaras.
 - Artinmatning stöder svenska och engelska namn.
 - Användaren kan lägga till arter en i taget eller klistra in rader som ”Talgoxe 6st”. Tolkade rader granskas och rättas före sparande. Båda inmatningssätten kan användas i samma lista.
+- Från en journalanteckning kan användaren skapa en ny observationslista eller länka en befintlig lista.
+- Användaren kan också skapa en fristående observationslista och vid behov länka den till journalanteckningar senare.
+- En lista som skapas från en journalanteckning länkas till den anteckningen när listan har sparats framgångsrikt. Journalanteckningens datum och plats föreslås som redigerbara standardvärden där de finns tillgängliga. Användaren kan ändra dem för listan. Listan behåller sina egna frivilliga besökstider och sitt eget frivilliga väder.
 - En lista kan sparas fristående och kopplas till en journalanteckning direkt eller senare. En journalanteckning kan länka till flera listor från olika platser.
 - Varje länkad lista visas under journaltexten som en kompakt förhandsvisning med plats, datum, eventuella besökstider och de tre första arterna med antal. Om listan har fler rader framgår det. Ett klick på förhandsvisningen öppnar hela listan. En förhandsvisning visas per lista.
 - Varje lista kan ha frivilligt väder för sin egen plats och sitt besök. Vädret gäller listans fågelrader och är oberoende av journalanteckningens väder. Användaren kan ange vädret manuellt eller hämta det när lämpliga data finns tillgängliga. Vädret kan visas kompakt tillsammans med plats och tid.
@@ -60,6 +63,10 @@ Acceptansen ska använda syntetiska observationer och omfatta följande.
 - Spara besök både med och utan start- och sluttid.
 - Kräv art och antal på varje fågelrad. Spara rader både med och utan kommentar och foto. Kontrollera att originalfotofilen bevaras.
 - Mata in arter med svenska och engelska namn. Blanda enskild registrering och inklistrade rader i samma lista. Granska och rätta tolkningen av exempelvis ”Talgoxe 6st” före sparande.
+- Skapa en ny lista från en journalanteckning. Kontrollera att datum och plats föreslås från anteckningen där de finns tillgängliga och kan ändras före sparande. Kontrollera att de ändrade värdena sparas på listan utan att journalanteckningens datum eller plats ändras, och att listan länkas till anteckningen först efter framgångsrikt sparande.
+- Länka en befintlig lista från en journalanteckning och kontrollera att länken öppnar samma lista med dess befintliga datum, plats och frivilliga väder.
+- Skapa och spara en fristående lista utan journalkoppling. Länka den senare till journalanteckningar och kontrollera att listans egna frivilliga besökstider och väder bevaras.
+- Avbryt skapandet från både en journalanteckning och den fristående ingången. Kontrollera att ingen oavsiktlig lista eller journalkoppling lämnas kvar.
 - Koppla en lista till journalen direkt och i efterhand. Länka flera listor från olika platser till samma journalanteckning. Kontrollera att journaltexten förblir användarskriven.
 - Kontrollera en förhandsvisning per länkad lista under journaltexten med plats, datum och eventuella besökstider. Prova listor med färre än tre, exakt tre och fler än tre fågelrader. Visa högst de tre första arterna med antal och markera när fler rader finns. Öppna hela listan från förhandsvisningen.
 - Spara en lista utan väder, med manuellt väder och med hämtat väder när lämpliga data finns. Kontrollera att vädret avser listans plats och besök, delas av dess fågelrader och kan skilja sig från journalanteckningens väder utan att det senare ändras.
