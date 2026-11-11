@@ -1,6 +1,6 @@
 # Egna fågelobservationer
 
-**Status — kravförslag för produktgranskning.** Beslut om implementation och teknisk design återstår.
+**Status — kravförslag för produktgranskning.** Beslut om implementation och teknisk design återstår. Val av backupformat och migrering lämnas till den tekniska designen.
 
 ## Överenskommen omfattning
 
@@ -20,6 +20,7 @@
 - En observationslista kan länkas till flera journalanteckningar. Alla förhandsvisningar refererar till samma lista, så redigeringar återspeglas överallt där den är länkad.
 - Avlänkning bevarar både listan och journalanteckningen. Om en länk tas bort bevaras också listans övriga länkar.
 - Att radera en lista kräver bekräftelse. Listans förhandsvisningar tas bort från journalen, medan journaltext och originalfotofiler bevaras.
+- MNO:s backup ska bevara alla observationslistor, även listor utan journalkoppling. Artidentifieringar, antal, kommentarer, platser och koordinater, besökstider, väder, lagrade fotoförhandsvisningar, referenser till originalfiler och journalkopplingar ska följa med. Originalfotofiler omfattas av MNO:s befintliga backuppolicy.
 - Journaltexten skrivs av användaren. Automatiska sammanfattningar och statistik skjuts upp.
 - Registrering kräver inget externt konto och inget exportsteg. Tjänsteintegrationer och exportfunktioner hör till separat prioritering.
 
@@ -38,11 +39,10 @@ Konceptets fristående bibliotek, relationsgraf, analysverkstad, presentationsla
 
 - **AviList och namn.** Vilken utgåva och åtkomstväg ska användas? Vilka villkor gäller för lokal distribution och uppdatering? Varifrån kommer svenska och engelska namn, hur kopplas de till AviList och vad visas när ett namn saknas? Detta är ännu inte verifierat.
 - **Journalens länkar.** Hur hittar användaren tillbaka från den fullständiga listan till journalanteckningen?
-- **Bevarande.** Hur ska nya observationer och deras kopplingar omfattas av MNO:s backup och återställning? Kravet på bevarande behöver avgränsas innan leverans.
 
 ## Underlag och senare acceptans
 
-Underlaget är roadmapkortet ”Egna fågelobservationer”, Concept v0.5 och den överenskomna produktdiskussion som återges i arbetsordern för denna uppdatering. Produktdiskussionen fastställer listans innehåll, inmatningssätt, frivilliga journalkopplingar, kompakta förhandsvisningar, listans eget väder samt regler för redigering, flera journalkopplingar, avlänkning och radering. Vid genomgång av tillgängligt projektmaterial hittades inget separat fågelvisionsdokument. Ett sådant dokument var därför inte tillgängligt för jämförelse. Eventuella ytterligare krav därifrån behöver granskas separat.
+Underlaget är roadmapkortet ”Egna fågelobservationer”, Concept v0.5 och den överenskomna produktdiskussion som återges i arbetsordern för denna uppdatering. Produktdiskussionen fastställer listans innehåll, inmatningssätt, frivilliga journalkopplingar, kompakta förhandsvisningar, listans eget väder samt regler för redigering, flera journalkopplingar, avlänkning, radering samt backupomfattning. Vid genomgång av tillgängligt projektmaterial hittades inget separat fågelvisionsdokument. Ett sådant dokument var därför inte tillgängligt för jämförelse. Eventuella ytterligare krav därifrån behöver granskas separat.
 
 Acceptansen ska använda syntetiska observationer och omfatta följande.
 
@@ -57,4 +57,7 @@ Acceptansen ska använda syntetiska observationer och omfatta följande.
 - Radera en journalanteckning med länkade listor och kontrollera att listorna och deras observationer finns kvar.
 - Länka samma lista till flera journalanteckningar. Redigera listan och kontrollera att samtliga förhandsvisningar visar ändringarna. Ta bort en av kopplingarna och kontrollera att listan, journalanteckningen och listans övriga kopplingar finns kvar.
 - Avbryt bekräftelsen för radering av en lista och kontrollera att listan och dess förhandsvisningar finns kvar. Bekräfta sedan raderingen och kontrollera att listan och dess journalförhandsvisningar försvinner, medan journaltext och originalfotofiler bevaras.
-- Komplettera acceptansen efter beslut om AviList-underlag, återgång till journalen samt backup och återställning.
+- Säkerhetskopiera och återställ både länkade och fristående listor. Kontrollera att samtliga listor, artidentifieringar, antal, kommentarer, platser och koordinater, besökstider och väder finns kvar.
+- Kontrollera efter återställning att lagrade fotoförhandsvisningar och referenser till originalfiler bevaras och att originalfotofiler hanteras enligt MNO:s befintliga backuppolicy.
+- Återställ en lista som är länkad till flera journalanteckningar. Kontrollera att alla kopplingar finns kvar och refererar till samma återställda lista samt att dess förhandsvisningar visar rätt innehåll.
+- Komplettera acceptansen efter beslut om AviList-underlag och återgång till journalen.
