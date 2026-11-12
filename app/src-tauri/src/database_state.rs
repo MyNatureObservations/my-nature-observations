@@ -87,10 +87,24 @@ impl DatabaseState {
         &self,
         directory: &std::path::Path,
     ) -> Result<std::path::PathBuf, String> {
+        self.initialize_startup_with(directory, crate::startup::begin)
+    }
+    #[cfg(target_os = "macos")]
+    pub(crate) fn initialize_bird_startup(
+        &self,
+        directory: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        self.initialize_startup_with(directory, crate::startup::begin_bird_upgrade)
+    }
+    fn initialize_startup_with(
+        &self,
+        directory: &std::path::Path,
+        begin: impl FnOnce(&std::path::Path) -> Result<crate::startup::StartupOutcome, String>,
+    ) -> Result<std::path::PathBuf, String> {
         if self.startup_started.swap(true, Ordering::AcqRel) {
             return Err("database_startup_already_attempted".into());
         }
-        let outcome = match crate::startup::begin(directory) {
+        let outcome = match begin(directory) {
             Ok(outcome) => outcome,
             Err(error) => {
                 self.phase.store(Phase::Blocked as u8, Ordering::Release);

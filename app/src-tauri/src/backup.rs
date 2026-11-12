@@ -166,6 +166,13 @@ fn create_with_publication(
                 )
                 .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
             }
+            5 => {
+                crate::storage_content::verify_v6(
+                    &mut snapshot,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+                .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
+            }
             4 => {
                 crate::storage_content::verify_v5(
                     &mut snapshot,
@@ -254,7 +261,7 @@ fn verify_backup_in(path: &Path, staging: &Path) -> BackupResult<BackupManifest>
     if manifest.format != FORMAT
         || !matches!(
             (manifest.format_version, manifest.database_schema_version),
-            (1, 0) | (2, 1) | (3, 2) | (4, 3) | (5, 4)
+            (1, 0) | (2, 1) | (3, 2) | (4, 3) | (5, 4) | (6, 5)
         )
         || manifest.database_file != DATABASE
         || manifest.book_id.is_some()
@@ -289,7 +296,13 @@ fn verify_backup_in(path: &Path, staging: &Path) -> BackupResult<BackupManifest>
         return Err("Backup schema differs from manifest".into());
     }
     check_database(&database)?;
-    if manifest.format_version == 5 {
+    if manifest.format_version == 6 {
+        crate::storage_content::verify_v6(
+            &mut database,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
+    } else if manifest.format_version == 5 {
         crate::storage_content::verify_v5(
             &mut database,
             &std::sync::atomic::AtomicBool::new(false),
@@ -342,6 +355,12 @@ fn check_database(database: &Connection) -> BackupResult<()> {
         return Err(format!("SQLite quick_check failed: {result}").into());
     }
     let version: u32 = database.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version == 5 {
+        if !crate::database::bird_schema::validate_schema(database)? {
+            return Err("Unsupported database schema".into());
+        }
+        return Ok(());
+    }
     if version == 4 {
         if !crate::photographs::validate_schema(database)? {
             return Err("Unsupported database schema".into());

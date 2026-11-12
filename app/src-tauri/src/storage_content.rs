@@ -883,3 +883,121 @@ pub(crate) fn verified_snapshot_v5(db: &Connection, flag: &AtomicBool) -> Result
         entry_count: previous.entry_count,
     })
 }
+
+// Proof v6 extends the frozen schema-4 inventory with all bird lists, including
+// unlinked ones. A source-preservation check can still use verified_snapshot_v5
+// inside an already validated schema-5 snapshot.
+pub(crate) fn verify_v6(db: &mut Connection, flag: &AtomicBool) -> Result<Proof> {
+    use rusqlite::limits::Limit;
+    if !db.is_autocommit() {
+        return Err(Error::Invalid);
+    }
+    let old = db.limit(Limit::SQLITE_LIMIT_LENGTH)?;
+    db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old.min(ROW_LIMIT as i32))?;
+    let result = (|| {
+        let tx = db.transaction()?;
+        let proof = snapshot_v6(&tx, flag)?;
+        tx.commit()?;
+        Ok(proof)
+    })();
+    let reset = db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old);
+    match (result, reset) {
+        (Ok(p), Ok(_)) => Ok(p),
+        (Err(e), _) => Err(e),
+        (_, Err(e)) => Err(e.into()),
+    }
+}
+pub(crate) fn snapshot_v6(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    check(flag)?;
+    if db.is_autocommit() || !crate::database::bird_schema::validate_schema(db)? {
+        return Err(Error::Invalid);
+    }
+    let integrity: String = db.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
+    if integrity != "ok"
+        || db
+            .prepare("PRAGMA foreign_key_check")?
+            .query([])?
+            .next()?
+            .is_some()
+    {
+        return Err(Error::Invalid);
+    }
+    verified_snapshot_v6(db, flag)
+}
+pub(crate) fn verified_snapshot_v6(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    let previous = verified_snapshot_v5(db, flag)?;
+    let mut hash = Sha256::new().chain_update(b"MNO-preserved-content\0\x00\x00\x00\x06");
+    hash.update(previous.sha256.as_bytes());
+    for (section, sql, columns) in [
+        (
+            "bird_lists:id,visit_date,place_id",
+            "SELECT id,visit_date,place_id FROM bird_lists ORDER BY id COLLATE BINARY",
+            3,
+        ),
+        (
+            "bird_rows:id,list_id,position,avibase_id,taxonomy_version,count",
+            "SELECT id,list_id,position,avibase_id,taxonomy_version,count FROM bird_rows ORDER BY id COLLATE BINARY",
+            6,
+        ),
+        (
+            "journal_bird_lists:entry_id,list_id",
+            "SELECT entry_id,list_id FROM journal_bird_lists ORDER BY entry_id COLLATE BINARY,list_id COLLATE BINARY",
+            2,
+        ),
+    ] {
+        hash.update(section.as_bytes());
+        hash.update([0]);
+        let mut query = db.prepare(sql)?;
+        let mut rows = query.query([])?;
+        while let Some(row) = rows.next()? {
+            check(flag)?;
+            for i in 0..columns {
+                let value = row.get_ref(i)?;
+                if let ValueRef::Text(_) = value {
+                    text(value, 512)?;
+                }
+                match (section, i) {
+                    ("bird_lists:id,visit_date,place_id", 1) => {
+                        let date = text(value, 10)?;
+                        let parsed = time::Date::parse(
+                            date,
+                            &time::format_description::parse_borrowed::<2>("[year]-[month]-[day]")
+                                .map_err(|_| Error::Invalid)?,
+                        )
+                        .map_err(|_| Error::Invalid)?;
+                        if parsed.to_string() != date {
+                            return Err(Error::Invalid);
+                        }
+                    }
+                    ("bird_rows:id,list_id,position,avibase_id,taxonomy_version,count", 2) => {
+                        if !matches!(value, ValueRef::Integer(n) if n >= 0) {
+                            return Err(Error::Invalid);
+                        }
+                    }
+                    ("bird_rows:id,list_id,position,avibase_id,taxonomy_version,count", 5) => {
+                        if !matches!(value, ValueRef::Integer(n) if n > 0) {
+                            return Err(Error::Invalid);
+                        }
+                    }
+                    _ => {
+                        if text(value, 512)?.trim().is_empty() {
+                            return Err(Error::Invalid);
+                        }
+                    }
+                }
+                field(&mut hash, value)?;
+            }
+            hash.update([0x52]);
+        }
+        hash.update([0x45]);
+    }
+    // A bird list requires an actual named position, unlike optional journal places.
+    let invalid: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM bird_lists b JOIN places p ON p.id=b.place_id WHERE p.latitude IS NULL OR p.longitude IS NULL)", [], |r| r.get(0))?;
+    if invalid {
+        return Err(Error::Invalid);
+    }
+    Ok(Proof {
+        sha256: format!("{:x}", hash.finalize()),
+        entry_count: previous.entry_count,
+    })
+}

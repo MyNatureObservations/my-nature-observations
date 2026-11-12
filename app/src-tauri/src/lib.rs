@@ -6,6 +6,10 @@ mod startup_error;
 #[allow(dead_code)]
 mod backup;
 mod database;
+// Internal schema-5 persistence; no command or UI registration.
+#[cfg(target_os = "macos")]
+#[allow(dead_code)]
+mod bird_observations;
 mod database_state;
 mod export_app;
 mod import_app;

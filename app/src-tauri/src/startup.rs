@@ -401,6 +401,21 @@ pub(crate) fn begin(root: &Path) -> Result<StartupOutcome, String> {
         },
     )
 }
+// Explicit internal entry for the bird persistence foundation. Desktop startup
+// remains schema 4 until portable export/import compatibility is approved.
+#[cfg(target_os = "macos")]
+pub(crate) fn begin_bird_upgrade(root: &Path) -> Result<StartupOutcome, String> {
+    begin_with(
+        root,
+        |path| fs::symlink_metadata(path),
+        |path, new| {
+            if new {
+                database::create_current_database(path)?;
+            }
+            crate::backup::restore_context::bird_upgrade::initialize(path)
+        },
+    )
+}
 // Compatibility wrapper for existing isolated startup tests, not an app entry.
 #[cfg(test)]
 fn initialize(root: &Path) -> Result<StartupReady, String> {

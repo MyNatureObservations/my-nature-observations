@@ -99,10 +99,12 @@ fn require_schema3(db: &Connection) -> Result<(), String> {
     let version: i64 = db
         .pragma_query_value(Some("main"), "user_version", |r| r.get(0))
         .map_err(|_| "place_schema_unavailable")?;
-    if !matches!(version, 3 | 4) {
+    if !matches!(version, 3 | 4 | 5) {
         return Err("place_schema_unavailable".into());
     }
-    if !(if version == 4 {
+    if !(if version == 5 {
+        crate::database::bird_schema::validate_schema(db)
+    } else if version == 4 {
         crate::photographs::validate_schema(db)
     } else {
         crate::database::weather_default_schema::validate_schema3(db)
