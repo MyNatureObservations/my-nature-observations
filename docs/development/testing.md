@@ -105,6 +105,37 @@ For exact paths, isolated-profile rules and manual acceptance steps, see
 Do not use a debug build with the Production identifier, even with a test override;
 it now fails before plugin or database startup.
 
+## Bird observations: macOS schema-upgrade DEV acceptance
+
+**Accepted within this DEV scope**, based on the project owner's manual report,
+recorded on 2026-11-12. Tested source:
+`e049c118cf46ff11bf98837964e008a72f0dbabc` on
+`codex/bird-observations-persistence`.
+
+- A genuine schema-4 journal contained synthetic text, a photo, a place and weather.
+- Ordinary macOS startup upgraded it to schema 5 and preserved that content.
+- The independently retained schema-4 copy matched the original SHA-256:
+  `2383faaa9d087c391f1b14cf43d4af25caa29d7d71569bd3c0a823742d39d426`.
+  This identifies the tested source database/copy, not an application installer.
+- Restart preserved the content and left exactly one migration copy.
+- A fresh journal opened normally and used schema 5.
+
+This is macOS **DEV acceptance**, not packaged-release acceptance, bird-observation
+UI acceptance, or proof of physical power-loss durability. Observation UI and
+creation commands remain unavailable. Windows/Linux retain their existing schema
+behavior and feature gates; this report does not establish native acceptance there.
+
+Recorded local verification for the tested checkpoint: 957 Rust library tests
+passed, 0 failed and 2 remained ignored; focused startup/persistence, Export,
+Backup and photo regressions passed. All-targets compilation, Rust 1.99.1
+formatting and `git diff --check` passed. These results are reused for this
+acceptance-only documentation update; the tests were not repeated.
+
+The automated older-backup Restore test also checks that unfinished Recovery
+blocks upgrade, the replaced observations remain protected, and bird writes are
+rejected in the restored schema-4 state until the next ordinary startup upgrades
+it. This is automated evidence, not an additional manual desktop acceptance claim.
+
 ## Cross-platform Stage A1: compile/test visibility
 
 The additional CI matrix uses `ubuntu-24.04` and `windows-2022`, retaining the
