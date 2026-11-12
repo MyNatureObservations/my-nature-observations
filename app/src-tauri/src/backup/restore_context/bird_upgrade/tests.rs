@@ -443,18 +443,17 @@ fn failed_upgrade_keeps_independent_source_copy() {
 }
 
 #[test]
-fn older_portable_export_and_import_contracts_reject_schema5_without_writes() {
+fn frozen_schema4_import_proof_rejects_schema5_without_writes() {
     let root = TempDir::new().unwrap();
     let (path, _, _) = fixture(root.path());
     initialize(&path).unwrap();
     add_lists(&path);
     let bytes = fs::read(&path).unwrap();
     let mut db = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
-    let export = root.path().join("unsupported.mno-export");
-    assert!(crate::open_export::export(&mut db, &export, &AtomicBool::new(false)).is_err());
-    assert!(!export.exists());
+    assert!(
+        crate::open_import::verify_database_version(&mut db, &AtomicBool::new(false), 5).is_err()
+    );
     close(db);
-    assert!(super::super::activation::journal_proof(&path).is_err());
     assert_eq!(fs::read(path).unwrap(), bytes);
 }
 
@@ -754,3 +753,5 @@ fn bird_list_places_keep_coordinates_and_remain_startup_and_backup_valid() {
         );
     }
 }
+
+mod export_import;

@@ -28,6 +28,7 @@ pub(crate) fn journal_proof(path: &Path) -> Outcome<ContentProof> {
             2 => 3,
             3 => 4,
             4 => 5,
+            5 => 6,
             _ => return Err(Error::Binding),
         },
     )

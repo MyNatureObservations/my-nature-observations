@@ -17,7 +17,7 @@ const MANIFEST_LIMIT: u64 = 16 * 1024;
 const LINE_LIMIT: usize = ROW_LIMIT * 6 + 1024;
 const LINE_LIMIT_V2: usize = (ROW_LIMIT + 2 * crate::weather::storage::PART_LIMIT) * 6 + 2048;
 mod v3;
-pub(crate) use v3::{build_v3, build_v4, build_v5, is_v3, is_v4, is_v5};
+pub(crate) use v3::{build_v3, build_v4, build_v5, build_v6, is_v3, is_v4, is_v5, is_v6};
 type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub(crate) enum Error {
@@ -607,7 +607,7 @@ fn next_record_version(
         created_at: wire.created_at,
         updated_at: wire.updated_at,
     };
-    if version == 5 && r.document_version == 2 {
+    if matches!(version, 5 | 6) && r.document_version == 2 {
         let mut legacy = r.clone();
         legacy.document_version = 1;
         validate_record(&legacy)?;
@@ -684,6 +684,18 @@ pub(crate) fn verify_database_version(
         5 => crate::storage_content::verify_v5(db, flag)
             .map(|p| ContentProof {
                 version: 5,
+                sha256: p.sha256,
+                entry_count: p.entry_count,
+            })
+            .map_err(|e| match e {
+                crate::storage_content::Error::Sql(e) => Error::Sql(e),
+                crate::storage_content::Error::Cancelled => Error::Cancelled,
+                crate::storage_content::Error::Limit => Error::ResourceLimit,
+                _ => Error::Verification,
+            }),
+        6 => crate::storage_content::verify_v6(db, flag)
+            .map(|p| ContentProof {
+                version: 6,
                 sha256: p.sha256,
                 entry_count: p.entry_count,
             })

@@ -147,7 +147,9 @@ fn prepare(state: &DatabaseState, path: &Path) -> Result<Choice, Error> {
         return Err(Error::Changed);
     }
     let staging = tempfile::tempdir().map_err(|_| Error::Failed)?;
-    let format = if open_import::is_v5(&mut archive).map_err(|_| Error::InvalidPackage)? {
+    let format = if open_import::is_v6(&mut archive).map_err(|_| Error::InvalidPackage)? {
+        6
+    } else if open_import::is_v5(&mut archive).map_err(|_| Error::InvalidPackage)? {
         5
     } else if open_import::is_v4(&mut archive).map_err(|_| Error::InvalidPackage)? {
         4
@@ -156,10 +158,12 @@ fn prepare(state: &DatabaseState, path: &Path) -> Result<Choice, Error> {
     } else {
         0
     };
-    if format != 5 && !state.permits_legacy_protocol_fixture() {
+    if !matches!(format, 5 | 6) && !state.permits_legacy_protocol_fixture() {
         return Err(Error::InvalidPackage);
     }
-    let candidate = (if format == 5 {
+    let candidate = (if format == 6 {
+        open_import::build_v6(&mut archive, staging.path(), &AtomicBool::new(false))
+    } else if format == 5 {
         open_import::build_v5(&mut archive, staging.path(), &AtomicBool::new(false))
     } else if format == 4 {
         open_import::build_v4(&mut archive, staging.path(), &AtomicBool::new(false))
@@ -173,6 +177,11 @@ fn prepare(state: &DatabaseState, path: &Path) -> Result<Choice, Error> {
     .map_err(|_| Error::InvalidPackage)?;
     let entry_count = candidate.entry_count;
     let new_content = candidate.proof().clone();
+    // Keep unsupported cross-schema replacement explicit; never reinterpret a
+    // schema-5 journal through an older content proof.
+    if matches!(format, 5 | 6) && old_content.version != new_content.version {
+        return Err(Error::InvalidPackage);
+    }
     let existing_place_count = if old_content.version >= 3 {
         place_count(&active, false)?
     } else {
@@ -256,6 +265,24 @@ fn activate(state: &DatabaseState, mut choice: Choice) -> Result<Success, Error>
     // nor metadata stands in for content identity. No descriptor clone/reopen.
     if digest(&mut choice.original)? != choice.hash || digest(&mut choice.archive)? != choice.hash {
         return Err(Error::Changed);
+    }
+    if choice.new_content.version == 6 {
+        if crate::backup::restore_context::activation::journal_proof(&active)
+            .map_err(|_| Error::Failed)?
+            != choice.old_content
+        {
+            return Err(Error::Changed);
+        }
+        let activated = crate::backup::restore_context::activation::importing::activate_v6(
+            &maintenance,
+            &mut choice.archive,
+            &choice.old_content,
+            &choice.new_content,
+            Arc::new(AtomicBool::new(false)),
+        )
+        .map_err(|_| Error::Failed)?;
+        drop(activated);
+        return Ok(Success::Activated);
     }
     if choice.new_content.version == 5 {
         if crate::backup::restore_context::activation::journal_proof(&active)

@@ -39,6 +39,15 @@ pub(crate) fn activate_v5<'m, 's>(
 ) -> Outcome<DiskActivated<'m, 's>> {
     activate_version(maintenance, archive, expected_old, expected_new, flag, 5)
 }
+pub(crate) fn activate_v6<'m, 's>(
+    maintenance: &'m Maintenance<'s>,
+    archive: &mut File,
+    expected_old: &open_import::ContentProof,
+    expected_new: &open_import::ContentProof,
+    flag: Arc<AtomicBool>,
+) -> Outcome<DiskActivated<'m, 's>> {
+    activate_version(maintenance, archive, expected_old, expected_new, flag, 6)
+}
 fn activate_version<'m, 's>(
     maintenance: &'m Maintenance<'s>,
     archive: &mut File,
@@ -99,7 +108,9 @@ fn activate_version<'m, 's>(
     let protection =
         pre_restore::create_bound(maintenance, work.active.as_ref().unwrap(), flag.clone())
             .map_err(Error::Protection)?;
-    let protected = if old_schema == 4 {
+    let protected = if old_schema == 5 {
+        preserved_fingerprint_v6(protection.candidate(), &flag)?
+    } else if old_schema == 4 {
         preserved_fingerprint_v5(protection.candidate(), &flag)?
     } else if old_schema == 3 {
         preserved_fingerprint_v4(protection.candidate(), &flag)?
@@ -124,7 +135,9 @@ fn activate_version<'m, 's>(
     point("import-v3-protected")?;
     let staging = root.join("backups/import-staging");
     private::ensure_directory(&staging)?;
-    let candidate = (if version == 5 {
+    let candidate = (if version == 6 {
+        open_import::build_v6(archive, &staging, &flag)
+    } else if version == 5 {
         open_import::build_v5(archive, &staging, &flag)
     } else if version == 4 {
         open_import::build_v4(archive, &staging, &flag)
