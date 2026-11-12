@@ -617,3 +617,140 @@ fn bird_persistence_rolls_back_invalid_rows_missing_link_and_stale_generation() 
         unlinked
     );
 }
+
+#[test]
+fn bird_list_places_keep_coordinates_and_remain_startup_and_backup_valid() {
+    use crate::bird_observations::{self, SpeciesCount};
+    for link in [Some("entry"), None] {
+        let root = TempDir::new().unwrap();
+        let (path, _, _) = fixture(root.path());
+        let state = crate::database_state::DatabaseState::default();
+        state.initialize_bird_startup(root.path()).unwrap();
+        let generation = state.operation(None).unwrap().snapshot(()).generation;
+        let search = crate::journal_search::SearchState::default();
+        let db = crate::database::open_existing(&path).unwrap();
+        let place_id: String = db
+            .query_row("SELECT id FROM places", [], |r| r.get(0))
+            .unwrap();
+        let place_before = crate::place_registry::read_place(&db, &place_id).unwrap();
+        close(db);
+        let id = bird_observations::create(
+            &state,
+            &search,
+            generation,
+            "2026-11-12",
+            &place_id,
+            &[SpeciesCount {
+                avibase_id: "synthetic-species".into(),
+                taxonomy_version: "AviList v2026".into(),
+                count: 3,
+            }],
+            link,
+        )
+        .unwrap();
+        let list_before = bird_observations::reopen(&state, generation, &id).unwrap();
+        let bytes_before = fs::read(&path).unwrap();
+        assert_eq!(
+            crate::place_registry::update_with(
+                &state,
+                generation,
+                || crate::database::open_existing(&path),
+                &place_id,
+                1,
+                "Changed name".into(),
+                None,
+                None
+            )
+            .err()
+            .unwrap(),
+            "place_coordinates_invalid"
+        );
+        assert_eq!(fs::read(&path).unwrap(), bytes_before);
+        assert_eq!(
+            bird_observations::reopen(&state, generation, &id).unwrap(),
+            list_before
+        );
+        let mut db = crate::database::open_existing(&path).unwrap();
+        assert_eq!(
+            crate::place_registry::read_place(&db, &place_id).unwrap(),
+            place_before
+        );
+        let proof = crate::storage_content::verify_v6(&mut db, &AtomicBool::new(false)).unwrap();
+        let archive = root.path().join("after-rejection.mno-backup");
+        crate::backup::create_backup(&db, &archive, crate::backup::BackupKind::Manual).unwrap();
+        close(db);
+        assert_eq!(
+            crate::backup::verify_backup(&archive)
+                .unwrap()
+                .database_schema_version,
+            5
+        );
+        drop(state);
+        let reopened = crate::database_state::DatabaseState::default();
+        reopened.initialize_startup(root.path()).unwrap();
+        let generation = reopened.operation(None).unwrap().snapshot(()).generation;
+        assert_eq!(
+            bird_observations::reopen(&reopened, generation, &id).unwrap(),
+            list_before
+        );
+        let mut db = crate::database::open_existing(&path).unwrap();
+        assert_eq!(
+            crate::storage_content::verify_v6(&mut db, &AtomicBool::new(false)).unwrap(),
+            proof
+        );
+        close(db);
+
+        // Schema 5 must still permit clearing an unrelated place's coordinates.
+        let unused = crate::place_registry::create_with(
+            &reopened,
+            generation,
+            || crate::database::open_existing(&path),
+            "Unused".into(),
+            Some(60.0),
+            Some(19.0),
+        )
+        .unwrap()
+        .data;
+        let cleared = crate::place_registry::update_with(
+            &reopened,
+            generation,
+            || crate::database::open_existing(&path),
+            &unused.id,
+            1,
+            "Unused".into(),
+            None,
+            None,
+        )
+        .unwrap()
+        .data;
+        assert_eq!((cleared.latitude, cleared.longitude), (None, None));
+        let mut db = crate::database::open_existing(&path).unwrap();
+        crate::storage_content::verify_v6(&mut db, &AtomicBool::new(false)).unwrap();
+        close(db);
+
+        // Keep the established weather-default error and its precedence.
+        crate::place_registry::set_weather_default_place_with(
+            &reopened,
+            generation,
+            || crate::database::open_existing(&path),
+            0,
+            Some(&place_id),
+        )
+        .unwrap();
+        assert_eq!(
+            crate::place_registry::update_with(
+                &reopened,
+                generation,
+                || crate::database::open_existing(&path),
+                &place_id,
+                1,
+                "Changed name".into(),
+                None,
+                None
+            )
+            .err()
+            .unwrap(),
+            "place_coordinates_required_by_weather_default"
+        );
+    }
+}
