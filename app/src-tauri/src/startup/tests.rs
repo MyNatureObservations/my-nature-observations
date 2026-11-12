@@ -32,8 +32,11 @@ fn normal_first_startup_initializes_and_holds_lock_until_state_drops() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        4
+        if cfg!(target_os = "macos") { 5 } else { 4 }
     );
+    #[cfg(target_os = "macos")]
+    crate::storage_content::verify_v6(&mut db, &std::sync::atomic::AtomicBool::new(false)).unwrap();
+    #[cfg(not(target_os = "macos"))]
     crate::storage_content::verify_v5(&mut db, &std::sync::atomic::AtomicBool::new(false)).unwrap();
     db.close().unwrap();
     assert!(DirectoryLease::acquire(&root).is_err());
@@ -52,7 +55,20 @@ fn existing_journal_data_is_preserved() {
     assert!(!established::read(dir.path()).unwrap());
     let state = DatabaseState::default();
     state.initialize_startup(dir.path()).unwrap();
-    assert_eq!(fs::read(path).unwrap(), before);
+    #[cfg(not(target_os = "macos"))]
+    assert_eq!(fs::read(&path).unwrap(), before);
+    #[cfg(target_os = "macos")]
+    {
+        let attempts = dir.path().join("backups/bird-schema-upgrade");
+        let copies: Vec<_> = fs::read_dir(attempts)
+            .unwrap()
+            .map(|e| e.unwrap().path().join("schema4.sqlite"))
+            .collect();
+        assert_eq!(copies.len(), 1);
+        assert_eq!(fs::read(&copies[0]).unwrap(), before);
+        let db = database::open_existing(&path).unwrap();
+        assert_eq!(db.query_row("SELECT id,entry_date,title,content_json,document_version,created_at,updated_at FROM journal_entries",[],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,i64>(4)?,r.get::<_,String>(5)?,r.get::<_,String>(6)?))).unwrap(),("one".into(),"2026-10-17".into(),"preserve".into(),"{}".into(),1,"created".into(),"updated".into()));
+    }
     assert!(established::read(dir.path()).unwrap());
 }
 #[test]
@@ -604,6 +620,8 @@ fn valid_existing_schema_is_read_only_with_or_without_initialization_marker() {
         let dir = TempDir::new().unwrap();
         let path = database::expected_database_path(dir.path());
         database::create_current_database(&path).unwrap();
+        #[cfg(target_os = "macos")]
+        crate::backup::restore_context::bird_upgrade::initialize(&path).unwrap();
         if marked {
             established::publish(dir.path()).unwrap();
         }

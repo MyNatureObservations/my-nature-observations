@@ -85,12 +85,9 @@ fn initialize_with(path: &Path, mut point: impl FnMut(&str, &Path) -> Result<()>
         if active.close_inner().is_err() {
             std::process::abort();
         }
-        // A retry after rename must re-establish barriers before Ready.
-        if version? == 5 {
-            verify(path, true)?;
-            sync_file(path)?;
-            sync_dir(path.parent().ok_or("bird_schema_upgrade_parent_missing")?)?;
-        }
+        // Ordinary schema-5 validation also re-establishes publication barriers
+        // on retry after rename, while preserving startup error classification.
+        version?;
         return crate::database::initialize_database(path);
     }
     // Work owns checked-close ordering even when an intermediate operation fails.

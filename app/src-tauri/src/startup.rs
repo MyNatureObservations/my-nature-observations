@@ -385,6 +385,9 @@ fn checkpoint(
     Ok(artifacts::unexpected_root(root, None).map_err(failure)? || present)
 }
 pub(crate) fn begin(root: &Path) -> Result<StartupOutcome, String> {
+    #[cfg(target_os = "macos")]
+    return begin_bird_upgrade(root);
+    #[cfg(not(target_os = "macos"))]
     begin_with(
         root,
         |path| fs::symlink_metadata(path),
@@ -401,14 +404,18 @@ pub(crate) fn begin(root: &Path) -> Result<StartupOutcome, String> {
         },
     )
 }
-// Explicit internal entry for the bird persistence foundation. Desktop startup
-// remains schema 4 until portable export/import compatibility is approved.
+// The shared macOS initializer runs only after begin_with has acquired the
+// directory lease and rejected unfinished Recovery, unsafe paths and sidecars.
 #[cfg(target_os = "macos")]
-pub(crate) fn begin_bird_upgrade(root: &Path) -> Result<StartupOutcome, String> {
+fn begin_bird_upgrade(root: &Path) -> Result<StartupOutcome, String> {
     begin_with(
         root,
         |path| fs::symlink_metadata(path),
         |path, new| {
+            #[cfg(test)]
+            if let Some(result) = migration_probe::initialize(path, new) {
+                return result;
+            }
             if new {
                 database::create_current_database(path)?;
             }

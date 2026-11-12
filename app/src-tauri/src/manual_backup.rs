@@ -330,7 +330,7 @@ mod startup_gate_tests {
 mod established_startup_tests {
     use super::*;
     #[test]
-    fn real_schema4_startup_creates_verified_format5_backup() {
+    fn real_current_startup_creates_verified_backup() {
         let dir = tempfile::TempDir::new().unwrap();
         let root = dir.path().join("data");
         let state = DatabaseState::default();
@@ -348,7 +348,11 @@ mod established_startup_tests {
         let manifest = backup::verify_backup(&destination).unwrap();
         assert_eq!(
             (manifest.format_version, manifest.database_schema_version),
-            (5, 4)
+            if cfg!(target_os = "macos") {
+                (6, 5)
+            } else {
+                (5, 4)
+            }
         );
         assert_eq!(
             Connection::open(&path)

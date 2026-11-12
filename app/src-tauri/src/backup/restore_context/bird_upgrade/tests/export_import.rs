@@ -30,9 +30,9 @@ fn export_fixture_for_format(
     close(db);
     let state = DatabaseState::default();
     if format == 6 {
-        state.initialize_bird_startup(root).unwrap();
-    } else {
         state.initialize_startup(root).unwrap();
+    } else {
+        state.initialize_schema4_startup(root).unwrap();
     }
     let generation = state.operation(None).unwrap().snapshot(()).generation;
     let lists = lists
@@ -157,7 +157,7 @@ fn format6_activation_child() {
         .unwrap();
     close(db);
     let state = DatabaseState::default();
-    let target = state.initialize_bird_startup(&data).unwrap();
+    let target = state.initialize_startup(&data).unwrap();
     let before = fs::read(&target).unwrap();
     let old = super::super::super::activation::journal_proof(&target).unwrap();
     assert_ne!(old.sha256, new.sha256);
@@ -490,7 +490,7 @@ fn normalized_format5_rejects_invalid_older_payloads_without_active_changes() {
     initialize(&active).unwrap();
     add_lists(&active);
     let state = DatabaseState::default();
-    state.initialize_bird_startup(&data).unwrap();
+    state.initialize_startup(&data).unwrap();
     let before = fs::read(&active).unwrap();
     let original = fs::read(&archive).unwrap();
     for case in ["legacy-reference", "legacy-document"] {

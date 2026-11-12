@@ -43,7 +43,7 @@ fn fresh(root: &Path) -> (DatabaseState, PathBuf) {
 fn current(root: &Path) -> (DatabaseState, PathBuf) {
     let state = DatabaseState::default();
     let active = state
-        .initialize_startup(&root.join("current-data"))
+        .initialize_schema4_startup(&root.join("current-data"))
         .unwrap();
     (state, active)
 }
@@ -329,7 +329,11 @@ fn import_app_child() {
     let root = PathBuf::from(std::env::var_os("MNO_IMPORT_APP_ROOT").unwrap());
     let state = DatabaseState::default();
     if matches!(scenario.as_str(), "restart" | "restart-before") {
-        assert!(state.initialize_startup(&root.join("data")).is_err());
+        assert!(
+            state
+                .initialize_schema4_startup(&root.join("data"))
+                .is_err()
+        );
         assert_eq!(mode(&state), Mode::Recovery);
         startup::run(
             &state,
@@ -358,7 +362,9 @@ fn import_app_child() {
         std::process::exit(0);
     }
     let package = archive_v5(&root);
-    let active = state.initialize_startup(&root.join("data")).unwrap();
+    let active = state
+        .initialize_schema4_startup(&root.join("data"))
+        .unwrap();
     let choice = prepare(&state, &package).unwrap();
     if scenario == "occupied-late" {
         let db = Connection::open(&active).unwrap();
@@ -879,7 +885,7 @@ fn format6_preview_confirmation_and_restart_preserve_observations() {
     readonly.close().unwrap();
     let state = DatabaseState::default();
     let active = state
-        .initialize_bird_startup(&root.path().join("current-data"))
+        .initialize_startup(&root.path().join("current-data"))
         .unwrap();
     let before = fs::read(&active).unwrap();
     // Recompute valid checksums around invalid observations: rejection must

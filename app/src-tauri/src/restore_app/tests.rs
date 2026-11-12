@@ -14,7 +14,7 @@ fn create_portable_backup_with_setting(root: &Path, setting: &str) {
     let source_install = tempfile::tempdir_in("/private/tmp").unwrap();
     let original = DatabaseState::default();
     let source_path = original
-        .initialize_startup(&source_install.path().join("data"))
+        .initialize_schema4_startup(&source_install.path().join("data"))
         .unwrap();
     let source = Connection::open(source_path).unwrap();
     for (id, date, title) in [
@@ -195,7 +195,8 @@ fn app_restore_child() {
         assert_rows(&data.join("mno.sqlite"));
         std::process::exit(0);
     }
-    let path = state.initialize_startup(&data).unwrap();
+    // Frozen schema-4 Restore marker contract; schema-5 startup has its own integration coverage.
+    let path = state.initialize_schema4_startup(&data).unwrap();
     let before = fs::read(&path).unwrap();
     let archive = root.join("portable.mno-backup");
     if mode == "invalid" {

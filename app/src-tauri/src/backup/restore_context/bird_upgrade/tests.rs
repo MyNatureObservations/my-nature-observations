@@ -51,9 +51,7 @@ fn retained(root: &Path) -> Vec<PathBuf> {
 fn add_lists(path: &Path) -> Vec<crate::bird_observations::List> {
     use crate::bird_observations::{self, SpeciesCount};
     let state = crate::database_state::DatabaseState::default();
-    state
-        .initialize_bird_startup(path.parent().unwrap())
-        .unwrap();
+    state.initialize_startup(path.parent().unwrap()).unwrap();
     let search = crate::journal_search::SearchState::default();
     let db = crate::database::open_existing(path).unwrap();
     let place: String = db
@@ -250,7 +248,7 @@ fn process_interruption_before_and_after_publication_is_restartable() {
         assert_eq!(output.status.code(), Some(77), "{output:?}");
         let state = crate::database_state::DatabaseState::default();
         assert_eq!(
-            state.initialize_bird_startup(root.path()).unwrap(),
+            state.initialize_startup(root.path()).unwrap(),
             path.canonicalize().unwrap()
         );
         assert_eq!(verify(&path, true).unwrap(), before);
@@ -270,7 +268,7 @@ fn upgrade_process_child() {
         return;
     };
     let state = crate::database_state::DatabaseState::default();
-    state.initialize_bird_startup(Path::new(&root)).unwrap();
+    state.initialize_startup(Path::new(&root)).unwrap();
 }
 #[test]
 fn publication_barrier_failures_do_not_lose_old_source() {
@@ -349,7 +347,7 @@ fn restore_process_child() {
         crate::storage_content::verify_v6(&mut previous, &AtomicBool::new(false)).unwrap();
     close(previous);
     let state = crate::database_state::DatabaseState::default();
-    state.initialize_bird_startup(&data).unwrap();
+    state.initialize_startup(&data).unwrap();
     {
         let maintenance = state.maintenance().unwrap();
         let activated = super::super::activation::activate(
@@ -392,7 +390,7 @@ fn restore_process_child() {
     // evidence exists. In the old-backup case the installed file is schema 4.
     let pending_bytes = fs::read(&path).unwrap();
     let blocked = crate::database_state::DatabaseState::default();
-    assert!(blocked.initialize_bird_startup(&data).is_err());
+    assert!(blocked.initialize_startup(&data).is_err());
     assert_eq!(fs::read(&path).unwrap(), pending_bytes);
     drop(blocked);
     let restarted = crate::database_state::DatabaseState::default();
@@ -416,10 +414,35 @@ fn restore_process_child() {
             before
         );
         close(restored);
+        let generation = restarted.operation(None).unwrap().snapshot(()).generation;
+        let db = crate::database::open_existing(&path).unwrap();
+        let place: String = db
+            .query_row("SELECT id FROM places", [], |r| r.get(0))
+            .unwrap();
+        close(db);
+        let bytes = fs::read(&path).unwrap();
+        assert_eq!(
+            crate::bird_observations::create(
+                &restarted,
+                &crate::journal_search::SearchState::default(),
+                generation,
+                "2026-11-13",
+                &place,
+                &[crate::bird_observations::SpeciesCount {
+                    avibase_id: "synthetic-after-restore".into(),
+                    taxonomy_version: "AviList v2026".into(),
+                    count: 1
+                }],
+                Some("entry")
+            )
+            .unwrap_err(),
+            "bird_list_schema_unsupported"
+        );
+        assert_eq!(fs::read(&path).unwrap(), bytes);
     }
     drop(restarted);
     let final_start = crate::database_state::DatabaseState::default();
-    final_start.initialize_bird_startup(&data).unwrap();
+    final_start.initialize_startup(&data).unwrap();
     assert_eq!(verify(&path, true).unwrap(), before);
     if format == "6" {
         let mut db = crate::database::open_existing(&path).unwrap();
@@ -440,6 +463,35 @@ fn restore_process_child() {
         assert_eq!(
             crate::bird_observations::reopen(&final_start, generation, &expected.id).unwrap(),
             expected
+        );
+    }
+    if format == "5" {
+        let db = crate::database::open_existing(&path).unwrap();
+        let place: String = db
+            .query_row("SELECT id FROM places", [], |r| r.get(0))
+            .unwrap();
+        close(db);
+        let generation = final_start.operation(None).unwrap().snapshot(()).generation;
+        let id = crate::bird_observations::create(
+            &final_start,
+            &crate::journal_search::SearchState::default(),
+            generation,
+            "2026-11-13",
+            &place,
+            &[crate::bird_observations::SpeciesCount {
+                avibase_id: "synthetic-after-restore".into(),
+                taxonomy_version: "AviList v2026".into(),
+                count: 1,
+            }],
+            Some("entry"),
+        )
+        .unwrap();
+        assert_eq!(
+            crate::bird_observations::reopen(&final_start, generation, &id)
+                .unwrap()
+                .rows[0]
+                .count,
+            1
         );
     }
     assert_eq!(fs::read(archive).unwrap(), archive_before);
@@ -515,17 +567,21 @@ fn frozen_schema4_import_proof_rejects_schema5_without_writes() {
 }
 
 #[test]
-fn explicit_upgrade_and_ordinary_restart_keep_the_same_journal() {
+fn ordinary_startup_upgrades_and_restarts_without_repeating_migration() {
     let root = TempDir::new().unwrap();
     let (path, bytes, before) = fixture(root.path());
     let ordinary = crate::database_state::DatabaseState::default();
     ordinary.initialize_startup(root.path()).unwrap();
-    assert_eq!(fs::read(&path).unwrap(), bytes);
+    assert_eq!(verify(&path, true).unwrap(), before);
+    assert_eq!(fs::read(&retained(root.path())[0]).unwrap(), bytes);
+    let after_upgrade = fs::read(&path).unwrap();
     drop(ordinary);
     let upgraded = crate::database_state::DatabaseState::default();
-    upgraded.initialize_bird_startup(root.path()).unwrap();
+    upgraded.initialize_startup(root.path()).unwrap();
     assert_eq!(verify(&path, true).unwrap(), before);
     drop(upgraded);
+    assert_eq!(retained(root.path()).len(), 1);
+    assert_eq!(fs::read(&path).unwrap(), after_upgrade);
     for _ in 0..2 {
         let reopened = crate::database_state::DatabaseState::default();
         assert_eq!(
@@ -544,7 +600,7 @@ fn bird_persistence_rolls_back_invalid_rows_missing_link_and_stale_generation() 
     let root = TempDir::new().unwrap();
     let (path, _, _) = fixture(root.path());
     let state = crate::database_state::DatabaseState::default();
-    state.initialize_bird_startup(root.path()).unwrap();
+    state.initialize_startup(root.path()).unwrap();
     let search = crate::journal_search::SearchState::default();
     let generation = state.operation(None).unwrap().snapshot(()).generation;
     let db = crate::database::open_existing(&path).unwrap();
@@ -681,7 +737,7 @@ fn bird_list_places_keep_coordinates_and_remain_startup_and_backup_valid() {
         let root = TempDir::new().unwrap();
         let (path, _, _) = fixture(root.path());
         let state = crate::database_state::DatabaseState::default();
-        state.initialize_bird_startup(root.path()).unwrap();
+        state.initialize_startup(root.path()).unwrap();
         let generation = state.operation(None).unwrap().snapshot(()).generation;
         let search = crate::journal_search::SearchState::default();
         let db = crate::database::open_existing(&path).unwrap();
@@ -812,3 +868,86 @@ fn bird_list_places_keep_coordinates_and_remain_startup_and_backup_valid() {
 }
 
 mod export_import;
+
+#[test]
+fn ordinary_fresh_startup_reaches_schema5_and_reopens_without_migrating_again() {
+    let parent = TempDir::new().unwrap();
+    let root = parent.path().join("absent-journal");
+    assert!(!root.exists());
+    let state = crate::database_state::DatabaseState::default();
+    let path = state.initialize_startup(&root).unwrap();
+    let mut db = crate::database::open_existing(&path).unwrap();
+    crate::storage_content::verify_v6(&mut db, &AtomicBool::new(false)).unwrap();
+    close(db);
+    let copies = retained(&root);
+    assert_eq!(copies.len(), 1);
+    let mut old =
+        Connection::open_with_flags(&copies[0], OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    crate::storage_content::verify_v5(&mut old, &AtomicBool::new(false)).unwrap();
+    close(old);
+    let bytes = fs::read(&path).unwrap();
+    drop(state);
+    for _ in 0..2 {
+        let state = crate::database_state::DatabaseState::default();
+        assert_eq!(state.initialize_startup(&root).unwrap(), path);
+        assert!(state.operation(None).is_ok());
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        assert_eq!(retained(&root), copies);
+    }
+}
+
+#[test]
+fn ordinary_startup_upgrade_failure_keeps_source_and_retry_uses_verified_path() {
+    let root = TempDir::new().unwrap();
+    let (path, bytes, before) = fixture(root.path());
+    fn fail_at_publication(path: &Path, new: bool) -> Result<()> {
+        assert!(!new);
+        initialize_with(path, |point, _| {
+            if point == "before-publish" {
+                Err("injected_upgrade_failure".into())
+            } else {
+                Ok(())
+            }
+        })
+    }
+    let blocked = crate::database_state::DatabaseState::default();
+    let result = crate::startup::migration_probe::with_initializer(fail_at_publication, || {
+        blocked.initialize_startup(root.path())
+    });
+    assert_eq!(result.unwrap_err(), "injected_upgrade_failure");
+    assert!(blocked.operation(None).is_err());
+    assert_eq!(fs::read(&path).unwrap(), bytes);
+    assert_eq!(fs::read(&retained(root.path())[0]).unwrap(), bytes);
+    drop(blocked);
+    let retry = crate::database_state::DatabaseState::default();
+    retry.initialize_startup(root.path()).unwrap();
+    assert_eq!(verify(&path, true).unwrap(), before);
+    assert!(retry.operation(None).is_ok());
+}
+
+#[test]
+fn ordinary_schema5_validation_failure_keeps_existing_startup_error_handling() {
+    let root = TempDir::new().unwrap();
+    let (path, _, _) = fixture(root.path());
+    initialize(&path).unwrap();
+    let db = crate::database::open_existing(&path).unwrap();
+    // A well-formed SQLite file with invalid stored content must be reported
+    // as validation failure, rather than as an upgrade/publication failure.
+    db.execute("UPDATE journal_entries SET document_version=99", [])
+        .unwrap();
+    close(db);
+    let bytes = fs::read(&path).unwrap();
+    let state = crate::database_state::DatabaseState::default();
+    let error = state.initialize_startup(root.path()).unwrap_err();
+    assert!(
+        error.starts_with("database_content_validation_failed:"),
+        "{error}"
+    );
+    assert_eq!(
+        crate::startup_error::Failure::from_error(&error),
+        crate::startup_error::Failure::Invalid
+    );
+    assert!(state.operation(None).is_err());
+    assert_eq!(fs::read(&path).unwrap(), bytes);
+    assert_eq!(retained(root.path()).len(), 1);
+}
