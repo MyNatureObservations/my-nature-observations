@@ -116,6 +116,58 @@ impl Candidate {
         &self.path
     }
 }
+// Only these two source contracts can produce a schema-5 import candidate.
+// Both preview and confirmed activation use this exact path.
+pub(crate) fn build_for_schema5(
+    archive: &mut File,
+    parent: &Path,
+    flag: &AtomicBool,
+    source_format: u32,
+) -> Result<Candidate> {
+    match source_format {
+        5 => normalize_v5_candidate(build_v5(archive, parent, flag)?, flag),
+        6 => build_v6(archive, parent, flag),
+        _ => Err(Error::Manifest),
+    }
+}
+fn normalize_v5_candidate(mut candidate: Candidate, flag: &AtomicBool) -> Result<Candidate> {
+    cancel(flag)?;
+    let original = candidate.proof.clone();
+    if original.version != 5 {
+        return Err(Error::Verification);
+    }
+    let mut db = Database(Some(Connection::open_with_flags(
+        candidate.path(),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    )?));
+    // Recheck the stored private candidate against its frozen source proof.
+    if verify_database_version(db.get(), flag, 5)? != original {
+        return Err(Error::Verification);
+    }
+    crate::database::bird_schema::upgrade(db.get()).map_err(|_| Error::Verification)?;
+    if !crate::database::bird_schema::validate_schema(db.get())? {
+        return Err(Error::Verification);
+    }
+    let tx = db.get().transaction()?;
+    let preserved =
+        crate::storage_content::verified_snapshot_v5(&tx, flag).map_err(|_| Error::Verification)?;
+    if preserved.sha256 != original.sha256 || preserved.entry_count != original.entry_count {
+        return Err(Error::Verification);
+    }
+    tx.commit()?;
+    drop(db); // Checked close before independent readback and the new proof.
+    let mut reopened = Database(Some(Connection::open_with_flags(
+        candidate.path(),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?));
+    candidate.proof = verify_database_version(reopened.get(), flag, 6)?;
+    if candidate.proof.entry_count != candidate.entry_count {
+        return Err(Error::Verification);
+    }
+    drop(reopened);
+    cancel(flag)?;
+    Ok(candidate)
+}
 // A close failure must not release directory resources ahead of the original handle.
 struct Database(Option<Connection>);
 impl Database {

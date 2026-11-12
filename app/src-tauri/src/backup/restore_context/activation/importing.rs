@@ -19,7 +19,7 @@ pub(crate) fn activate_v3<'m, 's>(
     expected_new: &open_import::ContentProof,
     flag: Arc<AtomicBool>,
 ) -> Outcome<DiskActivated<'m, 's>> {
-    activate_version(maintenance, archive, expected_old, expected_new, flag, 3)
+    activate_version(maintenance, archive, expected_old, expected_new, flag, 3, 3)
 }
 pub(crate) fn activate_v4<'m, 's>(
     maintenance: &'m Maintenance<'s>,
@@ -28,7 +28,7 @@ pub(crate) fn activate_v4<'m, 's>(
     expected_new: &open_import::ContentProof,
     flag: Arc<AtomicBool>,
 ) -> Outcome<DiskActivated<'m, 's>> {
-    activate_version(maintenance, archive, expected_old, expected_new, flag, 4)
+    activate_version(maintenance, archive, expected_old, expected_new, flag, 4, 4)
 }
 pub(crate) fn activate_v5<'m, 's>(
     maintenance: &'m Maintenance<'s>,
@@ -37,7 +37,7 @@ pub(crate) fn activate_v5<'m, 's>(
     expected_new: &open_import::ContentProof,
     flag: Arc<AtomicBool>,
 ) -> Outcome<DiskActivated<'m, 's>> {
-    activate_version(maintenance, archive, expected_old, expected_new, flag, 5)
+    activate_version(maintenance, archive, expected_old, expected_new, flag, 5, 5)
 }
 pub(crate) fn activate_v6<'m, 's>(
     maintenance: &'m Maintenance<'s>,
@@ -46,7 +46,25 @@ pub(crate) fn activate_v6<'m, 's>(
     expected_new: &open_import::ContentProof,
     flag: Arc<AtomicBool>,
 ) -> Outcome<DiskActivated<'m, 's>> {
-    activate_version(maintenance, archive, expected_old, expected_new, flag, 6)
+    activate_version(maintenance, archive, expected_old, expected_new, flag, 6, 6)
+}
+pub(crate) fn activate_schema5<'m, 's>(
+    maintenance: &'m Maintenance<'s>,
+    archive: &mut File,
+    expected_old: &open_import::ContentProof,
+    expected_new: &open_import::ContentProof,
+    flag: Arc<AtomicBool>,
+    source_format: u32,
+) -> Outcome<DiskActivated<'m, 's>> {
+    activate_version(
+        maintenance,
+        archive,
+        expected_old,
+        expected_new,
+        flag,
+        6,
+        source_format,
+    )
 }
 fn activate_version<'m, 's>(
     maintenance: &'m Maintenance<'s>,
@@ -55,11 +73,15 @@ fn activate_version<'m, 's>(
     expected_new: &open_import::ContentProof,
     flag: Arc<AtomicBool>,
     version: u32,
+    source_format: u32,
 ) -> Outcome<DiskActivated<'m, 's>> {
     maintenance
         .ensure_usable()
         .map_err(|_| Error::Coordination)?;
-    if expected_new.version != version
+    if !matches!(
+        (source_format, version),
+        (3, 3) | (4, 4) | (5, 5) | (6, 6) | (5, 6)
+    ) || expected_new.version != version
         || !(if version >= 4 {
             expected_old.version == version
         } else {
@@ -136,7 +158,7 @@ fn activate_version<'m, 's>(
     let staging = root.join("backups/import-staging");
     private::ensure_directory(&staging)?;
     let candidate = (if version == 6 {
-        open_import::build_v6(archive, &staging, &flag)
+        open_import::build_for_schema5(archive, &staging, &flag, source_format)
     } else if version == 5 {
         open_import::build_v5(archive, &staging, &flag)
     } else if version == 4 {
@@ -172,12 +194,16 @@ fn activate_version<'m, 's>(
     )?;
     let marker = Marker {
         format: IMPORT_FORMAT.into(),
-        version: version + 1,
+        version: if (source_format, version) == (5, 6) {
+            8
+        } else {
+            version + 1
+        },
         operation_id: maintenance.operation_id().to_string(),
         schema_version: version - 1,
         old_schema_version: Some(old_schema),
         backup_format_version: None,
-        export_format_version: Some(version),
+        export_format_version: Some(source_format),
         old_content: Content {
             version: expected_old.version,
             sha256: expected_old.sha256.clone(),

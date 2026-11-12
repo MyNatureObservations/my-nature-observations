@@ -2,8 +2,9 @@ use super::*;
 use crate::{database_state::DatabaseState, open_import};
 use std::io::{Read, Write};
 
-fn export_fixture(
+fn export_fixture_for_format(
     root: &Path,
+    format: u32,
 ) -> (
     PathBuf,
     crate::storage_content::Proof,
@@ -11,25 +12,39 @@ fn export_fixture(
 ) {
     fs::create_dir(root).unwrap();
     let (path, _, _) = fixture(root);
-    initialize(&path).unwrap();
-    let lists = add_lists(&path);
+    let lists = if format == 6 {
+        initialize(&path).unwrap();
+        add_lists(&path)
+    } else {
+        Vec::new()
+    };
     let db = crate::database::open_existing(&path).unwrap();
     db.execute("INSERT INTO journal_entries VALUES ('entry-two','2026-11-12','Second',?1,1,'created','updated')",[DOC]).unwrap();
-    db.execute(
-        "INSERT INTO journal_bird_lists VALUES ('entry-two',?1)",
-        [&lists[0].id],
-    )
-    .unwrap();
+    if format == 6 {
+        db.execute(
+            "INSERT INTO journal_bird_lists VALUES ('entry-two',?1)",
+            [&lists[0].id],
+        )
+        .unwrap();
+    }
     close(db);
     let state = DatabaseState::default();
-    state.initialize_bird_startup(root).unwrap();
+    if format == 6 {
+        state.initialize_bird_startup(root).unwrap();
+    } else {
+        state.initialize_startup(root).unwrap();
+    }
     let generation = state.operation(None).unwrap().snapshot(()).generation;
     let lists = lists
         .iter()
         .map(|l| crate::bird_observations::reopen(&state, generation, &l.id).unwrap())
         .collect();
     let mut db = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
-    let proof = crate::storage_content::verify_v6(&mut db, &AtomicBool::new(false)).unwrap();
+    let proof = if format == 6 {
+        crate::storage_content::verify_v6(&mut db, &AtomicBool::new(false)).unwrap()
+    } else {
+        crate::storage_content::verify_v5(&mut db, &AtomicBool::new(false)).unwrap()
+    };
     let archive = root.join("birds.mno-export");
     let m = crate::open_export::export(&mut db, &archive, &AtomicBool::new(false)).unwrap();
     assert_eq!(
@@ -38,14 +53,25 @@ fn export_fixture(
             m.database_schema_version,
             m.document_version
         ),
-        (6, 5, 2)
+        (format, format - 1, 2)
     );
-    assert_eq!(m.files["bird_lists.jsonl"].row_count, Some(2));
-    assert_eq!(m.files["bird_rows.jsonl"].row_count, Some(4));
-    assert_eq!(m.files["journal_bird_lists.jsonl"].row_count, Some(2));
+    if format == 6 {
+        assert_eq!(m.files["bird_lists.jsonl"].row_count, Some(2));
+        assert_eq!(m.files["bird_rows.jsonl"].row_count, Some(4));
+        assert_eq!(m.files["journal_bird_lists.jsonl"].row_count, Some(2));
+    }
     assert_eq!(m.files["images.jsonl"].row_count, Some(1));
     close(db);
     (archive, proof, lists)
+}
+fn export_fixture(
+    root: &Path,
+) -> (
+    PathBuf,
+    crate::storage_content::Proof,
+    Vec<crate::bird_observations::List>,
+) {
+    export_fixture_for_format(root, 6)
 }
 fn candidate(archive: &Path, parent: &Path) -> open_import::Candidate {
     assert!(open_import::is_v6(&mut File::open(archive).unwrap()).unwrap());
@@ -58,6 +84,13 @@ fn candidate(archive: &Path, parent: &Path) -> open_import::Candidate {
 }
 #[test]
 fn format6_roundtrip_and_protected_activation_survive_restart_and_retry() {
+    run_import_cases(6);
+}
+#[test]
+fn normalized_format5_activation_preserves_content_and_retries() {
+    run_import_cases(5);
+}
+fn run_import_cases(source_format: u32) {
     for mode in [
         "success",
         "fail:import-v3-before-marker-publish",
@@ -70,10 +103,10 @@ fn format6_roundtrip_and_protected_activation_survive_restart_and_retry() {
         "crash:after-replace",
     ] {
         let root = TempDir::new().unwrap();
-        let output=std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact","backup::restore_context::bird_upgrade::tests::export_import::format6_activation_child","--nocapture"]).env("MNO_BIRD_IMPORT_CASE",mode).env("MNO_ACTIVATION_ROOT",root.path()).env("MNO_ACTIVATION_MODE",mode).output().unwrap();
+        let output=std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact","backup::restore_context::bird_upgrade::tests::export_import::format6_activation_child","--nocapture"]).env("MNO_BIRD_SOURCE_FORMAT",source_format.to_string()).env("MNO_BIRD_IMPORT_CASE",mode).env("MNO_ACTIVATION_ROOT",root.path()).env("MNO_ACTIVATION_MODE",mode).output().unwrap();
         if mode.starts_with("crash:") {
             assert_eq!(output.status.code(), Some(88), "{mode}: {output:?}");
-            let retry=std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact","backup::restore_context::bird_upgrade::tests::export_import::format6_finish_child","--nocapture"]).env("MNO_BIRD_IMPORT_FINISH","1").env("MNO_ACTIVATION_ROOT",root.path()).env("MNO_ACTIVATION_MODE","success").output().unwrap();
+            let retry=std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact","backup::restore_context::bird_upgrade::tests::export_import::format6_finish_child","--nocapture"]).env("MNO_BIRD_SOURCE_FORMAT",source_format.to_string()).env("MNO_BIRD_IMPORT_FINISH","1").env("MNO_ACTIVATION_ROOT",root.path()).env("MNO_ACTIVATION_MODE","success").output().unwrap();
             assert!(retry.status.success(), "{mode}: {retry:?}");
         } else {
             assert!(output.status.success(), "{mode}: {output:?}");
@@ -86,10 +119,32 @@ fn format6_activation_child() {
         return;
     };
     let root = PathBuf::from(std::env::var_os("MNO_ACTIVATION_ROOT").unwrap());
-    let (archive, expected, lists) = export_fixture(&root.join("source"));
+    let source_format = std::env::var("MNO_BIRD_SOURCE_FORMAT")
+        .unwrap()
+        .parse::<u32>()
+        .unwrap();
+    let (archive, expected, lists) = export_fixture_for_format(&root.join("source"), source_format);
     let archive_bytes = fs::read(&archive).unwrap();
-    let prepared = candidate(&archive, &root);
-    assert_eq!(prepared.proof().sha256, expected.sha256);
+    let prepared = open_import::build_for_schema5(
+        &mut File::open(&archive).unwrap(),
+        &root,
+        &AtomicBool::new(false),
+        source_format,
+    )
+    .unwrap();
+    if source_format == 6 {
+        assert_eq!(prepared.proof().sha256, expected.sha256);
+    } else {
+        let mut readback =
+            Connection::open_with_flags(prepared.path(), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let tx = readback.transaction().unwrap();
+        assert_eq!(
+            crate::storage_content::verified_snapshot_v5(&tx, &AtomicBool::new(false)).unwrap(),
+            expected
+        );
+        tx.commit().unwrap();
+        close(readback);
+    }
     let new = prepared.proof().clone();
     drop(prepared);
     let data = root.join("data");
@@ -108,12 +163,13 @@ fn format6_activation_child() {
     assert_ne!(old.sha256, new.sha256);
     fs::write(root.join("expected-previous.sha256"), &old.sha256).unwrap();
     let maintenance = state.maintenance().unwrap();
-    let result = super::super::super::activation::importing::activate_v6(
+    let result = super::super::super::activation::importing::activate_schema5(
         &maintenance,
         &mut File::open(&archive).unwrap(),
         &old,
         &new,
         Arc::new(AtomicBool::new(false)),
+        source_format,
     );
     if mode == "success" || mode == "fail:startup-before-retire" {
         assert!(result.is_ok());
@@ -162,8 +218,8 @@ fn format6_activation_child() {
         let marker_path = data.join("recovery/activation-v1.json");
         let bytes = fs::read(&marker_path).unwrap();
         let original: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(original["version"], 7);
-        assert_eq!(original["export_format_version"], 6);
+        assert_eq!(original["version"], if source_format == 5 { 8 } else { 7 });
+        assert_eq!(original["export_format_version"], source_format);
         for field in [
             "version",
             "schema_version",
@@ -177,6 +233,9 @@ fn format6_activation_child() {
             let mut altered = original.clone();
             match field {
                 "old_content" | "new_content" => altered[field]["version"] = serde_json::json!(5),
+                "version" => {
+                    altered[field] = serde_json::json!(if source_format == 5 { 7 } else { 8 })
+                }
                 "candidate_file" => altered[field] = serde_json::json!("../mno.sqlite"),
                 _ => altered[field] = serde_json::json!(0),
             }
@@ -262,14 +321,19 @@ fn format6_finish_child() {
     };
     startup::run(&state, action).unwrap();
     assert!(state.operation(None).is_ok());
-    let mut source = Connection::open_with_flags(
-        data.parent().unwrap().join("source/mno.sqlite"),
-        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    let source_format = std::env::var("MNO_BIRD_SOURCE_FORMAT")
+        .unwrap()
+        .parse::<u32>()
+        .unwrap();
+    let expected_candidate = open_import::build_for_schema5(
+        &mut File::open(data.parent().unwrap().join("source/birds.mno-export")).unwrap(),
+        data.parent().unwrap(),
+        &AtomicBool::new(false),
+        source_format,
     )
     .unwrap();
-    let expected =
-        open_import::verify_database_version(&mut source, &AtomicBool::new(false), 6).unwrap();
-    close(source);
+    let expected = expected_candidate.proof().clone();
+    drop(expected_candidate);
     let target = state.ready_database_path().unwrap();
     assert_eq!(
         super::super::super::activation::journal_proof(&target).unwrap(),
@@ -306,6 +370,8 @@ fn rewrite(archive: &Path, destination: &Path, case: &str) {
     }
     let mut m: serde_json::Value = serde_json::from_slice(&payloads["manifest.json"]).unwrap();
     let name = match case {
+        "legacy-reference" => "journal_places.jsonl",
+        "legacy-document" => "journal.jsonl",
         "place" | "date" | "unknown" | "order" => "bird_lists.jsonl",
         "link" => "journal_bird_lists.jsonl",
         _ => "bird_rows.jsonl",
@@ -316,6 +382,8 @@ fn rewrite(archive: &Path, destination: &Path, case: &str) {
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
     match case {
+        "legacy-reference" => rows[0]["place_id"] = serde_json::json!("missing-place"),
+        "legacy-document" => rows[0]["content_json"] = serde_json::json!("not-json"),
         "place" => rows[0]["place_id"] = serde_json::json!("missing-place"),
         "date" => rows[0]["visit_date"] = serde_json::json!("2026-02-30"),
         "unknown" => rows[0]["unexpected"] = serde_json::json!(true),
@@ -408,6 +476,39 @@ fn format6_rejects_malformed_observations_without_changing_active_journal() {
         );
         assert_eq!(fs::read(&active).unwrap(), before, "{case}");
         assert_eq!(fs::read(&archive).unwrap(), original);
+        assert!(!data.join("recovery").exists());
+    }
+}
+
+#[test]
+fn normalized_format5_rejects_invalid_older_payloads_without_active_changes() {
+    let root = TempDir::new().unwrap();
+    let (archive, _, _) = export_fixture_for_format(&root.path().join("source"), 5);
+    let data = root.path().join("data");
+    fs::create_dir(&data).unwrap();
+    let (active, _, _) = fixture(&data);
+    initialize(&active).unwrap();
+    add_lists(&active);
+    let state = DatabaseState::default();
+    state.initialize_bird_startup(&data).unwrap();
+    let before = fs::read(&active).unwrap();
+    let original = fs::read(&archive).unwrap();
+    for case in ["legacy-reference", "legacy-document"] {
+        let damaged = root.path().join(format!("{case}.mno-export"));
+        rewrite(&archive, &damaged, case);
+        assert!(
+            open_import::build_for_schema5(
+                &mut File::open(&damaged).unwrap(),
+                root.path(),
+                &AtomicBool::new(false),
+                5
+            )
+            .is_err(),
+            "{case}"
+        );
+        assert_eq!(fs::read(&active).unwrap(), before);
+        assert_eq!(fs::read(&archive).unwrap(), original);
+        assert!(state.operation(None).is_ok());
         assert!(!data.join("recovery").exists());
     }
 }

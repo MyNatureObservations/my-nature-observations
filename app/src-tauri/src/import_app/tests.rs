@@ -963,13 +963,67 @@ fn format6_preview_confirmation_and_restart_preserve_observations() {
         crate::backup::restore_context::activation::journal_proof(&active).unwrap(),
         expected
     );
-    // Cross-schema imports remain explicit rejections, with no new selection.
+    // A format-5 archive retains its source identity while the private candidate
+    // is normalized to proof 6 before explicit confirmation.
     let old_archive = archive_v5(root.path());
     let bytes = fs::read(&active).unwrap();
-    assert!(matches!(
-        prepare(&restarted, &old_archive),
-        Err(Error::InvalidPackage)
-    ));
+    let previous = crate::backup::restore_context::activation::journal_proof(&active).unwrap();
+    let normalized = prepare(&restarted, &old_archive).unwrap();
+    assert_eq!(normalized.source_format, 5);
+    assert_eq!(normalized.old_content.version, 6);
+    assert_eq!(normalized.new_content.version, 6);
+    let expected_normalized = normalized.new_content.clone();
     assert_eq!(fs::read(&active).unwrap(), bytes);
     assert!(restarted.operation(None).is_ok());
+    let token = normalized.token.clone();
+    *imports.selected.lock().unwrap() = Some(normalized);
+    let result = confirm(
+        &restarted,
+        &RestoreState::default(),
+        &imports,
+        &token,
+        || {},
+    );
+    assert_eq!(result.error, None);
+    assert!(result.activated);
+    drop(restarted);
+    let final_start = DatabaseState::default();
+    assert!(
+        final_start
+            .initialize_startup(&root.path().join("current-data"))
+            .is_err()
+    );
+    startup::run(&final_start, startup::Action::FinishNew).unwrap();
+    assert_eq!(
+        crate::backup::restore_context::activation::journal_proof(&active).unwrap(),
+        expected_normalized
+    );
+    let mut protected_previous = false;
+    for archive in fs::read_dir(root.path().join("current-data/backups/pre-restore"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "mno-backup"))
+    {
+        let candidate =
+            crate::backup::restore::prepare_candidate(&archive, Arc::new(AtomicBool::new(false)))
+                .unwrap();
+        let proof = crate::storage_content::verified_snapshot_v6(
+            candidate.source().unwrap(),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        if proof.sha256 == previous.sha256 {
+            protected_previous = true;
+            assert_eq!(
+                candidate
+                    .source()
+                    .unwrap()
+                    .query_row("SELECT count(*) FROM bird_lists", [], |r| r
+                        .get::<_, u32>(0))
+                    .unwrap(),
+                2
+            );
+        }
+    }
+    assert!(protected_previous);
 }

@@ -340,6 +340,14 @@ fn restore_process_child() {
     crate::backup::create_backup(&db, &archive, crate::backup::BackupKind::Manual).unwrap();
     close(db);
     let archive_before = fs::read(&archive).unwrap();
+    if format == "5" {
+        initialize(&path).unwrap();
+        add_lists(&path);
+    }
+    let mut previous = crate::database::open_existing(&path).unwrap();
+    let previous_proof =
+        crate::storage_content::verify_v6(&mut previous, &AtomicBool::new(false)).unwrap();
+    close(previous);
     let state = crate::database_state::DatabaseState::default();
     state.initialize_bird_startup(&data).unwrap();
     {
@@ -353,6 +361,40 @@ fn restore_process_child() {
         drop(activated);
     }
     drop(state);
+    let protected = fs::read_dir(data.join("backups/pre-restore"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.extension().is_some_and(|e| e == "mno-backup"))
+        .unwrap();
+    let protected_bytes = fs::read(&protected).unwrap();
+    let preserved =
+        crate::backup::restore::prepare_candidate(&protected, Arc::new(AtomicBool::new(false)))
+            .unwrap();
+    assert_eq!(
+        crate::storage_content::verified_snapshot_v6(
+            preserved.source().unwrap(),
+            &AtomicBool::new(false)
+        )
+        .unwrap(),
+        previous_proof
+    );
+    assert_eq!(
+        preserved
+            .source()
+            .unwrap()
+            .query_row("SELECT count(*) FROM bird_lists", [], |r| r
+                .get::<_, u32>(0))
+            .unwrap(),
+        2
+    );
+    drop(preserved);
+    // Even the opt-in upgrader must stop before SQLite access while Recovery
+    // evidence exists. In the old-backup case the installed file is schema 4.
+    let pending_bytes = fs::read(&path).unwrap();
+    let blocked = crate::database_state::DatabaseState::default();
+    assert!(blocked.initialize_bird_startup(&data).is_err());
+    assert_eq!(fs::read(&path).unwrap(), pending_bytes);
+    drop(blocked);
     let restarted = crate::database_state::DatabaseState::default();
     assert!(restarted.initialize_startup(&data).is_err());
     super::super::activation::startup::run(
@@ -361,6 +403,20 @@ fn restore_process_child() {
     )
     .unwrap();
     assert!(restarted.operation(None).is_ok());
+    if format == "5" {
+        let mut restored = crate::database::open_existing(&path).unwrap();
+        assert_eq!(
+            restored
+                .pragma_query_value::<u32, _>(None, "user_version", |r| r.get(0))
+                .unwrap(),
+            4
+        );
+        assert_eq!(
+            crate::storage_content::verify_v5(&mut restored, &AtomicBool::new(false)).unwrap(),
+            before
+        );
+        close(restored);
+    }
     drop(restarted);
     let final_start = crate::database_state::DatabaseState::default();
     final_start.initialize_bird_startup(&data).unwrap();
@@ -387,6 +443,7 @@ fn restore_process_child() {
         );
     }
     assert_eq!(fs::read(archive).unwrap(), archive_before);
+    assert_eq!(fs::read(protected).unwrap(), protected_bytes);
 }
 
 #[test]

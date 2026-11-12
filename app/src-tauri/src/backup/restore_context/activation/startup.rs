@@ -202,7 +202,7 @@ fn v2(session: &RecoverySession<'_, '_>) -> Outcome<bool> {
     if serde_json::from_slice::<Header>(&bytes).is_ok_and(|h| {
         (h.format == "mno-database-activation" && matches!(h.version, 3 | 4 | 5 | 6))
             || (h.format == IMPORT_FORMAT && h.version == 4)
-            || (h.format == IMPORT_FORMAT && matches!(h.version, 5 | 6 | 7))
+            || (h.format == IMPORT_FORMAT && matches!(h.version, 5 | 6 | 7 | 8))
     }) {
         return Ok(false);
     }

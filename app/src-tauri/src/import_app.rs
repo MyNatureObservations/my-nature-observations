@@ -25,6 +25,7 @@ struct Choice {
     archive: File,
     hash: String,
     generation: u32,
+    source_format: u32,
     entry_count: u64,
     existing_place_count: u64,
     imported_place_count: u64,
@@ -161,7 +162,14 @@ fn prepare(state: &DatabaseState, path: &Path) -> Result<Choice, Error> {
     if !matches!(format, 5 | 6) && !state.permits_legacy_protocol_fixture() {
         return Err(Error::InvalidPackage);
     }
-    let candidate = (if format == 6 {
+    let candidate = (if matches!(format, 5 | 6) && old_content.version == 6 {
+        open_import::build_for_schema5(
+            &mut archive,
+            staging.path(),
+            &AtomicBool::new(false),
+            format,
+        )
+    } else if format == 6 {
         open_import::build_v6(&mut archive, staging.path(), &AtomicBool::new(false))
     } else if format == 5 {
         open_import::build_v5(&mut archive, staging.path(), &AtomicBool::new(false))
@@ -212,6 +220,11 @@ fn prepare(state: &DatabaseState, path: &Path) -> Result<Choice, Error> {
         archive,
         hash,
         generation,
+        source_format: if format == 0 {
+            new_content.version
+        } else {
+            format
+        },
         entry_count,
         existing_place_count,
         imported_place_count,
@@ -273,12 +286,13 @@ fn activate(state: &DatabaseState, mut choice: Choice) -> Result<Success, Error>
         {
             return Err(Error::Changed);
         }
-        let activated = crate::backup::restore_context::activation::importing::activate_v6(
+        let activated = crate::backup::restore_context::activation::importing::activate_schema5(
             &maintenance,
             &mut choice.archive,
             &choice.old_content,
             &choice.new_content,
             Arc::new(AtomicBool::new(false)),
+            choice.source_format,
         )
         .map_err(|_| Error::Failed)?;
         drop(activated);
@@ -414,7 +428,7 @@ pub(crate) async fn choose_open_import(
             let choice = prepare(&app.state::<DatabaseState>(), &path)?;
             let selection = Selection {
                 token: choice.token.clone(),
-                format_version: choice.new_content.version,
+                format_version: choice.source_format,
                 entry_count: choice.entry_count,
                 existing_entry_count: choice.old_content.entry_count,
                 existing_place_count: choice.existing_place_count,

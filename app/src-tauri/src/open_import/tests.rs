@@ -608,3 +608,43 @@ fn frozen_independent_import_proof_vectors() {
         "c1303869ee7d548823d0315a640d89ff4883e5394053b7eecb23699b4474838a"
     );
 }
+
+#[test]
+fn normalized_v5_rechecks_the_frozen_candidate_before_upgrade() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("source.sqlite");
+    crate::database::create_current_database(&source).unwrap();
+    let db = crate::database::open_existing(&source).unwrap();
+    db.execute(
+        "INSERT INTO journal_entries VALUES('entry','2026-11-12','Original','{}',1,'c','u')",
+        [],
+    )
+    .unwrap();
+    db.close().unwrap();
+    let archive = root.path().join("old.mno-export");
+    let mut readonly =
+        Connection::open_with_flags(&source, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    crate::open_export::export(&mut readonly, &archive, &flag()).unwrap();
+    readonly.close().unwrap();
+    let before = fs::read(&source).unwrap();
+    for malformed in [false, true] {
+        let candidate = build_v5(&mut File::open(&archive).unwrap(), root.path(), &flag()).unwrap();
+        let db = crate::database::open_existing(candidate.path()).unwrap();
+        if malformed {
+            db.execute_batch("CREATE TABLE unrecognized(value TEXT)")
+                .unwrap();
+        } else {
+            db.execute(
+                "UPDATE journal_entries SET title='Changed after frozen verification'",
+                [],
+            )
+            .unwrap();
+        }
+        db.close().unwrap();
+        assert!(normalize_v5_candidate(candidate, &flag()).is_err());
+        assert_eq!(fs::read(&source).unwrap(), before);
+    }
+    assert!(
+        build_for_schema5(&mut File::open(&archive).unwrap(), root.path(), &flag(), 4).is_err()
+    );
+}

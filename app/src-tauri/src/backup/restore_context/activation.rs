@@ -111,7 +111,7 @@ impl From<LegacyMarker> for Marker {
 }
 impl Marker {
     fn is_import(&self) -> bool {
-        self.format == IMPORT_FORMAT && matches!(self.version, 1 | 4 | 5 | 6 | 7)
+        self.format == IMPORT_FORMAT && matches!(self.version, 1 | 4 | 5 | 6 | 7 | 8)
     }
 }
 // Inert disk observation, not a completion/admission capability.
@@ -353,7 +353,7 @@ fn parse_marker(bytes: &[u8]) -> Outcome<Marker> {
     if h.format == "mno-database-activation" && matches!(h.version, 5 | 6) {
         return parse_v5_restore_marker(bytes);
     }
-    if h.format == IMPORT_FORMAT && matches!(h.version, 6 | 7) {
+    if h.format == IMPORT_FORMAT && matches!(h.version, 6 | 7 | 8) {
         return parse_v6_import_marker(bytes);
     }
     if h.format != "mno-database-activation" || h.version != 2 {
@@ -926,7 +926,7 @@ fn inspect(session: &RecoverySession<'_, '_>) -> Outcome<Observed> {
     let root = path.parent().ok_or(Error::Binding)?;
     let marker = read_marker(root)?;
     check_record(root, &marker)?;
-    let content = if matches!(marker.version, 3 | 4 | 5 | 6 | 7) {
+    let content = if matches!(marker.version, 3 | 4 | 5 | 6 | 7 | 8) {
         let old = verify_file_version(&path, marker.old_content.version)
             .is_ok_and(|v| v == marker.old_content);
         let new = verify_new_file(&path, &marker).is_ok_and(|v| v == marker.new_content);
@@ -1100,10 +1100,12 @@ fn parse_v6_import_marker(bytes: &[u8]) -> Outcome<Marker> {
                 .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
     };
     if m.format != IMPORT_FORMAT
-        || !matches!((m.version, m.schema_version), (6, 4) | (7, 5))
+        || !matches!(
+            (m.version, m.schema_version, m.export_format_version),
+            (6, 4, Some(5)) | (7, 5, Some(6)) | (8, 5, Some(5))
+        )
         || m.old_schema_version != Some(m.schema_version)
         || m.backup_format_version.is_some()
-        || m.export_format_version != Some(m.schema_version + 1)
         || m.old_content.version != m.schema_version + 1
         || m.new_content.version != m.schema_version + 1
         || id.get_version_num() != 4
