@@ -54,6 +54,20 @@ pub(crate) fn initialize_database(path: &Path) -> Result<(), String> {
     if version < SCHEMA_VERSION {
         return Err("database_schema_upgrade_required".into());
     }
+    if version == 5 {
+        #[cfg(not(target_os = "macos"))]
+        return Err("database_schema_platform_unsupported".into());
+        #[cfg(target_os = "macos")]
+        {
+            crate::storage_content::verify_v6(
+                &mut connection,
+                &std::sync::atomic::AtomicBool::new(false),
+            )
+            .map_err(|e| format!("database_content_validation_failed: {e:?}"))?;
+            connection.close().map_err(|(_, e)| e.to_string())?;
+            return crate::backup::restore_context::bird_upgrade::confirm(path);
+        }
+    }
     if version != SCHEMA_VERSION {
         return Err("database_schema_incompatible".into());
     }
@@ -237,3 +251,6 @@ fn supported_objects(connection: &Connection) -> rusqlite::Result<Vec<SchemaObje
     objects.sort();
     Ok(objects)
 }
+
+#[path = "database/bird_schema.rs"]
+pub(crate) mod bird_schema;

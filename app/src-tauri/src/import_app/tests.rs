@@ -43,7 +43,7 @@ fn fresh(root: &Path) -> (DatabaseState, PathBuf) {
 fn current(root: &Path) -> (DatabaseState, PathBuf) {
     let state = DatabaseState::default();
     let active = state
-        .initialize_startup(&root.join("current-data"))
+        .initialize_schema4_startup(&root.join("current-data"))
         .unwrap();
     (state, active)
 }
@@ -329,7 +329,11 @@ fn import_app_child() {
     let root = PathBuf::from(std::env::var_os("MNO_IMPORT_APP_ROOT").unwrap());
     let state = DatabaseState::default();
     if matches!(scenario.as_str(), "restart" | "restart-before") {
-        assert!(state.initialize_startup(&root.join("data")).is_err());
+        assert!(
+            state
+                .initialize_schema4_startup(&root.join("data"))
+                .is_err()
+        );
         assert_eq!(mode(&state), Mode::Recovery);
         startup::run(
             &state,
@@ -358,7 +362,9 @@ fn import_app_child() {
         std::process::exit(0);
     }
     let package = archive_v5(&root);
-    let active = state.initialize_startup(&root.join("data")).unwrap();
+    let active = state
+        .initialize_schema4_startup(&root.join("data"))
+        .unwrap();
     let choice = prepare(&state, &package).unwrap();
     if scenario == "occupied-late" {
         let db = Connection::open(&active).unwrap();
@@ -853,4 +859,177 @@ fn replacement_preparation_failures_never_report_success_or_change_active_journa
         let root = tempfile::tempdir_in("/private/tmp").unwrap();
         replacement_launch(root.path(), scenario, None);
     }
+}
+
+#[test]
+fn format6_preview_confirmation_and_restart_preserve_observations() {
+    let root = tempfile::tempdir_in("/private/tmp").unwrap();
+    let source = root.path().join("source-v6.sqlite");
+    crate::database::create_current_database(&source).unwrap();
+    let mut db = crate::database::open_existing(&source).unwrap();
+    crate::database::bird_schema::upgrade(&mut db).unwrap();
+    db.execute_batch("INSERT INTO journal_entries VALUES('incoming','2026-11-12','New','{}',1,'c','u');
+        INSERT INTO places VALUES('00000000-0000-4000-8000-000000000001','Lake',59,18,1);
+        INSERT INTO bird_lists VALUES('linked','2026-11-12','00000000-0000-4000-8000-000000000001');
+        INSERT INTO bird_lists VALUES('unlinked','2026-11-13','00000000-0000-4000-8000-000000000001');
+        INSERT INTO bird_rows VALUES('row1','linked',0,'synthetic-1','AviList v2026',6);
+        INSERT INTO bird_rows VALUES('row2','unlinked',0,'synthetic-2','AviList v2026',2);
+        INSERT INTO journal_bird_lists VALUES('incoming','linked');").unwrap();
+    let expected =
+        crate::open_import::verify_database_version(&mut db, &AtomicBool::new(false), 6).unwrap();
+    db.close().unwrap();
+    let package = root.path().join("birds.mno-export");
+    let mut readonly =
+        Connection::open_with_flags(&source, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    crate::open_export::export(&mut readonly, &package, &AtomicBool::new(false)).unwrap();
+    readonly.close().unwrap();
+    let state = DatabaseState::default();
+    let active = state
+        .initialize_startup(&root.path().join("current-data"))
+        .unwrap();
+    let before = fs::read(&active).unwrap();
+    // Recompute valid checksums around invalid observations: rejection must
+    // happen on content, before any active journal or Recovery publication changes.
+    let damaged = root.path().join("invalid-birds.mno-export");
+    {
+        let mut zip = zip::ZipArchive::new(File::open(&package).unwrap()).unwrap();
+        let mut payloads = std::collections::BTreeMap::new();
+        for i in 0..zip.len() {
+            let mut f = zip.by_index(i).unwrap();
+            let mut bytes = Vec::new();
+            f.read_to_end(&mut bytes).unwrap();
+            payloads.insert(f.name().to_owned(), bytes);
+        }
+        let mut rows: Vec<serde_json::Value> = std::str::from_utf8(&payloads["bird_rows.jsonl"])
+            .unwrap()
+            .lines()
+            .map(|r| serde_json::from_str(r).unwrap())
+            .collect();
+        rows[0]["count"] = serde_json::json!(0);
+        let mut bytes = Vec::new();
+        for row in rows {
+            serde_json::to_writer(&mut bytes, &row).unwrap();
+            bytes.push(b'\n');
+        }
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&payloads["manifest.json"]).unwrap();
+        manifest["files"]["bird_rows.jsonl"]["size"] = serde_json::json!(bytes.len());
+        manifest["files"]["bird_rows.jsonl"]["sha256"] =
+            serde_json::json!(format!("{:x}", Sha256::digest(&bytes)));
+        payloads.insert("bird_rows.jsonl".into(), bytes);
+        payloads.insert(
+            "manifest.json".into(),
+            serde_json::to_vec(&manifest).unwrap(),
+        );
+        let mut out = zip::ZipWriter::new(File::create(&damaged).unwrap());
+        for (name, bytes) in payloads {
+            out.start_file(
+                name,
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
+            out.write_all(&bytes).unwrap();
+        }
+        out.finish().unwrap();
+    }
+    assert!(matches!(
+        prepare(&state, &damaged),
+        Err(Error::InvalidPackage)
+    ));
+    assert_eq!(fs::read(&active).unwrap(), before);
+    assert!(state.operation(None).is_ok());
+    assert!(!root.path().join("current-data/recovery").exists());
+    let choice = prepare(&state, &package).unwrap();
+    assert_eq!(choice.new_content, expected);
+    assert_eq!(choice.old_content.version, 6);
+    assert_eq!(fs::read(&active).unwrap(), before);
+    assert!(!root.path().join("current-data/recovery").exists());
+    let imports = ImportState::default();
+    let token = choice.token.clone();
+    *imports.selected.lock().unwrap() = Some(choice);
+    let reply = confirm(&state, &RestoreState::default(), &imports, &token, || {});
+    assert_eq!(reply.error, None);
+    assert!(reply.activated);
+    assert_eq!(reply.mode, Mode::Blocked);
+    assert!(state.operation(None).is_err());
+    drop(state);
+    let restarted = DatabaseState::default();
+    assert!(
+        restarted
+            .initialize_startup(&root.path().join("current-data"))
+            .is_err()
+    );
+    assert_eq!(
+        startup::status(&restarted).unwrap().operation,
+        startup::Operation::Import
+    );
+    startup::run(&restarted, startup::Action::FinishNew).unwrap();
+    assert_eq!(
+        crate::backup::restore_context::activation::journal_proof(&active).unwrap(),
+        expected
+    );
+    // A format-5 archive retains its source identity while the private candidate
+    // is normalized to proof 6 before explicit confirmation.
+    let old_archive = archive_v5(root.path());
+    let bytes = fs::read(&active).unwrap();
+    let previous = crate::backup::restore_context::activation::journal_proof(&active).unwrap();
+    let normalized = prepare(&restarted, &old_archive).unwrap();
+    assert_eq!(normalized.source_format, 5);
+    assert_eq!(normalized.old_content.version, 6);
+    assert_eq!(normalized.new_content.version, 6);
+    let expected_normalized = normalized.new_content.clone();
+    assert_eq!(fs::read(&active).unwrap(), bytes);
+    assert!(restarted.operation(None).is_ok());
+    let token = normalized.token.clone();
+    *imports.selected.lock().unwrap() = Some(normalized);
+    let result = confirm(
+        &restarted,
+        &RestoreState::default(),
+        &imports,
+        &token,
+        || {},
+    );
+    assert_eq!(result.error, None);
+    assert!(result.activated);
+    drop(restarted);
+    let final_start = DatabaseState::default();
+    assert!(
+        final_start
+            .initialize_startup(&root.path().join("current-data"))
+            .is_err()
+    );
+    startup::run(&final_start, startup::Action::FinishNew).unwrap();
+    assert_eq!(
+        crate::backup::restore_context::activation::journal_proof(&active).unwrap(),
+        expected_normalized
+    );
+    let mut protected_previous = false;
+    for archive in fs::read_dir(root.path().join("current-data/backups/pre-restore"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "mno-backup"))
+    {
+        let candidate =
+            crate::backup::restore::prepare_candidate(&archive, Arc::new(AtomicBool::new(false)))
+                .unwrap();
+        let proof = crate::storage_content::verified_snapshot_v6(
+            candidate.source().unwrap(),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        if proof.sha256 == previous.sha256 {
+            protected_previous = true;
+            assert_eq!(
+                candidate
+                    .source()
+                    .unwrap()
+                    .query_row("SELECT count(*) FROM bird_lists", [], |r| r
+                        .get::<_, u32>(0))
+                    .unwrap(),
+                2
+            );
+        }
+    }
+    assert!(protected_previous);
 }

@@ -406,7 +406,7 @@ fn extract_archive_in(
         serde_json::from_slice(&bytes).map_err(|_| PrepareError::DamagedArchive)?
     };
     if manifest.format != FORMAT
-        || !matches!(manifest.format_version, 1 | 2 | 3 | 4 | 5)
+        || !matches!(manifest.format_version, 1 | 2 | 3 | 4 | 5 | 6)
         || manifest.database_file != DATABASE
         || manifest.book_id.is_some()
     {
@@ -414,7 +414,7 @@ fn extract_archive_in(
     }
     if !matches!(
         (manifest.format_version, manifest.database_schema_version),
-        (1, 0) | (2, 1) | (3, 2) | (4, 3) | (5, 4)
+        (1, 0) | (2, 1) | (3, 2) | (4, 3) | (5, 4) | (6, 5)
     ) {
         return Err(PrepareError::IncompatibleSchema);
     }
@@ -519,7 +519,9 @@ fn prepare_file_in(
                 crate::storage_content::ROW_LIMIT as i32,
             )
             .map_err(sql_error)?;
-        if manifest.format_version == 5 {
+        if manifest.format_version == 6 {
+            crate::storage_content::snapshot_v6(&database, &cancel).map_err(preservation_error)?;
+        } else if manifest.format_version == 5 {
             crate::storage_content::snapshot_v5(&database, &cancel).map_err(preservation_error)?;
         } else if manifest.format_version == 4 {
             crate::storage_content::snapshot_v4(&database, &cancel).map_err(preservation_error)?;

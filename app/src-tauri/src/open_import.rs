@@ -17,7 +17,7 @@ const MANIFEST_LIMIT: u64 = 16 * 1024;
 const LINE_LIMIT: usize = ROW_LIMIT * 6 + 1024;
 const LINE_LIMIT_V2: usize = (ROW_LIMIT + 2 * crate::weather::storage::PART_LIMIT) * 6 + 2048;
 mod v3;
-pub(crate) use v3::{build_v3, build_v4, build_v5, is_v3, is_v4, is_v5};
+pub(crate) use v3::{build_v3, build_v4, build_v5, build_v6, is_v3, is_v4, is_v5, is_v6};
 type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub(crate) enum Error {
@@ -115,6 +115,58 @@ impl Candidate {
     pub(crate) fn path(&self) -> &Path {
         &self.path
     }
+}
+// Only these two source contracts can produce a schema-5 import candidate.
+// Both preview and confirmed activation use this exact path.
+pub(crate) fn build_for_schema5(
+    archive: &mut File,
+    parent: &Path,
+    flag: &AtomicBool,
+    source_format: u32,
+) -> Result<Candidate> {
+    match source_format {
+        5 => normalize_v5_candidate(build_v5(archive, parent, flag)?, flag),
+        6 => build_v6(archive, parent, flag),
+        _ => Err(Error::Manifest),
+    }
+}
+fn normalize_v5_candidate(mut candidate: Candidate, flag: &AtomicBool) -> Result<Candidate> {
+    cancel(flag)?;
+    let original = candidate.proof.clone();
+    if original.version != 5 {
+        return Err(Error::Verification);
+    }
+    let mut db = Database(Some(Connection::open_with_flags(
+        candidate.path(),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    )?));
+    // Recheck the stored private candidate against its frozen source proof.
+    if verify_database_version(db.get(), flag, 5)? != original {
+        return Err(Error::Verification);
+    }
+    crate::database::bird_schema::upgrade(db.get()).map_err(|_| Error::Verification)?;
+    if !crate::database::bird_schema::validate_schema(db.get())? {
+        return Err(Error::Verification);
+    }
+    let tx = db.get().transaction()?;
+    let preserved =
+        crate::storage_content::verified_snapshot_v5(&tx, flag).map_err(|_| Error::Verification)?;
+    if preserved.sha256 != original.sha256 || preserved.entry_count != original.entry_count {
+        return Err(Error::Verification);
+    }
+    tx.commit()?;
+    drop(db); // Checked close before independent readback and the new proof.
+    let mut reopened = Database(Some(Connection::open_with_flags(
+        candidate.path(),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?));
+    candidate.proof = verify_database_version(reopened.get(), flag, 6)?;
+    if candidate.proof.entry_count != candidate.entry_count {
+        return Err(Error::Verification);
+    }
+    drop(reopened);
+    cancel(flag)?;
+    Ok(candidate)
 }
 // A close failure must not release directory resources ahead of the original handle.
 struct Database(Option<Connection>);
@@ -607,7 +659,7 @@ fn next_record_version(
         created_at: wire.created_at,
         updated_at: wire.updated_at,
     };
-    if version == 5 && r.document_version == 2 {
+    if matches!(version, 5 | 6) && r.document_version == 2 {
         let mut legacy = r.clone();
         legacy.document_version = 1;
         validate_record(&legacy)?;
@@ -684,6 +736,18 @@ pub(crate) fn verify_database_version(
         5 => crate::storage_content::verify_v5(db, flag)
             .map(|p| ContentProof {
                 version: 5,
+                sha256: p.sha256,
+                entry_count: p.entry_count,
+            })
+            .map_err(|e| match e {
+                crate::storage_content::Error::Sql(e) => Error::Sql(e),
+                crate::storage_content::Error::Cancelled => Error::Cancelled,
+                crate::storage_content::Error::Limit => Error::ResourceLimit,
+                _ => Error::Verification,
+            }),
+        6 => crate::storage_content::verify_v6(db, flag)
+            .map(|p| ContentProof {
+                version: 6,
                 sha256: p.sha256,
                 entry_count: p.entry_count,
             })

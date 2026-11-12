@@ -1,4 +1,4 @@
-//! Open export v1, deliberately independent of backup/restore and its validators.
+//! Versioned open export using bounded ZIP/JSONL snapshots.
 //! Caller supplies a dedicated read-only connection under the normal operation gate.
 use rusqlite::{Connection, TransactionBehavior, limits::Limit, types::ValueRef};
 use serde::{
@@ -294,7 +294,9 @@ fn export_snapshot(
     // Establish one main snapshot before checking schema and streaming both views.
     let _: i64 = tx.query_row("SELECT count(*) FROM main.sqlite_schema", [], |r| r.get(0))?;
     let schema_version: u32 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if !(if schema_version == 4 {
+    if !(if schema_version == 5 {
+        crate::database::bird_schema::validate_schema(&tx)?
+    } else if schema_version == 4 {
         crate::photographs::validate_schema(&tx)?
     } else if schema_version >= 3 {
         crate::database::weather_default_schema::validate_schema3(&tx)?
@@ -316,6 +318,9 @@ fn export_snapshot(
     } else if schema_version == 3 {
         crate::storage_content::snapshot_v4(&tx, flag).map_err(|_| Error::InvalidDatabase)?;
     }
+    if schema_version == 5 {
+        crate::storage_content::snapshot_v6(&tx, flag).map_err(|_| Error::InvalidDatabase)?;
+    }
     if schema_version == 4 {
         crate::storage_content::snapshot_v5(&tx, flag).map_err(|_| Error::InvalidDatabase)?;
     }
@@ -329,7 +334,7 @@ fn export_snapshot(
         while let Some(row) = rows.next()? {
             cancelled(flag)?;
             let version = match row.get_ref(4)? {
-                ValueRef::Integer(v) if v == 1 || (schema_version == 4 && v == 2) => v,
+                ValueRef::Integer(v) if v == 1 || (matches!(schema_version, 4 | 5) && v == 2) => v,
                 _ => return Err(Error::InvalidStorage),
             };
             let e = Entry {
@@ -426,7 +431,7 @@ fn export_snapshot(
     }
     let mut images_file = tempfile_in(parent)?;
     let mut image_count = 0u64;
-    if schema_version == 4 {
+    if matches!(schema_version, 4 | 5) {
         let mut q = tx.prepare("SELECT asset_id,entry_id,original_path,mime,width,height,preview FROM journal_image_assets ORDER BY asset_id COLLATE BINARY")?;
         let mut rows = q.query([])?;
         while let Some(row) = rows.next()? {
@@ -438,11 +443,64 @@ fn export_snapshot(
             image_count += 1;
         }
     }
+    let mut bird_files = Vec::new();
+    let mut bird_counts = BTreeMap::new();
+    if schema_version == 5 {
+        for (name, sql, fields) in [
+            (
+                "bird_lists.jsonl",
+                "SELECT id,visit_date,place_id FROM bird_lists ORDER BY id COLLATE BINARY",
+                &["id", "visit_date", "place_id"][..],
+            ),
+            (
+                "bird_rows.jsonl",
+                "SELECT id,list_id,position,avibase_id,taxonomy_version,count FROM bird_rows ORDER BY id COLLATE BINARY",
+                &[
+                    "id",
+                    "list_id",
+                    "position",
+                    "avibase_id",
+                    "taxonomy_version",
+                    "count",
+                ][..],
+            ),
+            (
+                "journal_bird_lists.jsonl",
+                "SELECT entry_id,list_id FROM journal_bird_lists ORDER BY entry_id COLLATE BINARY,list_id COLLATE BINARY",
+                &["entry_id", "list_id"][..],
+            ),
+        ] {
+            let mut file = tempfile_in(parent)?;
+            let mut query = tx.prepare(sql)?;
+            let mut rows = query.query([])?;
+            let mut count = 0u64;
+            while let Some(row) = rows.next()? {
+                cancelled(flag)?;
+                let mut record = serde_json::Map::new();
+                for (i, key) in fields.iter().enumerate() {
+                    let value = match row.get_ref(i)? {
+                        ValueRef::Text(_) => serde_json::Value::String(row.get(i)?),
+                        ValueRef::Integer(n) => serde_json::Value::from(n),
+                        _ => return Err(Error::InvalidStorage),
+                    };
+                    record.insert((*key).into(), value);
+                }
+                serde_json::to_writer(&mut file, &record)
+                    .map_err(|e| Error::Io(io::Error::other(e)))?;
+                file.write_all(b"\n")?;
+                count = count.checked_add(1).ok_or(Error::ResourceLimit)?;
+            }
+            bird_counts.insert(name, count);
+            bird_files.push((name, file));
+        }
+    }
     cancelled(flag)?;
     tx.commit()?; // Never publish before successful snapshot completion.
     let mut readme = tempfile_in(parent)?;
     if schema_version == 0 {
         readme.write_all(README.as_bytes())?;
+    } else if schema_version == 5 {
+        readme.write_all(b"# MNO open export v6\n\nJSONL files are authoritative. bird_lists.jsonl, bird_rows.jsonl and journal_bird_lists.jsonl preserve all observation lists, including unlinked lists, ordered species rows and journal links. Existing journal, weather, places and images payloads are retained. images.jsonl includes preview bytes and original-file references; original files are never included or followed. This archive is not encrypted. journal.md is a reading view.\n")?;
     } else if schema_version == 4 {
         readme.write_all(b"# MNO open export v5\n\nJSONL files are authoritative. images.jsonl contains per-entry metadata, complete original paths and base64-encoded JPEG/PNG preview bytes, including unused assets. Original files are never included or followed. This archive is not encrypted; paths may be private. journal.md is a text reading view; image rendering is not implemented.\n")?;
     } else if schema_version >= 3 {
@@ -464,16 +522,22 @@ fn export_snapshot(
     if schema_version >= 3 {
         payloads.push(("weather_default_place.jsonl", weather_default_file));
     }
-    if schema_version == 4 {
+    if matches!(schema_version, 4 | 5) {
         payloads.push(("images.jsonl", images_file));
     }
+    payloads.extend(bird_files);
     let mut files = BTreeMap::new();
     for (name, file) in &mut payloads {
         let mut r = record(file, flag)?;
         if schema_version >= 2 {
             if matches!(
                 *name,
-                "places.jsonl" | "journal_places.jsonl" | "weather_default_place.jsonl"
+                "places.jsonl"
+                    | "journal_places.jsonl"
+                    | "weather_default_place.jsonl"
+                    | "bird_lists.jsonl"
+                    | "bird_rows.jsonl"
+                    | "journal_bird_lists.jsonl"
             ) && r.size > 512 * 1024 * 1024
             {
                 return Err(Error::ResourceLimit);
@@ -484,7 +548,7 @@ fn export_snapshot(
                 "places.jsonl" => Some(place_count),
                 "journal_places.jsonl" => Some(link_count),
                 "weather_default_place.jsonl" => Some(weather_default_count),
-                _ => None,
+                name => bird_counts.get(name).copied(),
             };
         }
         files.insert(*name, r);
@@ -493,7 +557,11 @@ fn export_snapshot(
         format: "mno-export",
         format_version: schema_version + 1,
         database_schema_version: schema_version,
-        document_version: if schema_version == 4 { 2 } else { 1 },
+        document_version: if matches!(schema_version, 4 | 5) {
+            2
+        } else {
+            1
+        },
         entry_count,
         files,
         external_originals_included: false,

@@ -90,7 +90,9 @@ fn protection(root: &Path, marker: &Marker) -> Outcome<()> {
     let candidate =
         super::super::super::restore::prepare_candidate(&path, Arc::new(AtomicBool::new(false)))
             .map_err(Error::Candidate)?;
-    let actual = if marker.old_content.version == 5 {
+    let actual = if marker.old_content.version == 6 {
+        preserved_fingerprint_v6(&candidate, &AtomicBool::new(false))
+    } else if marker.old_content.version == 5 {
         preserved_fingerprint_v5(&candidate, &AtomicBool::new(false))
     } else if marker.old_content.version == 4 {
         preserved_fingerprint_v4(&candidate, &AtomicBool::new(false))
@@ -152,7 +154,7 @@ fn assess(root: &Path, marker: &Marker) -> View {
             actions: vec![Action::FinishNew],
         };
     }
-    let previous_matches = if marker.is_import() || matches!(marker.version, 3 | 4 | 5) {
+    let previous_matches = if marker.is_import() || matches!(marker.version, 3 | 4 | 5 | 6) {
         verify_file_version(&active_path, marker.old_content.version)
             .is_ok_and(|v| v == marker.old_content)
     } else {
@@ -198,9 +200,9 @@ fn v2(session: &RecoverySession<'_, '_>) -> Outcome<bool> {
         version: u32,
     }
     if serde_json::from_slice::<Header>(&bytes).is_ok_and(|h| {
-        (h.format == "mno-database-activation" && matches!(h.version, 3 | 4 | 5))
+        (h.format == "mno-database-activation" && matches!(h.version, 3 | 4 | 5 | 6))
             || (h.format == IMPORT_FORMAT && h.version == 4)
-            || (h.format == IMPORT_FORMAT && matches!(h.version, 5 | 6))
+            || (h.format == IMPORT_FORMAT && matches!(h.version, 5 | 6 | 7 | 8))
     }) {
         return Ok(false);
     }
@@ -219,8 +221,8 @@ pub(crate) fn status(state: &DatabaseState) -> Outcome<View> {
     let mut view = assess(&root, &marker);
     if !state.permits_legacy_protocol_fixture() {
         view.actions.retain(|action| match action {
-            Action::KeepPrevious => marker.old_content.version == 5,
-            Action::FinishNew | Action::Continue => marker.new_content.version == 5,
+            Action::KeepPrevious => matches!(marker.old_content.version, 5 | 6),
+            Action::FinishNew | Action::Continue => matches!(marker.new_content.version, 5 | 6),
         });
     }
     Ok(view)
@@ -364,7 +366,7 @@ pub(crate) fn run_confirmed(
         } else {
             marker.new_content.version
         };
-        if selected_version != 5 && !legacy {
+        if !matches!(selected_version, 5 | 6) && !legacy {
             // Validate the Ready contract before complete() can retire Recovery.
             return Err(Error::Binding);
         }

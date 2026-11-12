@@ -367,7 +367,10 @@ fn recovery_child() {
     let state = crate::database_state::DatabaseState::default();
     let mode = std::env::var("MNO_PHOTO_CHILD_MODE").unwrap();
     if mode == "restore" {
-        let path = state.initialize_startup(&root.join("data")).unwrap();
+        // Frozen schema-4 photo/activation contract, separate from schema-5 startup tests.
+        let path = state
+            .initialize_schema4_startup(&root.join("data"))
+            .unwrap();
         let mut db = Connection::open(path).unwrap();
         fs::create_dir(root.join("previous-original")).unwrap();
         let mut asset = source(&root.join("previous-original"));
@@ -383,7 +386,10 @@ fn recovery_child() {
         );
         assert!(result.is_err());
     } else if mode == "import" {
-        let path = state.initialize_startup(&root.join("data")).unwrap();
+        // Frozen schema-4 photo/activation contract, separate from schema-5 startup tests.
+        let path = state
+            .initialize_schema4_startup(&root.join("data"))
+            .unwrap();
         let mut db = Connection::open(path).unwrap();
         let old = crate::open_import::verify_database_version(&mut db, &AtomicBool::new(false), 5)
             .unwrap();

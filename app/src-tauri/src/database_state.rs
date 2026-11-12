@@ -87,10 +87,17 @@ impl DatabaseState {
         &self,
         directory: &std::path::Path,
     ) -> Result<std::path::PathBuf, String> {
+        self.initialize_startup_with(directory, crate::startup::begin)
+    }
+    fn initialize_startup_with(
+        &self,
+        directory: &std::path::Path,
+        begin: impl FnOnce(&std::path::Path) -> Result<crate::startup::StartupOutcome, String>,
+    ) -> Result<std::path::PathBuf, String> {
         if self.startup_started.swap(true, Ordering::AcqRel) {
             return Err("database_startup_already_attempted".into());
         }
-        let outcome = match crate::startup::begin(directory) {
+        let outcome = match begin(directory) {
             Ok(outcome) => outcome,
             Err(error) => {
                 self.phase.store(Phase::Blocked as u8, Ordering::Release);
@@ -661,6 +668,22 @@ impl DatabaseState {
 
 #[cfg(test)]
 impl DatabaseState {
+    // Preserve schema-4 archive/proof fixtures while ordinary macOS startup
+    // advances to schema 5. This substitutes only the initializer, not guards.
+    pub(crate) fn initialize_schema4_startup(
+        &self,
+        root: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        fn schema4(path: &std::path::Path, new: bool) -> Result<(), String> {
+            if new {
+                crate::database::create_current_database(path)
+            } else {
+                crate::database::initialize_database(path)
+            }
+        }
+        crate::startup::migration_probe::with_initializer(schema4, || self.initialize_startup(root))
+    }
+
     // Frozen pre-upgrade startup for old protocol fixtures. All directory locks,
     // artifact gates, sidecar checks and ownership paths remain the real ones.
     // New schema/recovery tests call initialize_startup, never this helper.

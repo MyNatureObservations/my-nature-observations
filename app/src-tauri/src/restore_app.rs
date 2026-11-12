@@ -74,9 +74,11 @@ fn validate_selection(state: &DatabaseState, path: PathBuf) -> Result<Choice, Er
     active.close().map_err(|_| Error::Failed)?;
     let generation = permit.snapshot(()).generation;
     let manifest = crate::backup::verify_backup(&path).map_err(|_| Error::InvalidBackup)?;
-    if active_version != crate::database::SCHEMA_VERSION
-        || manifest.format_version != 5
-        || manifest.database_schema_version != 4
+    if !matches!(active_version, 4 | 5)
+        || !matches!(
+            (manifest.format_version, manifest.database_schema_version),
+            (5, 4) | (6, 5)
+        )
     {
         return Err(Error::InvalidBackup);
     }

@@ -99,10 +99,12 @@ fn require_schema3(db: &Connection) -> Result<(), String> {
     let version: i64 = db
         .pragma_query_value(Some("main"), "user_version", |r| r.get(0))
         .map_err(|_| "place_schema_unavailable")?;
-    if !matches!(version, 3 | 4) {
+    if !matches!(version, 3 | 4 | 5) {
         return Err("place_schema_unavailable".into());
     }
-    if !(if version == 4 {
+    if !(if version == 5 {
+        crate::database::bird_schema::validate_schema(db)
+    } else if version == 4 {
         crate::photographs::validate_schema(db)
     } else {
         crate::database::weather_default_schema::validate_schema3(db)
@@ -352,6 +354,23 @@ pub(crate) fn update_with(
             .map_err(|_| "place_read_failed")?;
         if is_default {
             return Err("place_coordinates_required_by_weather_default".into());
+        }
+        // Older schemas have no bird tables. In schema 5, every list (linked
+        // or standalone) requires its referenced place to retain coordinates.
+        let version: u32 = tx
+            .pragma_query_value(Some("main"), "user_version", |row| row.get(0))
+            .map_err(|_| "place_read_failed")?;
+        if version == 5 {
+            let used_by_birds: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM main.bird_lists WHERE place_id=?1)",
+                    [id],
+                    |row| row.get(0),
+                )
+                .map_err(|_| "place_read_failed")?;
+            if used_by_birds {
+                return Err("place_coordinates_invalid".into());
+            }
         }
     }
     let next = revision.checked_add(1).ok_or("place_revision_overflow")?;

@@ -315,3 +315,6 @@ pub(crate) mod activation;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) mod migration;
+
+#[cfg(target_os = "macos")]
+pub(crate) mod bird_upgrade;

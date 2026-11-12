@@ -1,4 +1,4 @@
-//! Current open export contract. Builds a private schema-2 database only.
+//! Strict readers for open-export formats 3–6; builds private verified candidates.
 use super::*;
 use serde::Deserialize;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
@@ -30,6 +30,42 @@ const NAMES_V5: [&str; 8] = [
     "weather_default_place.jsonl",
     "images.jsonl",
 ];
+const NAMES_V6: [&str; 11] = [
+    "manifest.json",
+    "journal.jsonl",
+    "journal.md",
+    "README.md",
+    "places.jsonl",
+    "journal_places.jsonl",
+    "weather_default_place.jsonl",
+    "images.jsonl",
+    "bird_lists.jsonl",
+    "bird_rows.jsonl",
+    "journal_bird_lists.jsonl",
+];
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BirdList {
+    id: String,
+    visit_date: String,
+    place_id: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BirdRow {
+    id: String,
+    list_id: String,
+    position: i64,
+    avibase_id: String,
+    taxonomy_version: String,
+    count: i64,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BirdLink {
+    entry_id: String,
+    list_id: String,
+}
 // Snapshots are preserved values, not editor input. Match proof-v3's bounded
 // SQLite row allowance, including historical values created outside the UI.
 const PLACE_LINE_LIMIT: usize = crate::storage_content::ROW_LIMIT;
@@ -98,7 +134,7 @@ fn unique_files_v3<'de, D: serde::Deserializer<'de>>(
         ) -> std::result::Result<Self::Value, A::Error> {
             let mut files = BTreeMap::new();
             while let Some((name, record)) = map.next_entry::<String, FileV3>()? {
-                if !NAMES_V5[1..].contains(&name.as_str()) || files.insert(name, record).is_some() {
+                if !NAMES_V6[1..].contains(&name.as_str()) || files.insert(name, record).is_some() {
                     return Err(serde::de::Error::custom("unexpected or duplicate payload"));
                 }
             }
@@ -116,6 +152,12 @@ pub(crate) fn is_v4(archive: &mut File) -> Result<bool> {
 }
 pub(crate) fn is_v5(archive: &mut File) -> Result<bool> {
     is_version(archive, 5, &NAMES_V5)
+}
+pub(crate) fn is_v6(archive: &mut File) -> Result<bool> {
+    is_version(archive, 6, &NAMES_V6)
+}
+pub(crate) fn build_v6(archive: &mut File, parent: &Path, flag: &AtomicBool) -> Result<Candidate> {
+    build_version(archive, parent, flag, 6, &NAMES_V6)
 }
 fn is_version(archive: &mut File, version: u32, names: &[&str]) -> Result<bool> {
     archive.seek(SeekFrom::Start(0))?;
@@ -223,7 +265,7 @@ fn build_version(
     if m.format != "mno-export"
         || m.format_version != version
         || m.database_schema_version != version - 1
-        || m.document_version != if version == 5 { 2 } else { 1 }
+        || m.document_version != if matches!(version, 5 | 6) { 2 } else { 1 }
         || m.external_originals_included
         || m.files.len() != expected_names.len() - 1
         || m.files
@@ -253,6 +295,9 @@ fn build_version(
             "places.jsonl",
             "journal_places.jsonl",
             "weather_default_place.jsonl",
+            "bird_lists.jsonl",
+            "bird_rows.jsonl",
+            "journal_bird_lists.jsonl",
         ]
         .contains(name)
             && expected.size > MAX_PLACE_PAYLOAD
@@ -300,10 +345,13 @@ fn build_version(
         let tx = db.get().transaction()?;
         crate::database::weather_default_schema::create_in_transaction(&tx)
             .map_err(|_| Error::Verification)?;
-        if version == 5 {
+        if matches!(version, 5 | 6) {
             crate::photographs::create_schema(&tx).map_err(|_| Error::Verification)?;
         }
         tx.commit()?;
+    }
+    if version == 6 {
+        crate::database::bird_schema::upgrade(db.get()).map_err(|_| Error::Verification)?;
     }
     let tx = db.get().transaction()?;
     let mut count = 0u64;
@@ -393,7 +441,7 @@ fn build_version(
             return Err(Error::Manifest);
         }
     }
-    if version == 5 {
+    if matches!(version, 5 | 6) {
         let mut previous: Option<String> = None;
         let count = for_each_line::<crate::photographs::Asset>(
             directory.path().join("images.jsonl"),
@@ -408,6 +456,66 @@ fn build_version(
             },
         )?;
         if m.files["images.jsonl"].row_count != Some(count) {
+            return Err(Error::Manifest);
+        }
+    }
+    if version == 6 {
+        let mut previous = None;
+        let n = for_each_line::<BirdList>(
+            directory.path().join("bird_lists.jsonl"),
+            PLACE_LINE_LIMIT,
+            flag,
+            |r| {
+                if previous.as_ref().is_some_and(|id: &String| id >= &r.id) {
+                    return Err(Error::Record);
+                }
+                tx.execute(
+                    "INSERT INTO bird_lists(id,visit_date,place_id) VALUES (?1,?2,?3)",
+                    params![r.id, r.visit_date, r.place_id],
+                )?;
+                previous = Some(r.id);
+                Ok(())
+            },
+        )?;
+        if m.files["bird_lists.jsonl"].row_count != Some(n) {
+            return Err(Error::Manifest);
+        }
+        let mut previous = None;
+        let n = for_each_line::<BirdRow>(
+            directory.path().join("bird_rows.jsonl"),
+            PLACE_LINE_LIMIT,
+            flag,
+            |r| {
+                if previous.as_ref().is_some_and(|id: &String| id >= &r.id) {
+                    return Err(Error::Record);
+                }
+                tx.execute("INSERT INTO bird_rows(id,list_id,position,avibase_id,taxonomy_version,count) VALUES (?1,?2,?3,?4,?5,?6)",params![r.id,r.list_id,r.position,r.avibase_id,r.taxonomy_version,r.count])?;
+                previous = Some(r.id);
+                Ok(())
+            },
+        )?;
+        if m.files["bird_rows.jsonl"].row_count != Some(n) {
+            return Err(Error::Manifest);
+        }
+        let mut previous = None;
+        let n = for_each_line::<BirdLink>(
+            directory.path().join("journal_bird_lists.jsonl"),
+            PLACE_LINE_LIMIT,
+            flag,
+            |r| {
+                let key = (r.entry_id.clone(), r.list_id.clone());
+                if previous.as_ref().is_some_and(|id| id >= &key) {
+                    return Err(Error::Record);
+                }
+                tx.execute(
+                    "INSERT INTO journal_bird_lists(entry_id,list_id) VALUES (?1,?2)",
+                    params![r.entry_id, r.list_id],
+                )?;
+                previous = Some(key);
+                Ok(())
+            },
+        )?;
+        if m.files["journal_bird_lists.jsonl"].row_count != Some(n) {
             return Err(Error::Manifest);
         }
     }
