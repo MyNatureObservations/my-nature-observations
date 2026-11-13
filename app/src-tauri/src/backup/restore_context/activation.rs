@@ -111,7 +111,33 @@ impl From<LegacyMarker> for Marker {
 }
 impl Marker {
     fn is_import(&self) -> bool {
-        self.format == IMPORT_FORMAT && matches!(self.version, 1 | 4 | 5 | 6 | 7 | 8)
+        self.format == IMPORT_FORMAT
+            && matches!(
+                self.version,
+                1 | 4
+                    | 5
+                    | 6
+                    | 7
+                    | 8
+                    | 9
+                    | 10
+                    | 11
+                    | 12
+                    | 13
+                    | 14
+                    | 15
+                    | 16
+                    | 17
+                    | 18
+                    | 19
+                    | 20
+                    | 21
+                    | 22
+                    | 23
+                    | 24
+                    | 25
+                    | 26
+            )
     }
 }
 // Inert disk observation, not a completion/admission capability.
@@ -350,10 +376,34 @@ fn parse_marker(bytes: &[u8]) -> Outcome<Marker> {
         version: u32,
     }
     let h: Header = serde_json::from_slice(bytes).map_err(|_| Error::Binding)?;
-    if h.format == "mno-database-activation" && matches!(h.version, 5 | 6) {
+    if h.format == "mno-database-activation" && matches!(h.version, 5 | 6 | 7 | 8 | 9 | 10) {
         return parse_v5_restore_marker(bytes);
     }
-    if h.format == IMPORT_FORMAT && matches!(h.version, 6 | 7 | 8) {
+    if h.format == IMPORT_FORMAT
+        && matches!(
+            h.version,
+            6 | 7
+                | 8
+                | 9
+                | 10
+                | 11
+                | 12
+                | 13
+                | 14
+                | 15
+                | 16
+                | 17
+                | 18
+                | 19
+                | 20
+                | 21
+                | 22
+                | 23
+                | 24
+                | 25
+                | 26
+        )
+    {
         return parse_v6_import_marker(bytes);
     }
     if h.format != "mno-database-activation" || h.version != 2 {
@@ -579,7 +629,7 @@ fn verify_file_version(path: &Path, version: u32) -> Outcome<Content> {
     if version == 1 {
         return verify_file(path);
     }
-    if !matches!(version, 2 | 3 | 4 | 5 | 6) {
+    if !matches!(version, 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10) {
         return Err(Error::Binding);
     }
     no_sidecars(path)?;
@@ -599,7 +649,15 @@ fn verify_file_version(path: &Path, version: u32) -> Outcome<Content> {
     let result = (|| {
         crate::backup::restore::harden_open_connection(&db, Arc::new(AtomicBool::new(false)))
             .map_err(Error::Candidate)?;
-        (if version == 6 {
+        (if version == 10 {
+            crate::storage_content::verify_v10(&mut db, &AtomicBool::new(false))
+        } else if version == 9 {
+            crate::storage_content::verify_v9(&mut db, &AtomicBool::new(false))
+        } else if version == 8 {
+            crate::storage_content::verify_v8(&mut db, &AtomicBool::new(false))
+        } else if version == 7 {
+            crate::storage_content::verify_v7(&mut db, &AtomicBool::new(false))
+        } else if version == 6 {
             crate::storage_content::verify_v6(&mut db, &AtomicBool::new(false))
         } else if version == 5 {
             crate::storage_content::verify_v5(&mut db, &AtomicBool::new(false))
@@ -683,7 +741,8 @@ pub(crate) fn activate<'m, 's>(
         // covers it, so an older archive contract cannot replace it.
         return Err(Error::Binding);
     }
-    if matches!(old_schema, 4 | 5) && !matches!(new_format, 5 | 6) {
+    if matches!(old_schema, 4 | 5 | 6 | 7 | 8 | 9) && !matches!(new_format, 5 | 6 | 7 | 8 | 9 | 10)
+    {
         return Err(Error::Binding);
     }
     let current = protection.candidate().manifest().database_schema_version == 1
@@ -694,9 +753,13 @@ pub(crate) fn activate<'m, 's>(
             .manifest()
             .database_schema_version
             == 1;
-    let old_content = if matches!(new_format, 5 | 6) {
+    let old_content = if matches!(new_format, 5 | 6 | 7 | 8 | 9 | 10) {
         match old_schema {
             4 => preserved_fingerprint_v5(protection.candidate(), &flag)?,
+            9 => preserved_fingerprint_v10(protection.candidate(), &flag)?,
+            8 => preserved_fingerprint_v9(protection.candidate(), &flag)?,
+            7 => preserved_fingerprint_v8(protection.candidate(), &flag)?,
+            6 => preserved_fingerprint_v7(protection.candidate(), &flag)?,
             5 => preserved_fingerprint_v6(protection.candidate(), &flag)?,
             _ => return Err(Error::Binding),
         }
@@ -716,7 +779,15 @@ pub(crate) fn activate<'m, 's>(
     } else {
         fingerprint(protection.candidate(), flag.clone())?
     };
-    let new_content = if new_format == 6 {
+    let new_content = if new_format == 10 {
+        preserved_fingerprint_v10(work.incoming.as_ref().unwrap(), &flag)?
+    } else if new_format == 9 {
+        preserved_fingerprint_v9(work.incoming.as_ref().unwrap(), &flag)?
+    } else if new_format == 8 {
+        preserved_fingerprint_v8(work.incoming.as_ref().unwrap(), &flag)?
+    } else if new_format == 7 {
+        preserved_fingerprint_v7(work.incoming.as_ref().unwrap(), &flag)?
+    } else if new_format == 6 {
         preserved_fingerprint_v6(work.incoming.as_ref().unwrap(), &flag)?
     } else if new_format == 5 {
         preserved_fingerprint_v5(work.incoming.as_ref().unwrap(), &flag)?
@@ -743,7 +814,15 @@ pub(crate) fn activate<'m, 's>(
     cancel(&flag)?;
     let marker = Marker {
         format: "mno-database-activation".into(),
-        version: if new_format == 6 || old_schema == 5 {
+        version: if new_format == 10 || old_schema == 9 {
+            10
+        } else if new_format == 9 || old_schema == 8 {
+            9
+        } else if new_format == 8 || old_schema == 7 {
+            8
+        } else if new_format == 7 || old_schema == 6 {
+            7
+        } else if new_format == 6 || old_schema == 5 {
             6
         } else if new_format == 5 {
             5
@@ -757,7 +836,15 @@ pub(crate) fn activate<'m, 's>(
             1
         },
         operation_id: maintenance.operation_id().to_string(),
-        schema_version: if new_format == 6 {
+        schema_version: if new_format == 10 {
+            9
+        } else if new_format == 9 {
+            8
+        } else if new_format == 8 {
+            7
+        } else if new_format == 7 {
+            6
+        } else if new_format == 6 {
             5
         } else if new_format == 5 {
             4
@@ -776,6 +863,10 @@ pub(crate) fn activate<'m, 's>(
             None
         },
         backup_format_version: match new_format {
+            10 => Some(10),
+            9 => Some(9),
+            8 => Some(8),
+            7 => Some(7),
             6 => Some(6),
             5 => Some(5),
             4 => Some(4),
@@ -817,7 +908,35 @@ pub(crate) fn activate<'m, 's>(
     if current && new_format != 3 {
         crate::database::weather_schema::migrate(writer).map_err(|_| Error::Verification)?;
     }
-    let actual: Content = if new_format == 6 {
+    let actual: Content = if new_format == 10 {
+        let p =
+            crate::storage_content::verify_v10(writer, &flag).map_err(|_| Error::Verification)?;
+        Content {
+            version: 10,
+            sha256: p.sha256,
+        }
+    } else if new_format == 9 {
+        let p =
+            crate::storage_content::verify_v9(writer, &flag).map_err(|_| Error::Verification)?;
+        Content {
+            version: 9,
+            sha256: p.sha256,
+        }
+    } else if new_format == 8 {
+        let p =
+            crate::storage_content::verify_v8(writer, &flag).map_err(|_| Error::Verification)?;
+        Content {
+            version: 8,
+            sha256: p.sha256,
+        }
+    } else if new_format == 7 {
+        let p =
+            crate::storage_content::verify_v7(writer, &flag).map_err(|_| Error::Verification)?;
+        Content {
+            version: 7,
+            sha256: p.sha256,
+        }
+    } else if new_format == 6 {
         let p =
             crate::storage_content::verify_v6(writer, &flag).map_err(|_| Error::Verification)?;
         Content {
@@ -926,7 +1045,32 @@ fn inspect(session: &RecoverySession<'_, '_>) -> Outcome<Observed> {
     let root = path.parent().ok_or(Error::Binding)?;
     let marker = read_marker(root)?;
     check_record(root, &marker)?;
-    let content = if matches!(marker.version, 3 | 4 | 5 | 6 | 7 | 8) {
+    let content = if matches!(
+        marker.version,
+        3 | 4
+            | 5
+            | 6
+            | 7
+            | 8
+            | 9
+            | 10
+            | 11
+            | 12
+            | 13
+            | 14
+            | 15
+            | 16
+            | 17
+            | 18
+            | 19
+            | 20
+            | 21
+            | 22
+            | 23
+            | 24
+            | 25
+            | 26
+    ) {
         let old = verify_file_version(&path, marker.old_content.version)
             .is_ok_and(|v| v == marker.old_content);
         let new = verify_new_file(&path, &marker).is_ok_and(|v| v == marker.new_content);
@@ -1067,6 +1211,40 @@ fn parse_v5_restore_marker(bytes: &[u8]) -> Outcome<Marker> {
                 && m.backup_format_version == Some(m.schema_version + 1)
                 && m.old_content.version == m.old_schema_version.unwrap_or(0) + 1
                 && m.new_content.version == m.schema_version + 1
+        } else if m.version == 10 {
+            matches!(m.schema_version, 4 | 5 | 6 | 7 | 8 | 9)
+                && matches!(
+                    m.old_schema_version,
+                    Some(4) | Some(5) | Some(6) | Some(7) | Some(8) | Some(9)
+                )
+                && (m.schema_version == 9 || m.old_schema_version == Some(9))
+                && m.backup_format_version == Some(m.schema_version + 1)
+                && m.old_content.version == m.old_schema_version.unwrap_or(0) + 1
+                && m.new_content.version == m.schema_version + 1
+        } else if m.version == 9 {
+            matches!(m.schema_version, 4 | 5 | 6 | 7 | 8)
+                && matches!(
+                    m.old_schema_version,
+                    Some(4) | Some(5) | Some(6) | Some(7) | Some(8)
+                )
+                && (m.schema_version == 8 || m.old_schema_version == Some(8))
+                && m.backup_format_version == Some(m.schema_version + 1)
+                && m.old_content.version == m.old_schema_version.unwrap_or(0) + 1
+                && m.new_content.version == m.schema_version + 1
+        } else if m.version == 8 {
+            matches!(m.schema_version, 4 | 5 | 6 | 7)
+                && matches!(m.old_schema_version, Some(4) | Some(5) | Some(6) | Some(7))
+                && (m.schema_version == 7 || m.old_schema_version == Some(7))
+                && m.backup_format_version == Some(m.schema_version + 1)
+                && m.old_content.version == m.old_schema_version.unwrap_or(0) + 1
+                && m.new_content.version == m.schema_version + 1
+        } else if m.version == 7 {
+            matches!(m.schema_version, 4 | 5 | 6)
+                && matches!(m.old_schema_version, Some(4) | Some(5) | Some(6))
+                && (m.schema_version == 6 || m.old_schema_version == Some(6))
+                && m.backup_format_version == Some(m.schema_version + 1)
+                && m.old_content.version == m.old_schema_version.unwrap_or(0) + 1
+                && m.new_content.version == m.schema_version + 1
         } else {
             false
         })
@@ -1102,7 +1280,27 @@ fn parse_v6_import_marker(bytes: &[u8]) -> Outcome<Marker> {
     if m.format != IMPORT_FORMAT
         || !matches!(
             (m.version, m.schema_version, m.export_format_version),
-            (6, 4, Some(5)) | (7, 5, Some(6)) | (8, 5, Some(5))
+            (6, 4, Some(5))
+                | (7, 5, Some(6))
+                | (8, 5, Some(5))
+                | (9, 6, Some(5))
+                | (10, 6, Some(6))
+                | (11, 6, Some(7))
+                | (12, 7, Some(5))
+                | (13, 7, Some(6))
+                | (14, 7, Some(7))
+                | (15, 7, Some(8))
+                | (16, 8, Some(5))
+                | (17, 8, Some(6))
+                | (18, 8, Some(7))
+                | (19, 8, Some(8))
+                | (20, 8, Some(9))
+                | (21, 9, Some(5))
+                | (22, 9, Some(6))
+                | (23, 9, Some(7))
+                | (24, 9, Some(8))
+                | (25, 9, Some(9))
+                | (26, 9, Some(10))
         )
         || m.old_schema_version != Some(m.schema_version)
         || m.backup_format_version.is_some()
@@ -1143,6 +1341,46 @@ fn preserved_fingerprint_v6(candidate: &PreparedRestore, flag: &AtomicBool) -> O
         crate::storage_content::verified_snapshot_v6(db, flag).map_err(|_| Error::Verification)?;
     Ok(Content {
         version: 6,
+        sha256: p.sha256,
+    })
+}
+
+fn preserved_fingerprint_v7(candidate: &PreparedRestore, flag: &AtomicBool) -> Outcome<Content> {
+    let p = crate::storage_content::verified_snapshot_v7(
+        candidate.source().map_err(Error::Candidate)?,
+        flag,
+    )
+    .map_err(|_| Error::Verification)?;
+    Ok(Content {
+        version: 7,
+        sha256: p.sha256,
+    })
+}
+
+fn preserved_fingerprint_v8(candidate: &PreparedRestore, flag: &AtomicBool) -> Outcome<Content> {
+    let db = candidate.source().map_err(Error::Candidate)?;
+    let p =
+        crate::storage_content::verified_snapshot_v8(db, flag).map_err(|_| Error::Verification)?;
+    Ok(Content {
+        version: 8,
+        sha256: p.sha256,
+    })
+}
+
+fn preserved_fingerprint_v9(c: &PreparedRestore, f: &AtomicBool) -> Outcome<Content> {
+    let p = crate::storage_content::verified_snapshot_v9(c.source().map_err(Error::Candidate)?, f)
+        .map_err(|_| Error::Verification)?;
+    Ok(Content {
+        version: 9,
+        sha256: p.sha256,
+    })
+}
+
+fn preserved_fingerprint_v10(c: &PreparedRestore, f: &AtomicBool) -> Outcome<Content> {
+    let p = crate::storage_content::verified_snapshot_v10(c.source().map_err(Error::Candidate)?, f)
+        .map_err(|_| Error::Verification)?;
+    Ok(Content {
+        version: 10,
         sha256: p.sha256,
     })
 }

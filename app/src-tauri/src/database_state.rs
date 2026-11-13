@@ -668,6 +668,70 @@ impl DatabaseState {
 
 #[cfg(test)]
 impl DatabaseState {
+    #[cfg(target_os = "macos")]
+    pub(crate) fn initialize_schema5_startup(
+        &self,
+        root: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        if crate::startup::migration_probe::has_initializer() {
+            return self.initialize_startup(root);
+        }
+        fn schema5(path: &std::path::Path, new: bool) -> Result<(), String> {
+            if new {
+                crate::database::create_current_database(path)?;
+            }
+            crate::backup::restore_context::bird_upgrade::initialize(path)
+        }
+        crate::startup::migration_probe::with_initializer(schema5, || self.initialize_startup(root))
+    }
+    #[cfg(target_os = "macos")]
+    pub(crate) fn initialize_schema6_startup(
+        &self,
+        root: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        if crate::startup::migration_probe::has_initializer() {
+            return self.initialize_startup(root);
+        }
+        fn schema6(path: &std::path::Path, new: bool) -> Result<(), String> {
+            if new {
+                crate::database::create_current_database(path)?;
+            }
+            crate::backup::restore_context::bird_upgrade::initialize_schema6(path)
+        }
+        crate::startup::migration_probe::with_initializer(schema6, || self.initialize_startup(root))
+    }
+    #[cfg(target_os = "macos")]
+    pub(crate) fn initialize_schema7_startup(
+        &self,
+        root: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        if crate::startup::migration_probe::has_initializer() {
+            return self.initialize_startup(root);
+        }
+        fn schema7(path: &std::path::Path, new: bool) -> Result<(), String> {
+            if new {
+                crate::database::create_current_database(path)?;
+            }
+            crate::backup::restore_context::bird_upgrade::initialize_schema7(path)
+        }
+        crate::startup::migration_probe::with_initializer(schema7, || self.initialize_startup(root))
+    }
+    #[cfg(target_os = "macos")]
+    pub(crate) fn initialize_schema8_startup(
+        &self,
+        root: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        if crate::startup::migration_probe::has_initializer() {
+            return self.initialize_startup(root);
+        }
+        fn schema8(path: &std::path::Path, new: bool) -> Result<(), String> {
+            if new {
+                crate::database::create_current_database(path)?;
+            }
+            crate::backup::restore_context::bird_upgrade::initialize_schema8(path)
+        }
+        crate::startup::migration_probe::with_initializer(schema8, || self.initialize_startup(root))
+    }
     // Preserve schema-4 archive/proof fixtures while ordinary macOS startup
     // advances to schema 5. This substitutes only the initializer, not guards.
     pub(crate) fn initialize_schema4_startup(

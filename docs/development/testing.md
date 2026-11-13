@@ -136,6 +136,80 @@ blocks upgrade, the replaced observations remain protected, and bird writes are
 rejected in the restored schema-4 state until the next ordinary startup upgrades
 it. This is automated evidence, not an additional manual desktop acceptance claim.
 
+## Bird observations: accepted macOS DEV flow (2026-11-13)
+
+The owner accepted the following behavior in the existing isolated synthetic
+profile on `codex/mac-bird-list-flow`. These are user-reported macOS **DEV** checks,
+not packaged-release acceptance or an exhaustive failure/concurrency campaign:
+
+- Creating, reopening and restarting with saved lists; independent visits at the
+  same place/date, with and without optional visit times.
+- Editing saved lists, cancelling changes and deleting complete lists.
+- Compact journal previews and the approved species-card visual presentation.
+- Species-row comments, remembered name-display preferences and corrected search.
+- The final cohesive time field/picker and Swedish crow-name presentation,
+  including the explicitly explained species-level referral from gråkråka.
+
+Automated evidence is separate: synthetic schema upgrades/source preservation and
+retry; format-9 and supported older Backup/Restore and Export/Open Import paths;
+atomic rollback, stale generations, multiple links, late edits, real catalog/search
+and command-contract tests, localized rendering, and keyboard/controller checks.
+Loss of an IPC response is modeled/injected; it is not a physically induced native
+WebView transport failure. Power-loss durability and Windows/Linux bird-feature
+activation are not established by this acceptance.
+
+Final local checks against base `748ea0198447844026888d4d6e36142f6958fa7f`
+plus all uncommitted work: complete frontend suite **600 passed**; complete macOS
+Rust library suite **978 passed, 0 failed, 2 existing ignored** (manual synthetic
+photo measurements and the opt-in live-weather HTTPS contract). Svelte check:
+**0 errors, 0 warnings**. All-targets compilation, Rust 1.99.1 formatting check and
+`git diff --check` passed. Each final complete suite was run once.
+
+Historical review blocker (subsequently corrected locally in the linked flow
+record): an isolated synthetic replay of production creation after
+confirmed deletion recreated the same list and its journal link in the same
+generation. This was tested only in a temporary copy of the public source, without
+changing checkout code or the user's profile. The passing existing suites do not
+cover this create/delete/replay sequence. The correction is documented separately and remains uncommitted. See [the reviewed flow record](MNO_Bird_First_Mac_Flow.md) for the finding
+and implementation scope.
+
+### Durable creation replay correction: local verification
+
+The follow-up schema-9 / archive-10 correction passed **601 complete frontend
+tests** and **983 complete macOS Rust library tests**, with no failures and the
+same **2 existing ignored tests**. The focused receipt regressions use production
+reservation/create/edit/delete functions, reopen databases, exercise rollback and
+upgrade interruption, and activate current/older archives. Svelte reported **0
+errors / 0 warnings**; all-targets compilation, Rust 1.99.1 formatting and whitespace
+checks passed. The create → delete → replay blocker is resolved within this tested
+scope. The earlier accepted DEV checks remain valid observations of that earlier
+build. The owner subsequently reports that the remaining schema-9 DEV flow works;
+this is a user-reported DEV result, not packaged acceptance. Species selection
+remains pending: the owner reports two clicks are required even immediately after
+typing in the active MNO window.
+All work remains uncommitted; the user's test profile was not opened or changed.
+
+
+### Known non-blocking species-result interaction
+
+The owner confirms the latest full-row hit-area change did **not** fix the
+reported macOS Tauri DEV behavior: clicking the species name selects immediately;
+clicking the blank right-hand area of the same visible result still requires two
+clicks. This remains unaccepted, is recorded as **UX-005** in
+[public UX backlog #4](https://github.com/MyNatureObservations/my-nature-observations/issues/4),
+and does not block the local checkpoint. Further speculative fixes are paused.
+Passing isolated browser/native-WebKit checks do not establish a fix in the actual
+Tauri window. The existing test profile is preserved.
+
+The final combined-branch review found no remaining concrete correctness or
+preservation blocker after the schema-9 receipt correction. It reuses the complete
+601-frontend / 983-Rust passing results above. Only subsequent UI checks were run:
+45 focused bird tests, one explicit real-rendered browser regression and Svelte
+(0 errors / 0 warnings), all passing. See the
+[final checkpoint review](MNO_Bird_First_Mac_Flow.md#final-checkpoint-review-and-known-ux-limitation-2026-11-13)
+for scope, limitations and the distinction between DEV and packaged acceptance.
+
+
 ## Cross-platform Stage A1: compile/test visibility
 
 The additional CI matrix uses `ubuntu-24.04` and `windows-2022`, retaining the

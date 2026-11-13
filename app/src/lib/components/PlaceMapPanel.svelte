@@ -106,7 +106,7 @@
   let error = $state("");
   let notice = $state(false);
   const results = $derived(filterPlaces(places, query, locale));
-  const eligible = (place: Place) => request.mode !== "default" || (place.latitude !== null && place.longitude !== null && mapDraftCoordinates(String(place.latitude), String(place.longitude)) !== null);
+  const eligible = (place: Place) => !(request.mode === "default" || request.mode === "observation") || (place.latitude !== null && place.longitude !== null && mapDraftCoordinates(String(place.latitude), String(place.longitude)) !== null);
   let center = $state<PlaceCoordinates | null>(null);
   let loaded = $state(false);
   let failed = $state(false);
@@ -218,7 +218,7 @@
     if (busy || generation === null || disposed) return;
     const point = parsePlaceCoordinates(latitude, longitude);
     if (!name.trim()) { error = "invalid"; return; }
-    if (!point) { error = "coordinates"; return; }
+    if (!point || (request.mode === "observation" && point.latitude === null)) { error = "coordinates"; return; }
     busy = true; controller?.setBusy(true); error = "";
     try {
       const gen = generation;
@@ -286,7 +286,7 @@
 
 <div id="navigation-map" class="map-panel" bind:this={panel} tabindex="-1" role="dialog" aria-label={m.map_panel_title({}, { locale })}
   onkeydown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (menu) { menu = false; searchInput?.focus(); } else if (discardOpen) { discardOpen = false; } else if (deleteTarget) { if (!busy) deleteTarget = null; } else if (form && !busy) { protect(() => { resetForm(); searchInput?.focus(); }); } else close(); } }}>
-  <header inert={blockedOpen}><h2>{m.map_panel_title({}, { locale })} · {request.mode === "journal" ? m.place_choose({}, { locale }) : request.mode === "default" ? m.weather_default_title({}, { locale }) : m.map_orientation({}, { locale })}</h2><button type="button" disabled={busy} onclick={close} aria-label={m.nav_close_panel({}, { locale })}>×</button></header>
+  <header inert={blockedOpen}><h2>{m.map_panel_title({}, { locale })} · {(request.mode === "journal" || request.mode === "observation") ? m.place_choose({}, { locale }) : request.mode === "default" ? m.weather_default_title({}, { locale }) : m.map_orientation({}, { locale })}</h2><button type="button" disabled={busy} onclick={close} aria-label={m.nav_close_panel({}, { locale })}>×</button></header>
   {#if failed}<p role="status">{m.map_panel_read_failed({}, { locale })}</p>{/if}
   <div class="workspace" inert={blockedOpen}>
   <aside aria-label={m.place_saved({}, { locale })}>
@@ -319,8 +319,8 @@
         <label>{m.place_name({}, { locale })}<input bind:this={nameInput} bind:value={name} maxlength="512" disabled={busy} /></label>
         <label>{m.place_latitude({}, { locale })}<input bind:value={latitude} inputmode="decimal" disabled={busy} /></label>
         <label>{m.place_longitude({}, { locale })}<input bind:value={longitude} inputmode="decimal" disabled={busy} /></label>
-        <p>{m.place_coordinates_optional({}, { locale })}</p>
-        <button disabled={busy || generation === null}>{editing ? m.place_registry_save({}, { locale }) : request.mode === "journal" ? m.place_save_use({}, { locale }) : request.mode === "default" ? m.map_save_default({}, { locale }) : m.map_save_place({}, { locale })}</button><button type="button" disabled={busy} onclick={() => protect(resetForm)}>{m.place_cancel({}, { locale })}</button>
+        <p>{request.mode === "observation" ? m.bird_place_required({}, {locale}) : m.place_coordinates_optional({}, { locale })}</p>
+        <button disabled={busy || generation === null}>{editing ? m.place_registry_save({}, { locale }) : (request.mode === "journal" || request.mode === "observation") ? m.place_save_use({}, { locale }) : request.mode === "default" ? m.map_save_default({}, { locale }) : m.map_save_place({}, { locale })}</button><button type="button" disabled={busy} onclick={() => protect(resetForm)}>{m.place_cancel({}, { locale })}</button>
       </form>
     {/if}
     </section>

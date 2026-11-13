@@ -885,7 +885,7 @@ fn format6_preview_confirmation_and_restart_preserve_observations() {
     readonly.close().unwrap();
     let state = DatabaseState::default();
     let active = state
-        .initialize_startup(&root.path().join("current-data"))
+        .initialize_schema5_startup(&root.path().join("current-data"))
         .unwrap();
     let before = fs::read(&active).unwrap();
     // Recompute valid checksums around invalid observations: rejection must
@@ -957,7 +957,7 @@ fn format6_preview_confirmation_and_restart_preserve_observations() {
     let restarted = DatabaseState::default();
     assert!(
         restarted
-            .initialize_startup(&root.path().join("current-data"))
+            .initialize_schema5_startup(&root.path().join("current-data"))
             .is_err()
     );
     assert_eq!(
@@ -996,7 +996,7 @@ fn format6_preview_confirmation_and_restart_preserve_observations() {
     let final_start = DatabaseState::default();
     assert!(
         final_start
-            .initialize_startup(&root.path().join("current-data"))
+            .initialize_schema5_startup(&root.path().join("current-data"))
             .is_err()
     );
     startup::run(&final_start, startup::Action::FinishNew).unwrap();

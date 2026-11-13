@@ -1001,3 +1001,249 @@ pub(crate) fn verified_snapshot_v6(db: &Connection, flag: &AtomicBool) -> Result
         entry_count: previous.entry_count,
     })
 }
+
+pub(crate) fn verify_v7(db: &mut Connection, flag: &AtomicBool) -> Result<Proof> {
+    use rusqlite::limits::Limit;
+    if !db.is_autocommit() {
+        return Err(Error::Invalid);
+    }
+    let old = db.limit(Limit::SQLITE_LIMIT_LENGTH)?;
+    db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old.min(ROW_LIMIT as i32))?;
+    let result = (|| {
+        let tx = db.transaction()?;
+        let p = snapshot_v7(&tx, flag)?;
+        tx.commit()?;
+        Ok(p)
+    })();
+    let reset = db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old);
+    match (result, reset) {
+        (Ok(p), Ok(_)) => Ok(p),
+        (Err(e), _) => Err(e),
+        (_, Err(e)) => Err(e.into()),
+    }
+}
+pub(crate) fn snapshot_v7(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    if db.is_autocommit() || !crate::database::bird_visits::validate_schema(db)? {
+        return Err(Error::Invalid);
+    }
+    let integrity: String = db.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
+    if integrity != "ok"
+        || db
+            .prepare("PRAGMA foreign_key_check")?
+            .query([])?
+            .next()?
+            .is_some()
+    {
+        return Err(Error::Invalid);
+    }
+    verified_snapshot_v7(db, flag)
+}
+pub(crate) fn verified_snapshot_v7(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    let old = verified_snapshot_v6(db, flag)?;
+    let mut hash = Sha256::new().chain_update(b"MNO-preserved-content\0\x00\x00\x00\x07");
+    hash.update(old.sha256.as_bytes());
+    let mut q =
+        db.prepare("SELECT id,visit_start,visit_end FROM bird_lists ORDER BY id COLLATE BINARY")?;
+    let mut rows = q.query([])?;
+    while let Some(row) = rows.next()? {
+        check(flag)?;
+        for i in 1..3 {
+            let value: Option<String> = row.get(i)?;
+            if !crate::database::bird_visits::valid_time(value.as_deref()) {
+                return Err(Error::Invalid);
+            }
+        }
+        for i in 0..3 {
+            field(&mut hash, row.get_ref(i)?)?;
+        }
+        hash.update([0x52]);
+    }
+    Ok(Proof {
+        sha256: format!("{:x}", hash.finalize()),
+        entry_count: old.entry_count,
+    })
+}
+
+pub(crate) fn verify_v8(db: &mut Connection, flag: &AtomicBool) -> Result<Proof> {
+    use rusqlite::limits::Limit;
+    if !db.is_autocommit() {
+        return Err(Error::Invalid);
+    }
+    let old = db.limit(Limit::SQLITE_LIMIT_LENGTH)?;
+    db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old.min(ROW_LIMIT as i32))?;
+    let result = (|| {
+        let tx = db.transaction()?;
+        let p = snapshot_v8(&tx, flag)?;
+        tx.commit()?;
+        Ok(p)
+    })();
+    let reset = db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old);
+    match (result, reset) {
+        (Ok(p), Ok(_)) => Ok(p),
+        (Err(e), _) => Err(e),
+        (_, Err(e)) => Err(e.into()),
+    }
+}
+pub(crate) fn snapshot_v8(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    if db.is_autocommit() || !crate::database::bird_visit_identity::validate_schema(db)? {
+        return Err(Error::Invalid);
+    }
+    let integrity: String = db.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
+    if integrity != "ok"
+        || db
+            .prepare("PRAGMA foreign_key_check")?
+            .query([])?
+            .next()?
+            .is_some()
+    {
+        return Err(Error::Invalid);
+    }
+    verified_snapshot_v8(db, flag)
+}
+pub(crate) fn verified_snapshot_v8(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    let previous = verified_snapshot_v7(db, flag)?;
+    let hash = Sha256::new()
+        .chain_update(b"MNO-preserved-content\0\x00\x00\x00\x08")
+        .chain_update(previous.sha256.as_bytes());
+    Ok(Proof {
+        sha256: format!("{:x}", hash.finalize()),
+        entry_count: previous.entry_count,
+    })
+}
+
+pub(crate) fn verify_v9(db: &mut Connection, flag: &AtomicBool) -> Result<Proof> {
+    use rusqlite::limits::Limit;
+    if !db.is_autocommit() {
+        return Err(Error::Invalid);
+    }
+    let old = db.limit(Limit::SQLITE_LIMIT_LENGTH)?;
+    db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old.min(ROW_LIMIT as i32))?;
+    let result = (|| {
+        let tx = db.transaction()?;
+        let p = snapshot_v9(&tx, flag)?;
+        tx.commit()?;
+        Ok(p)
+    })();
+    let reset = db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old);
+    match (result, reset) {
+        (Ok(p), Ok(_)) => Ok(p),
+        (Err(e), _) => Err(e),
+        (_, Err(e)) => Err(e.into()),
+    }
+}
+pub(crate) fn snapshot_v9(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    if db.is_autocommit() || !crate::database::bird_comments::validate_schema(db)? {
+        return Err(Error::Invalid);
+    }
+    let integrity: String = db.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
+    if integrity != "ok"
+        || db
+            .prepare("PRAGMA foreign_key_check")?
+            .query([])?
+            .next()?
+            .is_some()
+    {
+        return Err(Error::Invalid);
+    }
+    verified_snapshot_v9(db, flag)
+}
+pub(crate) fn verified_snapshot_v9(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    let old = verified_snapshot_v8(db, flag)?;
+    let mut hash = Sha256::new().chain_update(b"MNO-preserved-content\0\x00\x00\x00\x09");
+    hash.update(old.sha256.as_bytes());
+    let mut q = db.prepare("SELECT id,comment FROM bird_rows ORDER BY id COLLATE BINARY")?;
+    let mut rows = q.query([])?;
+    while let Some(row) = rows.next()? {
+        check(flag)?;
+        let comment: Option<String> = row.get(1)?;
+        if !crate::database::bird_comments::valid_comment(comment.as_deref()) {
+            return Err(Error::Invalid);
+        }
+        for i in 0..2 {
+            field(&mut hash, row.get_ref(i)?)?;
+        }
+        hash.update([0x52]);
+    }
+    Ok(Proof {
+        sha256: format!("{:x}", hash.finalize()),
+        entry_count: old.entry_count,
+    })
+}
+
+pub(crate) fn verify_v10(db: &mut Connection, flag: &AtomicBool) -> Result<Proof> {
+    use rusqlite::limits::Limit;
+    if !db.is_autocommit() {
+        return Err(Error::Invalid);
+    }
+    let old = db.limit(Limit::SQLITE_LIMIT_LENGTH)?;
+    db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old.min(ROW_LIMIT as i32))?;
+    let result = (|| {
+        let tx = db.transaction()?;
+        let p = snapshot_v10(&tx, flag)?;
+        tx.commit()?;
+        Ok(p)
+    })();
+    let reset = db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old);
+    match (result, reset) {
+        (Ok(p), Ok(_)) => Ok(p),
+        (Err(e), _) => Err(e),
+        (_, Err(e)) => Err(e.into()),
+    }
+}
+pub(crate) fn snapshot_v10(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    if db.is_autocommit() || !crate::database::bird_requests::validate_schema(db)? {
+        return Err(Error::Invalid);
+    }
+    let integrity: String = db.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
+    if integrity != "ok"
+        || db
+            .prepare("PRAGMA foreign_key_check")?
+            .query([])?
+            .next()?
+            .is_some()
+    {
+        return Err(Error::Invalid);
+    }
+    verified_snapshot_v10(db, flag)
+}
+
+pub(crate) fn verified_snapshot_v10(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    let old = verified_snapshot_v9(db, flag)?;
+    let mut hash = Sha256::new().chain_update(b"MNO-preserved-content\0\x00\x00\x00\x0a");
+    hash.update(old.sha256.as_bytes());
+    let missing:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM bird_lists b WHERE NOT EXISTS(SELECT 1 FROM bird_creation_requests r WHERE r.request_id=b.id AND r.completed=1))",[],|r|r.get(0))?;
+    if missing {
+        return Err(Error::Invalid);
+    }
+    hash.update(b"bird_creation_requests:request_id,payload_sha256,completed\0");
+    let mut query=db.prepare("SELECT request_id,payload_sha256,completed FROM bird_creation_requests ORDER BY request_id COLLATE BINARY")?;
+    let mut rows = query.query([])?;
+    while let Some(row) = rows.next()? {
+        check(flag)?;
+        if text(row.get_ref(0)?, 512)?.trim().is_empty() {
+            return Err(Error::Invalid);
+        }
+        let digest: Option<String> = row.get(1)?;
+        if digest.as_ref().is_some_and(|d| {
+            d.len() != 64
+                || !d
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        }) {
+            return Err(Error::Invalid);
+        }
+        hash.update([0x52]);
+        let completed: i64 = row.get(2)?;
+        if !matches!(completed, 0 | 1) || (completed == 0 && digest.is_some()) {
+            return Err(Error::Invalid);
+        }
+        for i in 0..3 {
+            field(&mut hash, row.get_ref(i)?)?;
+        }
+    }
+    hash.update([0x45]);
+    Ok(Proof {
+        sha256: format!("{:x}", hash.finalize()),
+        entry_count: old.entry_count,
+    })
+}

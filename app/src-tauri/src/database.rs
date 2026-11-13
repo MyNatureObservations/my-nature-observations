@@ -54,15 +54,37 @@ pub(crate) fn initialize_database(path: &Path) -> Result<(), String> {
     if version < SCHEMA_VERSION {
         return Err("database_schema_upgrade_required".into());
     }
-    if version == 5 {
+    if matches!(version, 5 | 6 | 7 | 8 | 9) {
         #[cfg(not(target_os = "macos"))]
         return Err("database_schema_platform_unsupported".into());
         #[cfg(target_os = "macos")]
         {
-            crate::storage_content::verify_v6(
-                &mut connection,
-                &std::sync::atomic::AtomicBool::new(false),
-            )
+            (if version == 9 {
+                crate::storage_content::verify_v10(
+                    &mut connection,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+            } else if version == 8 {
+                crate::storage_content::verify_v9(
+                    &mut connection,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+            } else if version == 7 {
+                crate::storage_content::verify_v8(
+                    &mut connection,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+            } else if version == 6 {
+                crate::storage_content::verify_v7(
+                    &mut connection,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+            } else {
+                crate::storage_content::verify_v6(
+                    &mut connection,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+            })
             .map_err(|e| format!("database_content_validation_failed: {e:?}"))?;
             connection.close().map_err(|(_, e)| e.to_string())?;
             return crate::backup::restore_context::bird_upgrade::confirm(path);
@@ -254,3 +276,15 @@ fn supported_objects(connection: &Connection) -> rusqlite::Result<Vec<SchemaObje
 
 #[path = "database/bird_schema.rs"]
 pub(crate) mod bird_schema;
+
+#[path = "database/bird_visits.rs"]
+pub(crate) mod bird_visits;
+
+#[path = "database/bird_visit_identity.rs"]
+pub(crate) mod bird_visit_identity;
+
+#[path = "database/bird_comments.rs"]
+pub(crate) mod bird_comments;
+
+#[path = "database/bird_requests.rs"]
+pub(crate) mod bird_requests;

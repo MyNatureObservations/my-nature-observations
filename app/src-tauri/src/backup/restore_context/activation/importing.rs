@@ -66,6 +66,46 @@ pub(crate) fn activate_schema5<'m, 's>(
         source_format,
     )
 }
+pub(crate) fn activate_schema6<'m, 's>(
+    m: &'m Maintenance<'s>,
+    a: &mut File,
+    old: &open_import::ContentProof,
+    new: &open_import::ContentProof,
+    f: Arc<AtomicBool>,
+    source: u32,
+) -> Outcome<DiskActivated<'m, 's>> {
+    activate_version(m, a, old, new, f, 7, source)
+}
+pub(crate) fn activate_schema7<'m, 's>(
+    m: &'m Maintenance<'s>,
+    a: &mut File,
+    old: &open_import::ContentProof,
+    new: &open_import::ContentProof,
+    f: Arc<AtomicBool>,
+    source: u32,
+) -> Outcome<DiskActivated<'m, 's>> {
+    activate_version(m, a, old, new, f, 8, source)
+}
+pub(crate) fn activate_schema8<'m, 's>(
+    m: &'m Maintenance<'s>,
+    a: &mut File,
+    old: &open_import::ContentProof,
+    new: &open_import::ContentProof,
+    f: Arc<AtomicBool>,
+    source: u32,
+) -> Outcome<DiskActivated<'m, 's>> {
+    activate_version(m, a, old, new, f, 9, source)
+}
+pub(crate) fn activate_schema9<'m, 's>(
+    m: &'m Maintenance<'s>,
+    a: &mut File,
+    old: &open_import::ContentProof,
+    new: &open_import::ContentProof,
+    f: Arc<AtomicBool>,
+    source: u32,
+) -> Outcome<DiskActivated<'m, 's>> {
+    activate_version(m, a, old, new, f, 10, source)
+}
 fn activate_version<'m, 's>(
     maintenance: &'m Maintenance<'s>,
     archive: &mut File,
@@ -80,7 +120,29 @@ fn activate_version<'m, 's>(
         .map_err(|_| Error::Coordination)?;
     if !matches!(
         (source_format, version),
-        (3, 3) | (4, 4) | (5, 5) | (6, 6) | (5, 6)
+        (3, 3)
+            | (4, 4)
+            | (5, 5)
+            | (6, 6)
+            | (5, 6)
+            | (5, 7)
+            | (6, 7)
+            | (7, 7)
+            | (5, 8)
+            | (6, 8)
+            | (7, 8)
+            | (8, 8)
+            | (5, 9)
+            | (6, 9)
+            | (7, 9)
+            | (8, 9)
+            | (9, 9)
+            | (5, 10)
+            | (6, 10)
+            | (7, 10)
+            | (8, 10)
+            | (9, 10)
+            | (10, 10)
     ) || expected_new.version != version
         || !(if version >= 4 {
             expected_old.version == version
@@ -130,7 +192,15 @@ fn activate_version<'m, 's>(
     let protection =
         pre_restore::create_bound(maintenance, work.active.as_ref().unwrap(), flag.clone())
             .map_err(Error::Protection)?;
-    let protected = if old_schema == 5 {
+    let protected = if old_schema == 9 {
+        preserved_fingerprint_v10(protection.candidate(), &flag)?
+    } else if old_schema == 8 {
+        preserved_fingerprint_v9(protection.candidate(), &flag)?
+    } else if old_schema == 7 {
+        preserved_fingerprint_v8(protection.candidate(), &flag)?
+    } else if old_schema == 6 {
+        preserved_fingerprint_v7(protection.candidate(), &flag)?
+    } else if old_schema == 5 {
         preserved_fingerprint_v6(protection.candidate(), &flag)?
     } else if old_schema == 4 {
         preserved_fingerprint_v5(protection.candidate(), &flag)?
@@ -157,7 +227,15 @@ fn activate_version<'m, 's>(
     point("import-v3-protected")?;
     let staging = root.join("backups/import-staging");
     private::ensure_directory(&staging)?;
-    let candidate = (if version == 6 {
+    let candidate = (if version == 10 {
+        open_import::build_for_schema9(archive, &staging, &flag, source_format)
+    } else if version == 9 {
+        open_import::build_for_schema8(archive, &staging, &flag, source_format)
+    } else if version == 8 {
+        open_import::build_for_schema7(archive, &staging, &flag, source_format)
+    } else if version == 7 {
+        open_import::build_for_schema6(archive, &staging, &flag, source_format)
+    } else if version == 6 {
         open_import::build_for_schema5(archive, &staging, &flag, source_format)
     } else if version == 5 {
         open_import::build_v5(archive, &staging, &flag)
@@ -194,7 +272,15 @@ fn activate_version<'m, 's>(
     )?;
     let marker = Marker {
         format: IMPORT_FORMAT.into(),
-        version: if (source_format, version) == (5, 6) {
+        version: if version == 10 {
+            source_format + 16
+        } else if version == 9 {
+            source_format + 11
+        } else if version == 8 {
+            source_format + 7
+        } else if version == 7 {
+            source_format + 4
+        } else if (source_format, version) == (5, 6) {
             8
         } else {
             version + 1

@@ -76,7 +76,7 @@ fn app_export_round_trip_preserves_all_fields_and_active_bytes() {
     assert_eq!(fs::read(&fixture.active).unwrap(), before);
     let mut archive = fs::File::open(&target).unwrap();
     let candidate = if cfg!(target_os = "macos") {
-        crate::open_import::build_v6(&mut archive, fixture.root.path(), &AtomicBool::new(false))
+        crate::open_import::build_v10(&mut archive, fixture.root.path(), &AtomicBool::new(false))
     } else {
         crate::open_import::build_v5(&mut archive, fixture.root.path(), &AtomicBool::new(false))
     }

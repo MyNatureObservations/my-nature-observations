@@ -17,7 +17,10 @@ const MANIFEST_LIMIT: u64 = 16 * 1024;
 const LINE_LIMIT: usize = ROW_LIMIT * 6 + 1024;
 const LINE_LIMIT_V2: usize = (ROW_LIMIT + 2 * crate::weather::storage::PART_LIMIT) * 6 + 2048;
 mod v3;
-pub(crate) use v3::{build_v3, build_v4, build_v5, build_v6, is_v3, is_v4, is_v5, is_v6};
+pub(crate) use v3::{
+    build_v3, build_v4, build_v5, build_v6, build_v7, build_v8, build_v9, build_v10, is_v3, is_v4,
+    is_v5, is_v6, is_v7, is_v8, is_v9, is_v10,
+};
 type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub(crate) enum Error {
@@ -167,6 +170,146 @@ fn normalize_v5_candidate(mut candidate: Candidate, flag: &AtomicBool) -> Result
     drop(reopened);
     cancel(flag)?;
     Ok(candidate)
+}
+pub(crate) fn build_for_schema6(
+    a: &mut File,
+    p: &Path,
+    flag: &AtomicBool,
+    source: u32,
+) -> Result<Candidate> {
+    if source == 7 {
+        return build_v7(a, p, flag);
+    }
+    let mut c = build_for_schema5(a, p, flag, source)?;
+    let old = c.proof.clone();
+    let mut db = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    )?));
+    if verify_database_version(db.get(), flag, 6)? != old {
+        return Err(Error::Verification);
+    }
+    crate::database::bird_visits::upgrade(db.get()).map_err(|_| Error::Verification)?;
+    let tx = db.get().transaction()?;
+    let preserved =
+        crate::storage_content::verified_snapshot_v6(&tx, flag).map_err(|_| Error::Verification)?;
+    if preserved.sha256 != old.sha256 || preserved.entry_count != old.entry_count {
+        return Err(Error::Verification);
+    }
+    tx.commit()?;
+    drop(db);
+    let mut read = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?));
+    c.proof = verify_database_version(read.get(), flag, 7)?;
+    drop(read);
+    Ok(c)
+}
+pub(crate) fn build_for_schema7(
+    a: &mut File,
+    p: &Path,
+    flag: &AtomicBool,
+    source: u32,
+) -> Result<Candidate> {
+    if source == 8 {
+        return build_v8(a, p, flag);
+    }
+    let mut c = build_for_schema6(a, p, flag, source)?;
+    let old = c.proof.clone();
+    let mut db = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    )?));
+    if verify_database_version(db.get(), flag, 7)? != old {
+        return Err(Error::Verification);
+    }
+    crate::database::bird_visit_identity::upgrade(db.get()).map_err(|_| Error::Verification)?;
+    let tx = db.get().transaction()?;
+    let preserved =
+        crate::storage_content::verified_snapshot_v7(&tx, flag).map_err(|_| Error::Verification)?;
+    if preserved.sha256 != old.sha256 || preserved.entry_count != old.entry_count {
+        return Err(Error::Verification);
+    }
+    tx.commit()?;
+    drop(db);
+    let mut read = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?));
+    c.proof = verify_database_version(read.get(), flag, 8)?;
+    drop(read);
+    Ok(c)
+}
+pub(crate) fn build_for_schema8(
+    a: &mut File,
+    p: &Path,
+    f: &AtomicBool,
+    source: u32,
+) -> Result<Candidate> {
+    if source == 9 {
+        return build_v9(a, p, f);
+    }
+    let mut c = build_for_schema7(a, p, f, source)?;
+    let old = c.proof.clone();
+    let mut db = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    )?));
+    if verify_database_version(db.get(), f, 8)? != old {
+        return Err(Error::Verification);
+    }
+    crate::database::bird_comments::upgrade(db.get()).map_err(|_| Error::Verification)?;
+    let tx = db.get().transaction()?;
+    let preserved =
+        crate::storage_content::verified_snapshot_v8(&tx, f).map_err(|_| Error::Verification)?;
+    if preserved.sha256 != old.sha256 || preserved.entry_count != old.entry_count {
+        return Err(Error::Verification);
+    }
+    tx.commit()?;
+    drop(db);
+    let mut read = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?));
+    c.proof = verify_database_version(read.get(), f, 9)?;
+    drop(read);
+    Ok(c)
+}
+pub(crate) fn build_for_schema9(
+    a: &mut File,
+    p: &Path,
+    f: &AtomicBool,
+    source: u32,
+) -> Result<Candidate> {
+    if source == 10 {
+        return build_v10(a, p, f);
+    }
+    let mut c = build_for_schema8(a, p, f, source)?;
+    let old = c.proof.clone();
+    let mut db = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    )?));
+    if verify_database_version(db.get(), f, 9)? != old {
+        return Err(Error::Verification);
+    }
+    crate::database::bird_requests::upgrade(db.get()).map_err(|_| Error::Verification)?;
+    let tx = db.get().transaction()?;
+    let preserved =
+        crate::storage_content::verified_snapshot_v9(&tx, f).map_err(|_| Error::Verification)?;
+    if preserved.sha256 != old.sha256 || preserved.entry_count != old.entry_count {
+        return Err(Error::Verification);
+    }
+    tx.commit()?;
+    drop(db);
+    let mut read = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?));
+    c.proof = verify_database_version(read.get(), f, 10)?;
+    drop(read);
+    Ok(c)
 }
 // A close failure must not release directory resources ahead of the original handle.
 struct Database(Option<Connection>);
@@ -659,7 +802,7 @@ fn next_record_version(
         created_at: wire.created_at,
         updated_at: wire.updated_at,
     };
-    if matches!(version, 5 | 6) && r.document_version == 2 {
+    if matches!(version, 5 | 6 | 7 | 8 | 9 | 10) && r.document_version == 2 {
         let mut legacy = r.clone();
         legacy.document_version = 1;
         validate_record(&legacy)?;
@@ -757,6 +900,34 @@ pub(crate) fn verify_database_version(
                 crate::storage_content::Error::Limit => Error::ResourceLimit,
                 _ => Error::Verification,
             }),
+        10 => crate::storage_content::verify_v10(db, flag)
+            .map(|p| ContentProof {
+                version: 10,
+                sha256: p.sha256,
+                entry_count: p.entry_count,
+            })
+            .map_err(|_| Error::Verification),
+        9 => crate::storage_content::verify_v9(db, flag)
+            .map(|p| ContentProof {
+                version: 9,
+                sha256: p.sha256,
+                entry_count: p.entry_count,
+            })
+            .map_err(|_| Error::Verification),
+        8 => crate::storage_content::verify_v8(db, flag)
+            .map(|p| ContentProof {
+                version: 8,
+                sha256: p.sha256,
+                entry_count: p.entry_count,
+            })
+            .map_err(|_| Error::Verification),
+        7 => crate::storage_content::verify_v7(db, flag)
+            .map(|p| ContentProof {
+                version: 7,
+                sha256: p.sha256,
+                entry_count: p.entry_count,
+            })
+            .map_err(|_| Error::Verification),
         _ => Err(Error::Verification),
     }
 }

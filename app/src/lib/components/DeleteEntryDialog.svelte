@@ -1,8 +1,8 @@
 <script lang="ts">
   import * as m from "$lib/paraglide/messages.js";
 
-  let { title, date, locale, busy, oncancel, onconfirm }: {
-    title: string; date: string; locale: "sv" | "en"; busy: boolean;
+  let { title, date, locale, busy, heading=null, description=null, oncancel, onconfirm }: {
+    title: string; date: string; locale: "sv" | "en"; busy: boolean; heading?:string|null; description?:string|null;
     oncancel: () => void; onconfirm: () => void;
   } = $props();
   const id = $props.id();
@@ -27,9 +27,9 @@
   aria-labelledby={titleId}
   aria-describedby={descriptionId}
 >
-  <h2 id={titleId}>{m.journal_delete_entry({}, { locale })}</h2>
+  <h2 id={titleId}>{heading??m.journal_delete_entry({}, { locale })}</h2>
   <p id={descriptionId}>
-    {m.journal_delete_confirm({
+    {description??m.journal_delete_confirm({
       title: title || m.search_untitled({}, { locale }),
       date,
     }, { locale })}
@@ -39,7 +39,7 @@
       {m.journal_cancel({}, { locale })}
     </button>
     <button type="button" disabled={busy} onclick={onconfirm}>
-      {m.journal_delete_entry({}, { locale })}
+      {heading??m.journal_delete_entry({}, { locale })}
     </button>
   </div>
 </dialog>

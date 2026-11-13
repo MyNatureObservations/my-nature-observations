@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BirdJournalLists from "$lib/components/BirdJournalLists.svelte";
   import { onMount, untrack, tick, type Snippet } from "svelte";
   import DeleteEntryDialog from "$lib/components/DeleteEntryDialog.svelte";
   import EntryOptions from "$lib/components/EntryOptions.svelte";
@@ -934,6 +935,9 @@ for (const block of blocks) {
 
     <div bind:this={editorElement}></div>
   </article>
+  {#if canDeleteEntry() && !documentProtected && !deletingEntry && entryId && sessionGeneration!==null}
+    <BirdJournalLists entryId={entryId} generation={sessionGeneration} locale={language.current} journalDate={savedEntryDate} allowCreate={true}/>
+  {/if}
 
 </div>
 
