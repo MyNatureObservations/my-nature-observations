@@ -30,7 +30,7 @@ fn export_fixture_for_format(
     close(db);
     let state = DatabaseState::default();
     if format == 6 {
-        state.initialize_startup(root).unwrap();
+        state.initialize_schema5_startup(root).unwrap();
     } else {
         state.initialize_schema4_startup(root).unwrap();
     }
@@ -157,7 +157,7 @@ fn format6_activation_child() {
         .unwrap();
     close(db);
     let state = DatabaseState::default();
-    let target = state.initialize_startup(&data).unwrap();
+    let target = state.initialize_schema5_startup(&data).unwrap();
     let before = fs::read(&target).unwrap();
     let old = super::super::super::activation::journal_proof(&target).unwrap();
     assert_ne!(old.sha256, new.sha256);
@@ -203,7 +203,7 @@ fn format6_activation_child() {
         assert!(!data.join("recovery").exists());
         drop(state);
         let restarted = DatabaseState::default();
-        restarted.initialize_startup(&data).unwrap();
+        restarted.initialize_schema5_startup(&data).unwrap();
         assert_eq!(
             super::super::super::activation::journal_proof(&target).unwrap(),
             old
@@ -242,7 +242,7 @@ fn format6_activation_child() {
             fs::write(&marker_path, serde_json::to_vec(&altered).unwrap()).unwrap();
             let bytes_before = fs::read(&target).unwrap();
             let blocked = DatabaseState::default();
-            assert!(blocked.initialize_startup(&data).is_err());
+            assert!(blocked.initialize_schema5_startup(&data).is_err());
             assert!(
                 super::super::super::activation::startup::status(&blocked).is_err(),
                 "{field}"
@@ -255,7 +255,7 @@ fn format6_activation_child() {
     }
 
     let restarted = DatabaseState::default();
-    assert!(restarted.initialize_startup(&data).is_err());
+    assert!(restarted.initialize_schema5_startup(&data).is_err());
     use super::super::super::activation::startup;
     let view = startup::status(&restarted).unwrap();
     assert_eq!(view.operation, startup::Operation::Import);
@@ -290,7 +290,7 @@ fn format6_activation_child() {
         drop(restarted);
     }
     let final_start = DatabaseState::default();
-    final_start.initialize_startup(&data).unwrap();
+    final_start.initialize_schema5_startup(&data).unwrap();
     assert_eq!(
         super::super::super::activation::journal_proof(&target).unwrap(),
         new
@@ -311,7 +311,7 @@ fn format6_finish_child() {
     }
     let data = PathBuf::from(std::env::var_os("MNO_ACTIVATION_ROOT").unwrap()).join("data");
     let state = DatabaseState::default();
-    assert!(state.initialize_startup(&data).is_err());
+    assert!(state.initialize_schema5_startup(&data).is_err());
     use super::super::super::activation::startup;
     let view = startup::status(&state).unwrap();
     let action = if view.actions.contains(&startup::Action::FinishNew) {
@@ -490,7 +490,7 @@ fn normalized_format5_rejects_invalid_older_payloads_without_active_changes() {
     initialize(&active).unwrap();
     add_lists(&active);
     let state = DatabaseState::default();
-    state.initialize_startup(&data).unwrap();
+    state.initialize_schema5_startup(&data).unwrap();
     let before = fs::read(&active).unwrap();
     let original = fs::read(&archive).unwrap();
     for case in ["legacy-reference", "legacy-document"] {

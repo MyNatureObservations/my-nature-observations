@@ -1,0 +1,16 @@
+[
+  {
+    "id": "avibase-E4EE9AC4",
+    "scientific": "Corvus corone",
+    "taxonomyVersion": "AviList v2026",
+    "name": "Kråka",
+    "source": {
+      "url": "https://www.slu.se/artdatabanken/arter-och-natur/artiklar/kraka-eller-grakraka/",
+      "version": "Reviewed by SLU 2025-05-22; corroborated by BirdLife Sverige NL2025, species row 7232",
+      "reviewed": "2026-11-12"
+    },
+    "referrals": [
+      "gråkråka"
+    ]
+  }
+]

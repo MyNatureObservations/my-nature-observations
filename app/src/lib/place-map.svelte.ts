@@ -2,7 +2,7 @@ import type { Place, PlaceCoordinates } from "$lib/places";
 
 export const PLACE_MAP = "mno:place-map";
 export type MapRequest = {
-  mode: "orientation" | "journal" | "default";
+  mode: "orientation" | "journal" | "default" | "observation";
   generation?: number;
   center?: PlaceCoordinates | null;
   selectedId?: string | null;

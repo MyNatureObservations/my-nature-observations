@@ -25,7 +25,7 @@ CREATE TABLE journal_bird_lists (
 ";
 
 type Object = (String, String, String, Option<String>);
-fn objects(db: &Connection) -> rusqlite::Result<Vec<Object>> {
+pub(super) fn objects(db: &Connection) -> rusqlite::Result<Vec<Object>> {
     db.prepare("SELECT type,name,tbl_name,sql FROM main.sqlite_schema ORDER BY type,name LIMIT 32")?
         .query_map([], |row| {
             Ok((

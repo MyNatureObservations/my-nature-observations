@@ -39,7 +39,12 @@ pub(super) fn read(db: &Connection, entry: &str) -> Result<StoredWeather, String
         });
     }
     match version {
+        9 if crate::database::bird_requests::validate_schema(db).map_err(|e| e.to_string())? => {}
+        8 if crate::database::bird_comments::validate_schema(db).map_err(|e| e.to_string())? => {}
+        7 if crate::database::bird_visit_identity::validate_schema(db)
+            .map_err(|e| e.to_string())? => {}
         1 => {}
+        6 if crate::database::bird_visits::validate_schema(db).map_err(|e| e.to_string())? => {}
         5 if crate::database::bird_schema::validate_schema(db).map_err(|e| e.to_string())? => {}
         4 if crate::photographs::validate_schema(db).map_err(|e| e.to_string())? => {}
         3 if crate::database::weather_default_schema::validate_schema3(db)

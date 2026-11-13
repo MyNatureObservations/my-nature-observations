@@ -5,7 +5,9 @@ mod startup_error;
 // Shared backup primitives; some verification APIs are reserved for later steps.
 #[allow(dead_code)]
 mod backup;
+mod bird_app;
 mod database;
+mod species_registry;
 // Internal schema-5 persistence; no command or UI registration.
 #[cfg(target_os = "macos")]
 #[allow(dead_code)]
@@ -184,6 +186,15 @@ pub fn run() {
             place_registry::set_journal_place,
             place_registry::read_weather_default_place,
             place_registry::set_weather_default_place,
+            bird_app::bird_observations_available,
+            bird_app::search_bird_species,
+            bird_app::reserve_bird_creation,
+            bird_app::create_journal_bird_list,
+            bird_app::update_journal_bird_list,
+            bird_app::delete_journal_bird_list,
+            bird_app::journal_bird_list_exists,
+            bird_app::read_journal_bird_lists,
+            bird_app::read_journal_bird_list,
             journal::list_journal_entries,
             journal::list_journal_entries_for_date,
             journal::list_journal_dates_for_month

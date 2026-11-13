@@ -1,3 +1,4 @@
+import { birdPreviewUrl } from "./bird-test-modules.mjs";
 import { imageUrl, photographsUrl } from "./photo-test-modules.mjs";
 import { weatherUrl, tileUrl } from "./weather-test-modules.mjs";
 import assert from "node:assert/strict";
@@ -50,6 +51,7 @@ const placeUrl = componentUrl('../src/lib/components/EntryPlace.svelte', {
 const photographUrl = componentUrl("../src/lib/components/JournalPhotograph.svelte", { "$lib/journal-photographs": photographsUrl, "@tauri-apps/api/core": moduleUrl('export async function invoke(){throw new Error("SSR must not read photographs")}') });
 const contentUrl = componentUrl("../src/lib/components/JournalContent.svelte", { "$lib/components/JournalPhotograph.svelte": photographUrl });
 const { default: JournalReading } = await import(componentUrl("../src/lib/components/JournalReading.svelte", {
+  "$lib/components/BirdJournalLists.svelte": birdPreviewUrl,
   "$lib/components/DeleteEntryDialog.svelte": componentUrl("../src/lib/components/DeleteEntryDialog.svelte"),
   "$lib/components/EntryOptions.svelte": componentUrl("../src/lib/components/EntryOptions.svelte"),
   "$lib/components/EntryPlace.svelte": placeUrl,

@@ -148,7 +148,15 @@ fn prepare(state: &DatabaseState, path: &Path) -> Result<Choice, Error> {
         return Err(Error::Changed);
     }
     let staging = tempfile::tempdir().map_err(|_| Error::Failed)?;
-    let format = if open_import::is_v6(&mut archive).map_err(|_| Error::InvalidPackage)? {
+    let format = if open_import::is_v10(&mut archive).map_err(|_| Error::InvalidPackage)? {
+        10
+    } else if open_import::is_v9(&mut archive).map_err(|_| Error::InvalidPackage)? {
+        9
+    } else if open_import::is_v8(&mut archive).map_err(|_| Error::InvalidPackage)? {
+        8
+    } else if open_import::is_v7(&mut archive).map_err(|_| Error::InvalidPackage)? {
+        7
+    } else if open_import::is_v6(&mut archive).map_err(|_| Error::InvalidPackage)? {
         6
     } else if open_import::is_v5(&mut archive).map_err(|_| Error::InvalidPackage)? {
         5
@@ -159,10 +167,38 @@ fn prepare(state: &DatabaseState, path: &Path) -> Result<Choice, Error> {
     } else {
         0
     };
-    if !matches!(format, 5 | 6) && !state.permits_legacy_protocol_fixture() {
+    if !matches!(format, 5 | 6 | 7 | 8 | 9 | 10) && !state.permits_legacy_protocol_fixture() {
         return Err(Error::InvalidPackage);
     }
-    let candidate = (if matches!(format, 5 | 6) && old_content.version == 6 {
+    let candidate = (if matches!(format, 5 | 6 | 7 | 8 | 9 | 10) && old_content.version == 10 {
+        open_import::build_for_schema9(
+            &mut archive,
+            staging.path(),
+            &AtomicBool::new(false),
+            format,
+        )
+    } else if matches!(format, 5 | 6 | 7 | 8 | 9) && old_content.version == 9 {
+        open_import::build_for_schema8(
+            &mut archive,
+            staging.path(),
+            &AtomicBool::new(false),
+            format,
+        )
+    } else if matches!(format, 5 | 6 | 7 | 8) && old_content.version == 8 {
+        open_import::build_for_schema7(
+            &mut archive,
+            staging.path(),
+            &AtomicBool::new(false),
+            format,
+        )
+    } else if matches!(format, 5 | 6 | 7) && old_content.version == 7 {
+        open_import::build_for_schema6(
+            &mut archive,
+            staging.path(),
+            &AtomicBool::new(false),
+            format,
+        )
+    } else if matches!(format, 5 | 6) && old_content.version == 6 {
         open_import::build_for_schema5(
             &mut archive,
             staging.path(),
@@ -278,6 +314,82 @@ fn activate(state: &DatabaseState, mut choice: Choice) -> Result<Success, Error>
     // nor metadata stands in for content identity. No descriptor clone/reopen.
     if digest(&mut choice.original)? != choice.hash || digest(&mut choice.archive)? != choice.hash {
         return Err(Error::Changed);
+    }
+    if choice.new_content.version == 10 {
+        if crate::backup::restore_context::activation::journal_proof(&active)
+            .map_err(|_| Error::Failed)?
+            != choice.old_content
+        {
+            return Err(Error::Changed);
+        }
+        let activated = crate::backup::restore_context::activation::importing::activate_schema9(
+            &maintenance,
+            &mut choice.archive,
+            &choice.old_content,
+            &choice.new_content,
+            Arc::new(AtomicBool::new(false)),
+            choice.source_format,
+        )
+        .map_err(|_| Error::Failed)?;
+        drop(activated);
+        return Ok(Success::Activated);
+    }
+    if choice.new_content.version == 9 {
+        if crate::backup::restore_context::activation::journal_proof(&active)
+            .map_err(|_| Error::Failed)?
+            != choice.old_content
+        {
+            return Err(Error::Changed);
+        }
+        let activated = crate::backup::restore_context::activation::importing::activate_schema8(
+            &maintenance,
+            &mut choice.archive,
+            &choice.old_content,
+            &choice.new_content,
+            Arc::new(AtomicBool::new(false)),
+            choice.source_format,
+        )
+        .map_err(|_| Error::Failed)?;
+        drop(activated);
+        return Ok(Success::Activated);
+    }
+    if choice.new_content.version == 8 {
+        if crate::backup::restore_context::activation::journal_proof(&active)
+            .map_err(|_| Error::Failed)?
+            != choice.old_content
+        {
+            return Err(Error::Changed);
+        }
+        let activated = crate::backup::restore_context::activation::importing::activate_schema7(
+            &maintenance,
+            &mut choice.archive,
+            &choice.old_content,
+            &choice.new_content,
+            Arc::new(AtomicBool::new(false)),
+            choice.source_format,
+        )
+        .map_err(|_| Error::Failed)?;
+        drop(activated);
+        return Ok(Success::Activated);
+    }
+    if choice.new_content.version == 7 {
+        if crate::backup::restore_context::activation::journal_proof(&active)
+            .map_err(|_| Error::Failed)?
+            != choice.old_content
+        {
+            return Err(Error::Changed);
+        }
+        let activated = crate::backup::restore_context::activation::importing::activate_schema6(
+            &maintenance,
+            &mut choice.archive,
+            &choice.old_content,
+            &choice.new_content,
+            Arc::new(AtomicBool::new(false)),
+            choice.source_format,
+        )
+        .map_err(|_| Error::Failed)?;
+        drop(activated);
+        return Ok(Success::Activated);
     }
     if choice.new_content.version == 6 {
         if crate::backup::restore_context::activation::journal_proof(&active)

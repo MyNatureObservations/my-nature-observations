@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BirdJournalLists from "$lib/components/BirdJournalLists.svelte";
   import { tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import DeleteEntryDialog from "$lib/components/DeleteEntryDialog.svelte";
@@ -127,6 +128,7 @@
             <p class="message error" role="alert">{m.journal_delete_failed({}, { locale })}</p>
           {/if}
           <JournalContent contentJson={entry.contentJson} entryId={entry.id} documentVersion={entry.documentVersion ?? 1} {generation} {locale} editable={entry.editable === true} />
+          <BirdJournalLists entryId={entry.id} {generation} {locale} journalDate={entry.entryDate}/>
         </article>
       {/each}
     </section>

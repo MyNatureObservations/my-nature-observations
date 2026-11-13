@@ -419,7 +419,7 @@ fn begin_bird_upgrade(root: &Path) -> Result<StartupOutcome, String> {
             if new {
                 database::create_current_database(path)?;
             }
-            crate::backup::restore_context::bird_upgrade::initialize(path)
+            crate::backup::restore_context::bird_upgrade::initialize_current(path)
         },
     )
 }
