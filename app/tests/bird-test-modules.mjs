@@ -10,11 +10,15 @@ export const birdsUrl=url(resolve(transpile(source('../src/lib/birds.ts')),{'$li
 export const birds=await import(birdsUrl);
 export const namesUrl=url(resolve(transpile(source('../src/lib/bird-names.ts')),{}));
 export const names=await import(namesUrl);
-export function previewUrl(seeded){const compiled=compile(seeded??source('../src/lib/components/BirdJournalLists.svelte'),{generate:'server',filename:'BirdJournalLists.svelte'});if(compiled.warnings.length)throw Error(JSON.stringify(compiled.warnings));return url(resolve(compiled.js.code,{'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href}));}
+const messages=new URL('../src/lib/paraglide/messages.js',import.meta.url).href;
+function componentModule(text,aliases){const compiled=compile(text,{generate:'server'});if(compiled.warnings.length)throw Error(JSON.stringify(compiled.warnings));return url(resolve(compiled.js.code,aliases));}
+export const visitPreviewUrl=componentModule(source('../src/lib/components/BirdVisitPreview.svelte'),{'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/paraglide/messages.js':messages});
+export const linkPickerUrl=componentModule(source('../src/lib/components/BirdLinkPicker.svelte'),{'$lib/birds':birdsUrl,'$lib/components/BirdVisitPreview.svelte':visitPreviewUrl,'$lib/paraglide/messages.js':messages});
+export function previewUrl(seeded){const compiled=compile(seeded??source('../src/lib/components/BirdJournalLists.svelte'),{generate:'server',filename:'BirdJournalLists.svelte'});if(compiled.warnings.length)throw Error(JSON.stringify(compiled.warnings));return url(resolve(compiled.js.code,{'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/components/BirdVisitPreview.svelte':visitPreviewUrl,'$lib/components/BirdLinkPicker.svelte':linkPickerUrl,'$lib/components/DeleteEntryDialog.svelte':componentModule(source('../src/lib/components/DeleteEntryDialog.svelte'),{'$lib/paraglide/messages.js':messages}),'$lib/paraglide/messages.js':messages}));}
 export const birdPreviewUrl=previewUrl();
 
 // Use the real DatePicker: controller-only tests miss premature child rendering.
-export function creationUrl(text, locale='sv') {
+export function creationUrl(text, locale='sv',entryId='origin') {
  const language=url(`export const language={current:${JSON.stringify(locale)}};`);
  const messages=new URL('../src/lib/paraglide/messages.js',import.meta.url).href;
  const component=(text,aliases)=>url(resolve(compile(text,{generate:'server'}).js.code,aliases));
@@ -24,7 +28,7 @@ export function creationUrl(text, locale='sv') {
   '$lib/language.svelte':language,'$lib/paraglide/messages.js':messages,'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/components/EntryOptions.svelte':url(resolve(compile(source('../src/lib/components/EntryOptions.svelte'),{generate:'server'}).js.code,{'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href})),'$lib/components/BirdSpeciesName.svelte':speciesNameUrl,
   '$lib/journal-data':reader,'$lib/places':url('export async function readJournalPlace(){}'),
   '$lib/place-map.svelte':url('export const PLACE_MAP="map";'),
-  '$app/state':url('export const page={params:{id:"origin"}};'),
+  '$app/state':url(`export const page={params:{id:${JSON.stringify(entryId)}}};`),
   '$app/navigation':url('export function beforeNavigate(){};export async function goto(){}'),
   '$lib/components/VisitTimePicker.svelte':timePickerUrl,'$lib/components/DatePicker.svelte':picker,'$lib/components/BirdAttribution.svelte':attribution
  });
@@ -36,3 +40,9 @@ export function detailUrl(){return url(resolve(compile(source('../src/lib/compon
 export const deleteDialogUrl=url(resolve(compile(source('../src/lib/components/DeleteEntryDialog.svelte'),{generate:'server'}).js.code,{'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href}));
 
 export const timePickerUrl=url(resolve(compile(source('../src/lib/components/VisitTimePicker.svelte'),{generate:'server'}).js.code,{'$lib/birds':birdsUrl,'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href}));
+
+export function overviewUrl(text,locale='sv'){
+ return componentModule(text,{'$lib/bird-names':namesUrl,'$lib/language.svelte':url(`export const language={current:${JSON.stringify(locale)}};`),'$lib/birds':birdsUrl,'$lib/components/BirdVisitPreview.svelte':visitPreviewUrl,'$lib/paraglide/messages.js':messages});
+}
+
+export function journalLinksUrl(text){return componentModule(text,{'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/components/DeleteEntryDialog.svelte':deleteDialogUrl,'$lib/paraglide/messages.js':messages});}

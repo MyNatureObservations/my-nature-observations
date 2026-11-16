@@ -1,13 +1,22 @@
 <script lang="ts">
  import {onMount} from "svelte";
  import { invoke } from "@tauri-apps/api/core";
- import { makeBirdReader, birdHref, entryHref, speciesLabel, type BirdList } from "$lib/birds";
- import {capitalizeCommonName,formatBirdDate} from "$lib/bird-names";
+ import { makeBirdReader, birdHref, entryHref, setBirdLink, type BirdList } from "$lib/birds";
+ import {formatBirdDate} from "$lib/bird-names";
+ import BirdVisitPreview from "$lib/components/BirdVisitPreview.svelte";
+ import BirdLinkPicker from "$lib/components/BirdLinkPicker.svelte";
+ import DeleteEntryDialog from "$lib/components/DeleteEntryDialog.svelte";
  import * as m from "$lib/paraglide/messages.js";
  let {entryId,generation,locale,allowCreate=false,journalDate=null}:{entryId:string;generation:number|null;locale:"sv"|"en";allowCreate?:boolean;journalDate?:string|null}=$props();
  let available=$state(false),failed=$state(false),lists=$state<BirdList[]>([]);
  const read=makeBirdReader();
- let revision=$state(0);
+ let revision=$state(0),linkPicker=$state(false),unlinkTarget=$state<BirdList|null>(null),unlinkBusy=$state(false),unlinkFailed=$state(false);
+ async function unlink(){
+  if(!unlinkTarget||generation===null||unlinkBusy)return;unlinkBusy=true;unlinkFailed=false;
+  try{await setBirdLink(generation,entryId,unlinkTarget.id,false);unlinkTarget=null;window.dispatchEvent(new Event("mno:journal-changed"));}
+  catch{unlinkFailed=true;unlinkTarget=null;}finally{unlinkBusy=false;}
+ }
+ function linked(){linkPicker=false;window.dispatchEvent(new Event("mno:journal-changed"));}
  onMount(()=>{const refresh=()=>revision++;window.addEventListener("mno:journal-changed",refresh);return()=>window.removeEventListener("mno:journal-changed",refresh);});
  $effect(()=>{revision;const id=entryId,g= generation;let cancelled=false;
   available=false;lists=[];failed=false;
@@ -21,14 +30,17 @@
   {#if allowCreate}<p class="section-context">{m.bird_preview_context({}, {locale})}</p>{/if}
   {#if failed}<p role="alert">{m.bird_load_failed({}, {locale})}</p>{/if}
   {#each lists as list (list.id)}
-   <a class="bird-preview" href={birdHref(entryId,list.id)}>
-    <span class="visit"><strong>{list.place.name}</strong>{#if list.visitStart||list.visitEnd}<span>{' · '}{list.visitStart??"…"}–{list.visitEnd??"…"}</span>{/if}{#if list.visitDate!==journalDate}<span>{' · '}{formatBirdDate(list.visitDate,locale)}</span>{/if}</span>
-    <span class="species-preview">{#each list.rows.slice(0,3) as row,i}{#if i>0}{' · '}{/if}{capitalizeCommonName(speciesLabel(row,locale),locale)} <b>{row.count}</b>{/each}{#if list.rows.length>3}{' · '}{m.bird_more_rows({count:list.rows.length-3}, {locale})}{/if}</span>
-   </a>
+   <div class="linked-visit"><BirdVisitPreview {list} {locale} {journalDate} href={birdHref(entryId,list.id)}/>
+    {#if allowCreate}<button class="unlink" type="button" disabled={unlinkBusy} aria-label={m.bird_unlink_for({place:list.place.name,date:formatBirdDate(list.visitDate,locale)}, {locale})} onclick={()=>{unlinkTarget=list;unlinkFailed=false;}}>{m.bird_unlink({}, {locale})}</button>{/if}
+   </div>
   {/each}
   {#if allowCreate&&generation!==null}<a class="create-birds" href={`${entryHref(entryId)}/birds/new`}>＋ {m.bird_create({}, {locale})}</a>{/if}
+  {#if allowCreate&&generation!==null}<button class="create-birds" type="button" onclick={()=>linkPicker=true}>{m.bird_link_existing({}, {locale})}</button>{/if}
  </section>
+ {#if linkPicker&&generation!==null}<BirdLinkPicker {entryId} {generation} {locale} linkedIds={lists.map(list=>list.id)} oncancel={()=>linkPicker=false} onlinked={linked}/>{/if}
+ {#if unlinkTarget}<DeleteEntryDialog title={unlinkTarget.place.name} date={unlinkTarget.visitDate} {locale} busy={unlinkBusy} heading={m.bird_unlink({}, {locale})} description={m.bird_unlink_confirm({place:unlinkTarget.place.name,date:formatBirdDate(unlinkTarget.visitDate,locale)}, {locale})} oncancel={()=>{if(!unlinkBusy)unlinkTarget=null;}} onconfirm={()=>void unlink()}/>{/if}
+ {#if unlinkFailed}<p role="alert">{m.bird_unlink_failed({}, {locale})}</p>{/if}
 {/if}
 <style>
- .bird-links{margin-top:20px;color:var(--text-muted,#686d63);font:13px/1.5 system-ui,sans-serif}h2{font:12px system-ui,sans-serif;color:var(--accent,#435b47);margin:0 0 6px}.section-context{font:12px/1.5 system-ui,sans-serif;color:var(--text-muted,#686d63);margin:0 0 6px}.bird-preview{display:block;padding:7px 4px;margin:3px -4px;color:inherit;text-decoration:none;border-radius:4px}.bird-preview:hover{background:#eef1eb}.visit,.species-preview{display:block}.visit strong{font-weight:500;color:var(--accent,#435b47)}.species-preview{margin-top:2px}b{font-weight:500;font-variant-numeric:tabular-nums;margin-left:2px}.create-birds{display:inline-flex;align-items:center;min-height:40px;color:var(--accent,#435b47);font-size:12px}a:focus-visible{outline:2px solid #788e7b;outline-offset:3px}
+ .bird-links{margin-top:20px;color:var(--text-muted,#686d63);font:13px/1.5 system-ui,sans-serif}h2{font:12px system-ui,sans-serif;color:var(--accent,#435b47);margin:0 0 6px}.section-context{font:12px/1.5 system-ui,sans-serif;color:var(--text-muted,#686d63);margin:0 0 6px}.linked-visit{margin:3px 0}.unlink{border:0;background:transparent;color:#686d63;font:11px system-ui,sans-serif;min-height:32px;padding:4px}.create-birds{display:inline-flex;align-items:center;min-height:40px;padding:0;margin-right:18px;border:0;background:transparent;text-decoration:underline;cursor:pointer;color:var(--accent,#435b47);font:12px system-ui,sans-serif}a:focus-visible,button:focus-visible{outline:2px solid #788e7b;outline-offset:3px}[role=alert]{color:#9a403b}
 </style>

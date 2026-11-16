@@ -2,7 +2,7 @@
  import {validTime} from "$lib/birds";
  import * as m from "$lib/paraglide/messages.js";
  let {value=$bindable(""),id,label,locale,disabled=false,descriptionId=undefined}:{value:string;id:string;label:string;locale:"sv"|"en";disabled?:boolean;descriptionId?:string}=$props();
- let open=$state(false);let picker:HTMLDetailsElement;let input:HTMLInputElement|undefined=$state(undefined);
+ let open=$state(false);let picker:HTMLDetailsElement;let input:HTMLInputElement|undefined=$state(undefined);let minuteInput:HTMLInputElement|undefined=$state(undefined);
  const hours=Array.from({length:24},(_,i)=>String(i).padStart(2,"0"));
  const minutes=Array.from({length:60},(_,i)=>String(i).padStart(2,"0"));
  const hour=$derived(/^([01]\d|2[0-3]):[0-5]\d$/.test(value)?value.slice(0,2):"");
@@ -14,6 +14,24 @@
   value=part==="hour"?`${selected}:${match?.[2]??"00"}`:`${match?.[1]??"00"}:${selected}`;
  }
  function typeTime(event:Event){if(!disabled)value=(event.currentTarget as HTMLInputElement).value;}
+ function parts(text:string):[string,string]{const colon=text.indexOf(":");return colon<0?[text,""]:[text.slice(0,colon),text.slice(colon+1)];}
+ const typed=$derived(parts(value));
+ function typePart(part:"hour"|"minute",event:Event){
+  if(disabled)return;
+  const text=(event.currentTarget as HTMLInputElement).value;
+  if(text.includes(":")){typeTime(event);return;}
+  const old=parts(value),h=part==="hour"?text:old[0],m=part==="minute"?text:old[1];
+  value=h||m?`${h}:${m}`:"";
+ }
+ function hourKeydown(event:KeyboardEvent){
+  if(!disabled&&event.key===":"){event.preventDefault();minuteInput?.focus();minuteInput?.select();}
+ }
+ function pasteTime(event:ClipboardEvent){
+  if(disabled)return;
+  const text=event.clipboardData?.getData("text/plain");
+  if(text&&/^\d{2}:\d{2}$/.test(text)){event.preventDefault();value=text;}
+ }
+
  function clear(){if(disabled)return;value="";open=false;input?.focus();}
  function keydown(event:KeyboardEvent){
   if(open&&event.key==="Escape"&&event.target instanceof Node&&picker?.parentElement?.contains(event.target)){
@@ -27,7 +45,9 @@
 <div class="time-control" onfocusout={leaveControl}>
  <label for={id}>{label}</label>
  <div class="time-picker" class:invalid={!validTime(value)}>
-  <input {id} type="text" inputmode="numeric" placeholder="--:--" maxlength="5" bind:this={input} value={value} oninput={typeTime} {disabled} aria-invalid={!validTime(value)} aria-describedby={descriptionId} autocomplete="off"/>
+  <input {id} class="hour-entry" type="text" inputmode="numeric" placeholder="--" maxlength="5" bind:this={input} value={typed[0]} oninput={event=>typePart("hour",event)} onkeydown={hourKeydown} onpaste={pasteTime} {disabled} aria-label={`${label}: ${m.bird_hours({}, {locale})}`} aria-invalid={!validTime(value)} aria-describedby={descriptionId} autocomplete="off"/>
+  <span class="colon" aria-hidden="true">:</span>
+  <input id={`${id}-minute`} class="minute-entry" type="text" inputmode="numeric" placeholder="--" maxlength="2" bind:this={minuteInput} value={typed[1]} oninput={event=>typePart("minute",event)} onpaste={pasteTime} {disabled} aria-label={`${label}: ${m.bird_minutes({}, {locale})}`} aria-invalid={!validTime(value)} aria-describedby={descriptionId} autocomplete="off"/>
   <details bind:this={picker} bind:open>
    <summary aria-label={m.bird_choose_time({time:label},{locale})} aria-disabled={disabled} tabindex={disabled?-1:0} onclick={event=>{if(disabled)event.preventDefault();}}>
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
@@ -47,7 +67,8 @@
  .time-picker{position:relative;display:inline-flex;align-items:center;border:1px solid #cccec7;border-radius:6px;background:#fffefa}
  .time-picker.invalid{border-color:#b4756f}
  input,select{box-sizing:border-box;color:#343530;font:13px system-ui,sans-serif;font-variant-numeric:tabular-nums}
- input{width:69px;padding:7px 8px;min-height:36px;border:0;background:transparent;border-radius:6px}
+ input{width:30px;padding:7px 3px;text-align:center;min-height:36px;border:0;background:transparent;border-radius:6px}
+ .colon{font:13px system-ui,sans-serif;user-select:none}
  details{position:static}
  summary{box-sizing:border-box;display:grid;place-items:center;width:32px;min-height:36px;border-radius:5px;color:var(--text-muted,#686d63);cursor:pointer;list-style:none}
  summary::-webkit-details-marker{display:none}summary:hover{color:var(--accent,#435b47);background:#eef1eb}

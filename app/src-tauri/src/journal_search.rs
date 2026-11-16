@@ -121,7 +121,7 @@ fn build_index(mut source: Connection) -> Result<Connection, String> {
     tx.rollback().map_err(sql)?;
     Ok(index)
 }
-fn document_text(raw: &str) -> String {
+pub(crate) fn document_text(raw: &str) -> String {
     fn visit(node: &Value, out: &mut String, depth: usize) {
         if depth > 64 {
             return;

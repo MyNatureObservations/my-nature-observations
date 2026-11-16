@@ -210,6 +210,33 @@ preservation blocker after the schema-9 receipt correction. It reuses the comple
 for scope, limitations and the distinction between DEV and packaged acceptance.
 
 
+## Standalone bird observations: macOS DEV acceptance and refinements
+
+On 2026-11-13 the owner reported that the supplied standalone/linking checklist
+passed on the existing isolated synthetic profile, for local work on
+`codex/mac-bird-observations-overview` from main
+`788a740734ca871f7590641a9a563df7fff11e24`. Record this as user-reported DEV
+acceptance of that checklist, separately from automated preservation tests.
+
+Subsequent refinements were initially awaiting manual DEV acceptance. On
+2026-11-16 the owner confirmed date grouping/visit ordering, segmented keyboard
+time entry, linking/targeted unlinking from observation detail, return navigation
+and persistence after restart. These checks are **accepted within macOS DEV scope**.
+Automated results: 616 frontend tests, one rendered time-keyboard
+browser test, 53 bird Rust regressions and 10 journal-search regressions passed;
+Svelte had 0 errors/warnings, and all-targets/formatting/whitespace checks passed.
+No schema/archive change or native Windows/Linux execution is claimed. UX-005
+remains non-blocking and unresolved; the user's profile was not accessed or reset.
+See [the flow report and retry checklist](MNO_Bird_First_Mac_Flow.md#owner-acceptance-of-standalonelinking-flow-and-local-refinements).
+
+
+The [final standalone checkpoint review](MNO_Bird_First_Mac_Flow.md#standalone-flow-checkpoint-review--2026-11-16)
+found no concrete correctness or preservation blocker. It reused the recorded
+passing tests without another application run. UX-005 and the deferred main-navigation
+design remain **non-blocking follow-ups**. No packaged or Windows/Linux bird-feature
+acceptance is inferred. The review only adds acceptance/review documentation and a
+local checkpoint; the synthetic profile remains untouched.
+
 ## Cross-platform Stage A1: compile/test visibility
 
 The additional CI matrix uses `ubuntu-24.04` and `windows-2022`, retaining the

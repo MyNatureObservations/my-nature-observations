@@ -108,3 +108,27 @@ Godkänn steg 1 med dess schema- och bevarandekontroller som en vertikal leveran
 5. Skapa extern backup, återställ endast till en separat syntetisk målprofil och kontrollera listor och länkar. Kör samma automatiserade bevarandekontroll för olänkad lista och verifiera att journalradering inte tar bort listan.
 
 Navigationsacceptansen ska verifiera den godkända återgången utifrån var listan öppnades. Steg 1 ska också verifiera registrering med engelskt och vetenskapligt namn och diskret markering när svenskt namn saknas. Ägarens dokumenterade licenstolkning, okänt exportdatum och taxonomiska namnkontroller följer med artregistrets underlag.
+
+
+## Lokal uppföljning av steg 2 — fristående listor och journalkopplingar
+
+På grenen `codex/mac-bird-observations-overview`, från publik main
+`788a740734ca871f7590641a9a563df7fff11e24`, återanvänds det mergade första
+flödet för observationsöversikt, fristående skapande/återöppning/redigering/radering
+samt val av befintlig lista och separat avlänkning från en sparad journalanteckning.
+Schema 9 och arkivformat 10 återanvänds utan ändring. Översikten läser listägare och
+visar varje identitet en gång; återgång styrs av öppningssammanhanget, inte listans
+övriga länkar. Listor överlever journalradering och avlänkning. Samma lista kan
+länkas till flera anteckningar utan dubbla kopplingar.
+
+Detta är lokal implementation med automatiska kontroller. Projektägaren har den
+16 november 2026 bekräftat macOS DEV-kontroller av datumgruppering/besöksordning,
+segmenterad tidsinmatning, länkning/riktad avlänkning från detaljen samt återgång
+och bevarande efter omstart. Detta är inte paketerad releaseacceptans. Se [resultat och samma-profils-checklista](../development/MNO_Bird_First_Mac_Flow.md#standalone-lists-overview-and-journal-links--local-next-stage).
+UX-005 är oförändrad och icke blockerande. Senare artinklistrning, foton, listväder,
+katalog-/regionarbete och kalendermarkeringar ingår inte här.
+
+Slutgranskningen mot basen ovan fann inga konkreta korrekthets- eller
+bevarandeblockerare. UX-005 och den uppskjutna utformningen av huvudnavigationen
+kvarstår som icke blockerande uppföljningar. Se
+[granskning och lokal checkpoint](../development/MNO_Bird_First_Mac_Flow.md#standalone-flow-checkpoint-review--2026-11-16).

@@ -233,6 +233,34 @@ pub(crate) fn update(
     end: Option<&str>,
     rows: &[SpeciesCount],
 ) -> Result<String, String> {
+    update_in_context(
+        state,
+        search,
+        generation,
+        id,
+        Some(entry),
+        expected,
+        date,
+        place,
+        start,
+        end,
+        rows,
+    )
+}
+
+pub(crate) fn update_in_context(
+    state: &DatabaseState,
+    search: &SearchState,
+    generation: u32,
+    id: &str,
+    entry: Option<&str>,
+    expected: &str,
+    date: &str,
+    place: &str,
+    start: Option<&str>,
+    end: Option<&str>,
+    rows: &[SpeciesCount],
+) -> Result<String, String> {
     search.with_write(|| {
   let path=state.ready_database_path()?;
   let _operation=state.operation(Some(generation))?;
@@ -240,7 +268,7 @@ pub(crate) fn update(
   let tx=db.transaction().map_err(|e|e.to_string())?;
   if !(database::bird_requests::validate_schema(&tx).map_err(|e|e.to_string())?||database::bird_comments::validate_schema(&tx).map_err(|e|e.to_string())?) {return Err("bird_schema_unsupported".into());}
   let previous=read_list(&tx,id)?;
-  if !previous.journal_entries.iter().any(|e|e==entry) {return Err("bird_link_missing".into());}
+  if entry.is_some_and(|entry|!previous.journal_entries.iter().any(|e|e==entry)) {return Err("bird_link_missing".into());}
   if edit_token(&previous)!=expected {return Err("bird_edit_stale".into());}
   if rows.is_empty()||rows.len()>11172 {return Err("bird_rows_invalid".into());}
   for row in rows {
@@ -392,4 +420,117 @@ pub(crate) fn reserve_id(
   tx.execute("INSERT INTO bird_creation_requests(request_id,payload_sha256,completed) VALUES (?1,NULL,0)",[id]).map_err(|e|e.to_string())?;
   tx.commit().map_err(|e|e.to_string())
  })
+}
+
+// Links belong to the observation list; unlinking never deletes either owner.
+pub(crate) fn set_link(
+    state: &DatabaseState,
+    search: &SearchState,
+    generation: u32,
+    id: &str,
+    entry: &str,
+    linked: bool,
+) -> Result<(), String> {
+    set_link_with_hook(state, search, generation, id, entry, linked, || Ok(()))
+}
+fn set_link_with_hook(
+    state: &DatabaseState,
+    search: &SearchState,
+    generation: u32,
+    id: &str,
+    entry: &str,
+    linked: bool,
+    after: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    search.with_write(||{
+        let path=state.ready_database_path()?;
+        let _permit=state.operation(Some(generation))?;
+        let mut db=database::open_existing(&path)?;
+        let tx=db.transaction().map_err(|e|e.to_string())?;
+        if !database::bird_requests::validate_schema(&tx).map_err(|e|e.to_string())? {return Err("bird_schema_unsupported".into());}
+        read_list(&tx,id)?;
+        let exists:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM journal_entries WHERE id=?1)",[entry],|r|r.get(0)).map_err(|e|e.to_string())?;
+        if !exists{return Err("bird_entry_missing".into());}
+        if linked{
+            tx.execute("INSERT INTO journal_bird_lists(entry_id,list_id) VALUES (?1,?2) ON CONFLICT(entry_id,list_id) DO NOTHING",params![entry,id]).map_err(|e|e.to_string())?;
+        }else{
+            tx.execute("DELETE FROM journal_bird_lists WHERE entry_id=?1 AND list_id=?2",params![entry,id]).map_err(|e|e.to_string())?;
+        }
+        after()?;
+        read_list(&tx,id)?;
+        tx.commit().map_err(|e|e.to_string())
+    })
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+    #[test]
+    fn links_rollback_reject_stale_or_missing_owners_and_never_recreate_deleted_lists() {
+        let root = tempfile::TempDir::new().unwrap();
+        let state = DatabaseState::default();
+        let path = state
+            .initialize_startup(&root.path().join("journal"))
+            .unwrap();
+        let search = SearchState::default();
+        let db = database::open_existing(&path).unwrap();
+        db.execute(
+            "INSERT INTO places VALUES ('11111111-1111-4111-8111-111111111111','Lake',59,18,1)",
+            [],
+        )
+        .unwrap();
+        for id in ["a", "b"] {
+            db.execute("INSERT INTO journal_entries VALUES (?1,'2026-11-13','Synthetic','{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\"}]}',2,'created','updated')",[id]).unwrap();
+        }
+        db.close().unwrap();
+        let id = create(
+            &state,
+            &search,
+            1,
+            "2026-11-13",
+            "11111111-1111-4111-8111-111111111111",
+            &[SpeciesCount {
+                avibase_id: "avibase-FBBBA943".into(),
+                taxonomy_version: "AviList v2026".into(),
+                count: 1,
+                comment: None,
+            }],
+            None,
+        )
+        .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert!(
+            set_link_with_hook(
+                &state,
+                &search,
+                1,
+                &id,
+                "a",
+                true,
+                || Err("injected".into())
+            )
+            .is_err()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert!(set_link(&state, &search, 999, &id, "a", true).is_err());
+        assert!(set_link(&state, &search, 1, &id, "missing", true).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        set_link(&state, &search, 1, &id, "a", true).unwrap();
+        set_link(&state, &search, 1, &id, "b", true).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert!(
+            set_link_with_hook(&state, &search, 1, &id, "a", false, || Err(
+                "injected".into()
+            ))
+            .is_err()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        set_link(&state, &search, 1, &id, "a", false).unwrap();
+        let list = reopen(&state, 1, &id).unwrap();
+        assert_eq!(list.journal_entries, vec!["b"]);
+        delete(&state, &search, 1, &id, &edit_token(&list), true).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert!(set_link(&state, &search, 1, &id, "a", true).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+    }
 }

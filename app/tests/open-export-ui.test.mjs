@@ -8,12 +8,13 @@ const component = readFileSync(new URL('../src/lib/components/AppNavigation.svel
 const script = ts.transpileModule(component.match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^  import .*;\n/gm, ''), { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
 const reader = ts.transpileModule(readFileSync(new URL('../src/lib/journal-data.ts', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, ''), { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
 const translations = Object.fromEntries(['sv','en'].map(locale => [locale, JSON.parse(readFileSync(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8'))]));
-function harness(restoreAvailable = true, importAvailable = true) {
+function harness(restoreAvailable = true, importAvailable = true, birdsAvailable = true) {
   const calls = [];
   const context = vm.createContext({ $state: v => v, $derived: v => v, $effect() {}, afterNavigate() {}, onMount: mount => mount(), language: { current: 'sv' },
     PLACE_MAP: 'mno:place-map', getContext: () => ({ close() {} }),
     m: new Proxy({}, { get: (_, key) => (_args, options) => translations[options.locale][key] }),
     invoke: (name, args) => {
+      if (name === 'bird_observations_available') return Promise.resolve(birdsAvailable);
       if (name === 'restore_available') return Promise.resolve(restoreAvailable);
       if (name === 'open_import_available') return Promise.resolve(importAvailable);
       assert.equal(name, 'create_open_export');
@@ -168,4 +169,8 @@ test('settings actions share one quiet button style while navigation remains nat
   for(const [locale,labels] of [['sv',['Återställ…','Exportera…','Importera…']],['en',['Restore…','Export…','Import…']]]) {
     assert.deepEqual([translations[locale].settings_restore,translations[locale].settings_export,translations[locale].settings_import],labels);
   }
+});
+
+test('observations navigation follows backend availability without starting an export',async()=>{
+ for(const available of [true,false]){const h=harness(true,true,available);await Promise.resolve();assert.equal(h.run('birdsAvailable'),available);assert.equal(h.calls.length,0);}
 });
