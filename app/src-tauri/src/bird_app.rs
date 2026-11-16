@@ -68,7 +68,7 @@ pub(crate) fn create_journal_bird_list(
     search: State<'_, SearchState>,
     generation: u32,
     request_id: String,
-    entry_id: String,
+    entry_id: Option<String>,
     visit_date: String,
     place_id: String,
     rows: Vec<RowInput>,
@@ -116,7 +116,7 @@ pub(crate) fn create_journal_bird_list(
 struct CreateInput {
     generation: u32,
     request_id: String,
-    entry_id: String,
+    entry_id: Option<String>,
     visit_date: String,
     place_id: String,
     rows: Vec<RowInput>,
@@ -140,7 +140,7 @@ fn create_in_session(
         &input.visit_date,
         &input.place_id,
         &rows,
-        Some(&input.entry_id),
+        input.entry_id.as_deref(),
         input.visit_start.as_deref(),
         input.visit_end.as_deref(),
         Some(&input.request_id),
@@ -255,7 +255,7 @@ mod tests {
             serde_json::to_value(&id).unwrap(),
             serde_json::Value::String(id.clone())
         );
-        let view = read_view(&state, 1, &input().entry_id, &id).unwrap();
+        let view = read_view(&state, 1, input().entry_id.as_deref(), &id).unwrap();
         let wire = serde_json::to_value(&view).unwrap();
         assert_eq!(wire["visitStart"], "11:17");
         assert_eq!(wire["visitEnd"], "11:20");
@@ -328,7 +328,7 @@ mod tests {
             let new_id = create_in_session(&state, &search, visit).unwrap();
             assert_ne!(new_id, id);
             assert_eq!(
-                read_view(&state, 1, &input().entry_id, &new_id)
+                read_view(&state, 1, input().entry_id.as_deref(), &new_id)
                     .unwrap()
                     .visit_start,
                 None
@@ -349,13 +349,16 @@ mod tests {
         assert_eq!(create_in_session(&reopened, &search, input()).unwrap(), id);
         assert_eq!(journal_inventory(&path), journal_before);
         assert_eq!(
-            serde_json::to_value(read_view(&reopened, 1, &input().entry_id, &id).unwrap()).unwrap(),
+            serde_json::to_value(
+                read_view(&reopened, 1, input().entry_id.as_deref(), &id).unwrap()
+            )
+            .unwrap(),
             wire
         );
         let mut edit: serde_json::Value = serde_json::from_str(CREATE_WIRE).unwrap();
         edit.as_object_mut().unwrap().remove("requestId");
         edit["id"] = id.clone().into();
-        edit["expectedToken"] = read_view(&reopened, 1, &input().entry_id, &id)
+        edit["expectedToken"] = read_view(&reopened, 1, input().entry_id.as_deref(), &id)
             .unwrap()
             .edit_token
             .into();
@@ -366,7 +369,7 @@ mod tests {
             serde_json::from_value(edit.clone()).unwrap(),
         )
         .unwrap();
-        let updated = read_view(&reopened, 1, &input().entry_id, &id).unwrap();
+        let updated = read_view(&reopened, 1, input().entry_id.as_deref(), &id).unwrap();
         assert_eq!(updated.edit_token, token);
         assert_eq!(updated.rows[0].count, "9");
         assert_eq!(journal_inventory(&path), journal_before);
@@ -429,14 +432,16 @@ mod tests {
         .unwrap();
         let id = create_in_session(&state, &SearchState::default(), request).unwrap();
         assert_eq!(
-            serde_json::to_value(&read_view(&state, 1, &entry, &id).unwrap().rows[0]).unwrap(),
+            serde_json::to_value(&read_view(&state, 1, entry.as_deref(), &id).unwrap().rows[0])
+                .unwrap(),
             expected
         );
         drop(state);
         let reopened = DatabaseState::default();
         reopened.initialize_startup(&root).unwrap();
         assert_eq!(
-            serde_json::to_value(&read_view(&reopened, 1, &entry, &id).unwrap().rows[0]).unwrap(),
+            serde_json::to_value(&read_view(&reopened, 1, entry.as_deref(), &id).unwrap().rows[0])
+                .unwrap(),
             expected
         );
     }
@@ -489,7 +494,7 @@ pub(crate) fn read_journal_bird_lists(
         drop(_permit);
         let mut lists = Vec::new();
         for id in ids {
-            lists.push(read_view(&state, generation, &entry_id, &id)?);
+            lists.push(read_view(&state, generation, Some(&entry_id), &id)?);
         }
         let permit = state.operation(Some(generation))?;
         Ok(permit.snapshot(lists))
@@ -504,12 +509,12 @@ pub(crate) fn read_journal_bird_lists(
 pub(crate) fn read_journal_bird_list(
     state: State<'_, DatabaseState>,
     generation: u32,
-    entry_id: String,
+    entry_id: Option<String>,
     id: String,
 ) -> Result<Snapshot<ListView>, String> {
     #[cfg(target_os = "macos")]
     {
-        let view = read_view(&state, generation, &entry_id, &id)?;
+        let view = read_view(&state, generation, entry_id.as_deref(), &id)?;
         Ok(state.operation(Some(generation))?.snapshot(view))
     }
     #[cfg(not(target_os = "macos"))]
@@ -522,11 +527,11 @@ pub(crate) fn read_journal_bird_list(
 fn read_view(
     state: &DatabaseState,
     generation: u32,
-    entry: &str,
+    entry: Option<&str>,
     id: &str,
 ) -> Result<ListView, String> {
     let list = crate::bird_observations::reopen(state, generation, id)?;
-    if !list.journal_entries.iter().any(|e| e == entry) {
+    if entry.is_some_and(|entry| !list.journal_entries.iter().any(|e| e == entry)) {
         return Err("bird_link_missing".into());
     }
     let path = state.ready_database_path()?;
@@ -571,7 +576,7 @@ pub(crate) fn update_journal_bird_list(
     search: State<'_, SearchState>,
     generation: u32,
     id: String,
-    entry_id: String,
+    entry_id: Option<String>,
     expected_token: String,
     visit_date: String,
     place_id: String,
@@ -622,7 +627,7 @@ pub(crate) fn update_journal_bird_list(
 struct EditInput {
     generation: u32,
     id: String,
-    entry_id: String,
+    entry_id: Option<String>,
     expected_token: String,
     visit_date: String,
     place_id: String,
@@ -665,12 +670,12 @@ fn update_in_session(
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    crate::bird_observations::update(
+    crate::bird_observations::update_in_context(
         state,
         search,
         generation,
         &id,
-        &entry_id,
+        entry_id.as_deref(),
         &expected_token,
         &visit_date,
         &place_id,
@@ -766,6 +771,412 @@ pub(crate) fn reserve_bird_creation(
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (state, search, generation);
+        Err("bird_platform_unsupported".into())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn all_views(state: &DatabaseState, generation: u32) -> Result<Vec<ListView>, String> {
+    let path = state.ready_database_path()?;
+    let permit = state.operation(Some(generation))?;
+    let db = crate::database::open_existing(&path)?;
+    // Select owners, not joined links: each list appears once, including orphans.
+    let ids=db.prepare("SELECT id FROM bird_lists ORDER BY visit_date DESC,visit_start IS NULL,visit_start,id COLLATE BINARY").map_err(|e|e.to_string())?.query_map([],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())?.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
+    drop(db);
+    drop(permit);
+    ids.into_iter()
+        .map(|id| read_view(state, generation, None, &id))
+        .collect()
+}
+#[tauri::command]
+pub(crate) fn read_bird_lists(
+    state: State<'_, DatabaseState>,
+    generation: u32,
+) -> Result<Snapshot<Vec<ListView>>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let lists = all_views(&state, generation)?;
+        Ok(state.operation(Some(generation))?.snapshot(lists))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (state, generation);
+        Err("bird_platform_unsupported".into())
+    }
+}
+#[tauri::command]
+pub(crate) fn set_journal_bird_link(
+    state: State<'_, DatabaseState>,
+    search: State<'_, SearchState>,
+    generation: u32,
+    entry_id: String,
+    id: String,
+    linked: bool,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        if !available(&state) {
+            return Err("bird_schema_unsupported".into());
+        }
+        crate::bird_observations::set_link(&state, &search, generation, &id, &entry_id, linked)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (state, search, generation, entry_id, id, linked);
+        Err("bird_platform_unsupported".into())
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod overview_tests {
+    use super::*;
+    use crate::bird_observations as birds;
+    use rusqlite::{Connection, OpenFlags};
+    use std::{
+        fs,
+        path::PathBuf,
+        sync::{Arc, atomic::AtomicBool},
+    };
+    fn fixture() -> (tempfile::TempDir, DatabaseState, PathBuf, SearchState) {
+        let temp = tempfile::TempDir::new().unwrap();
+        let state = DatabaseState::default();
+        let path = state
+            .initialize_startup(&temp.path().join("journal"))
+            .unwrap();
+        let db = crate::database::open_existing(&path).unwrap();
+        db.execute(
+            "INSERT INTO places VALUES ('11111111-1111-4111-8111-111111111111','Synthetic lake',59.33,18.07,1)",
+            [],
+        )
+        .unwrap();
+        db.close().unwrap();
+        (temp, state, path, SearchState::default())
+    }
+    fn entry(path: &std::path::Path, id: &str) {
+        let db = crate::database::open_existing(path).unwrap();
+        db.execute("INSERT INTO journal_entries VALUES (?1,'2026-11-13','Synthetic','{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\"}]}',2,'created','updated')",[id]).unwrap();
+        db.close().unwrap();
+    }
+    fn create(state: &DatabaseState, search: &SearchState) -> String {
+        let request = birds::reserve(state, search, 1).unwrap();
+        // Flat JSON is the real Tauri command contract, explicitly without an entry.
+        let input=serde_json::from_value(serde_json::json!({"generation":1,"requestId":request,"entryId":null,"visitDate":"2026-11-13","placeId":"11111111-1111-4111-8111-111111111111","visitStart":"08:07","visitEnd":null,"rows":[{"speciesId":"avibase-FBBBA943","taxonomyVersion":"AviList v2026","count":"6","comment":"Synthetic comment"}]})).unwrap();
+        create_in_session(state, search, input).unwrap()
+    }
+    #[test]
+    fn standalone_command_and_overview_preserve_identity_links_and_restart() {
+        let (temp, state, path, search) = fixture();
+        let id = create(&state, &search);
+        let db = crate::database::open_existing(&path).unwrap();
+        assert_eq!(
+            db.query_row("SELECT count(*) FROM journal_entries", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        db.close().unwrap();
+        let saved = birds::reopen(&state, 1, &id).unwrap();
+        assert!(saved.journal_entries.is_empty());
+        let bytes = fs::read(&path).unwrap();
+        assert_eq!(
+            birds::create_with_identity(
+                &state,
+                &search,
+                1,
+                &saved.visit_date,
+                &saved.place_id,
+                &saved.rows,
+                None,
+                saved.visit_start.as_deref(),
+                saved.visit_end.as_deref(),
+                Some(&id)
+            )
+            .unwrap(),
+            id
+        );
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+
+        assert_eq!(saved.rows[0].comment.as_deref(), Some("Synthetic comment"));
+        entry(&path, "first");
+        entry(&path, "second");
+        for e in ["first", "first", "second"] {
+            birds::set_link(&state, &search, 1, &id, e, true).unwrap();
+        }
+        assert_eq!(all_views(&state, 1).unwrap().len(), 1);
+        assert_eq!(
+            birds::reopen(&state, 1, &id).unwrap().journal_entries,
+            vec!["first", "second"]
+        );
+        let mut edit = serde_json::json!({"generation":1,"entryId":null,"id":id,"expectedToken":read_view(&state,1,None,&id).unwrap().edit_token,"visitDate":"2026-11-14","placeId":"11111111-1111-4111-8111-111111111111","visitStart":null,"visitEnd":"19:59","rows":[{"speciesId":"avibase-FBBBA943","taxonomyVersion":"AviList v2026","count":"8","comment":"Updated"}]});
+        update_in_session(
+            &state,
+            &search,
+            serde_json::from_value(edit.clone()).unwrap(),
+        )
+        .unwrap();
+        let updated = birds::reopen(&state, 1, &id).unwrap();
+        assert_eq!(updated.journal_entries, vec!["first", "second"]);
+        assert_eq!(updated.rows[0].count, 8);
+        // Journal-origin access requires the actual link, while standalone access does not.
+        birds::set_link(&state, &search, 1, &id, "first", false).unwrap();
+        birds::set_link(&state, &search, 1, &id, "first", false).unwrap();
+        assert!(read_view(&state, 1, Some("first"), &id).is_err());
+        assert!(read_view(&state, 1, Some("second"), &id).is_ok());
+        assert!(read_view(&state, 1, None, &id).is_ok());
+        edit["entryId"] = "first".into();
+        edit["expectedToken"] = read_view(&state, 1, None, &id).unwrap().edit_token.into();
+        assert!(update_in_session(&state, &search, serde_json::from_value(edit).unwrap()).is_err());
+        // Delete the remaining journal owner: its observation survives and stays discoverable.
+        let db = crate::database::open_existing(&path).unwrap();
+        db.execute("DELETE FROM journal_entries WHERE id='second'", [])
+            .unwrap();
+        db.close().unwrap();
+        assert!(
+            birds::reopen(&state, 1, &id)
+                .unwrap()
+                .journal_entries
+                .is_empty()
+        );
+        assert_eq!(all_views(&state, 1).unwrap().len(), 1);
+        let other = create(&state, &search);
+        assert_ne!(other, id);
+        assert_eq!(all_views(&state, 1).unwrap().len(), 2);
+        drop(state);
+        let state = DatabaseState::default();
+        state
+            .initialize_startup(&temp.path().join("journal"))
+            .unwrap();
+        assert_eq!(birds::reopen(&state, 1, &id).unwrap().rows[0].count, 8);
+        assert_eq!(all_views(&state, 1).unwrap().len(), 2);
+        delete_in_session(
+            &state,
+            &search,
+            DeleteInput {
+                generation: 1,
+                id: id.clone(),
+                expected_token: read_view(&state, 1, None, &id).unwrap().edit_token,
+                confirmed: true,
+            },
+        )
+        .unwrap();
+        assert!(read_view(&state, 1, None, &id).is_err());
+        assert_eq!(
+            birds::create_with_identity(
+                &state,
+                &search,
+                1,
+                &saved.visit_date,
+                &saved.place_id,
+                &saved.rows,
+                None,
+                saved.visit_start.as_deref(),
+                saved.visit_end.as_deref(),
+                Some(&id)
+            )
+            .unwrap_err(),
+            "bird_request_retired"
+        );
+
+        assert_eq!(all_views(&state, 1).unwrap()[0].id, other);
+        let db = crate::database::open_existing(&path).unwrap();
+        assert_eq!(
+            db.query_row("SELECT count(*) FROM places", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        db.close().unwrap();
+    }
+    #[test]
+    fn standalone_and_multi_linked_lists_are_in_existing_format10_archives() {
+        let (temp, state, path, search) = fixture();
+        let unlinked = create(&state, &search);
+        let linked = create(&state, &search);
+        entry(&path, "first");
+        entry(&path, "second");
+        for e in ["first", "second"] {
+            birds::set_link(&state, &search, 1, &linked, e, true).unwrap();
+        }
+        let mut db = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let proof = crate::storage_content::verify_v10(&mut db, &AtomicBool::new(false)).unwrap();
+        let backup = temp.path().join("visits.mno-backup");
+        crate::backup::create_backup(&db, &backup, crate::backup::BackupKind::Manual).unwrap();
+        let export = temp.path().join("visits.mno-export");
+        crate::open_export::export(&mut db, &export, &AtomicBool::new(false)).unwrap();
+        db.close().unwrap();
+        let candidate =
+            crate::backup::restore::prepare_candidate(&backup, Arc::new(AtomicBool::new(false)))
+                .unwrap();
+        assert_eq!(
+            crate::storage_content::verified_snapshot_v10(
+                candidate.source().unwrap(),
+                &AtomicBool::new(false)
+            )
+            .unwrap(),
+            proof
+        );
+        for (id, expected) in [(&unlinked, 0), (&linked, 2)] {
+            assert_eq!(
+                candidate
+                    .source()
+                    .unwrap()
+                    .query_row(
+                        "SELECT count(*) FROM journal_bird_lists WHERE list_id=?1",
+                        [id],
+                        |r| r.get::<_, i64>(0)
+                    )
+                    .unwrap(),
+                expected
+            );
+        }
+        drop(candidate);
+        let imported = crate::open_import::build_for_schema9(
+            &mut fs::File::open(export).unwrap(),
+            temp.path(),
+            &AtomicBool::new(false),
+            10,
+        )
+        .unwrap();
+        assert_eq!(imported.proof().sha256, proof.sha256);
+        let mut db = crate::database::open_existing(imported.path()).unwrap();
+        crate::storage_content::verify_v10(&mut db, &AtomicBool::new(false)).unwrap();
+        db.close().unwrap();
+    }
+    #[test]
+    fn overview_orders_null_times_last_and_detail_journal_targets_preserve_owners() {
+        let (_temp, state, path, search) = fixture();
+        let mut ids = Vec::new();
+        for _ in 0..5 {
+            ids.push(create(&state, &search));
+        }
+        let db = crate::database::open_existing(&path).unwrap();
+        for (i, (date, time)) in [
+            ("2026-11-13", None),
+            ("2026-11-13", Some("18:07")),
+            ("2026-11-13", Some("08:15")),
+            ("2026-11-13", Some("08:15")),
+            ("2026-11-12", Some("00:01")),
+        ]
+        .iter()
+        .enumerate()
+        {
+            db.execute(
+                "UPDATE bird_lists SET visit_date=?2,visit_start=?3 WHERE id=?1",
+                rusqlite::params![ids[i], date, time],
+            )
+            .unwrap();
+        }
+        db.close().unwrap();
+        let mut ties = vec![ids[2].clone(), ids[3].clone()];
+        ties.sort();
+        assert_eq!(
+            all_views(&state, 1)
+                .unwrap()
+                .into_iter()
+                .map(|v| v.id)
+                .collect::<Vec<_>>(),
+            vec![
+                ties[0].clone(),
+                ties[1].clone(),
+                ids[1].clone(),
+                ids[0].clone(),
+                ids[4].clone()
+            ]
+        );
+        assert!(journal_targets(&state, 1, &ids[0]).unwrap().is_empty());
+        entry(&path, "first");
+        entry(&path, "second");
+        let db = crate::database::open_existing(&path).unwrap();
+        db.execute("UPDATE journal_entries SET title='',content_json='{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Useful journal preview\"}]}]}' WHERE id='first'",[]).unwrap();
+        db.close().unwrap();
+        birds::set_link(&state, &search, 1, &ids[0], "first", true).unwrap();
+        birds::set_link(&state, &search, 1, &ids[0], "first", true).unwrap();
+        let targets = journal_targets(&state, 1, &ids[0]).unwrap();
+        assert_eq!(targets.len(), 2);
+        let first = targets.iter().find(|e| e.id == "first").unwrap();
+        assert!(first.linked);
+        assert_eq!(first.preview, "Useful journal preview");
+        assert!(first.title.is_empty());
+        assert!(!targets.iter().find(|e| e.id == "second").unwrap().linked);
+        birds::set_link(&state, &search, 1, &ids[0], "second", true).unwrap();
+        birds::set_link(&state, &search, 1, &ids[0], "first", false).unwrap();
+        let list = birds::reopen(&state, 1, &ids[0]).unwrap();
+        assert_eq!(list.journal_entries, vec!["second"]);
+        let new_token = birds::update_in_context(
+            &state,
+            &search,
+            1,
+            &list.id,
+            None,
+            &birds::edit_token(&list),
+            &list.visit_date,
+            &list.place_id,
+            list.visit_start.as_deref(),
+            list.visit_end.as_deref(),
+            &list.rows,
+        )
+        .unwrap();
+        assert_eq!(new_token, birds::edit_token(&list));
+        let before = fs::read(&path).unwrap();
+        assert!(journal_targets(&state, 999, &ids[0]).is_err());
+        assert!(journal_targets(&state, 1, "missing").is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct JournalTarget {
+    id: String,
+    entry_date: String,
+    title: String,
+    preview: String,
+    linked: bool,
+}
+#[cfg(target_os = "macos")]
+fn journal_targets(
+    state: &DatabaseState,
+    generation: u32,
+    id: &str,
+) -> Result<Vec<JournalTarget>, String> {
+    let path = state.ready_database_path()?;
+    let _permit = state.operation(Some(generation))?;
+    let mut db = crate::database::open_existing(&path)?;
+    let tx = db.transaction().map_err(|e| e.to_string())?;
+    crate::storage_content::snapshot_v10(&tx, &std::sync::atomic::AtomicBool::new(false))
+        .map_err(|_| "bird_list_invalid")?;
+    if !tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM bird_lists WHERE id=?1)",
+            [id],
+            |r| r.get::<_, bool>(0),
+        )
+        .map_err(|e| e.to_string())?
+    {
+        return Err("bird_list_missing".into());
+    }
+    let rows=tx.prepare("SELECT e.id,e.entry_date,e.title,e.content_json,EXISTS(SELECT 1 FROM journal_bird_lists l WHERE l.entry_id=e.id AND l.list_id=?1) FROM journal_entries e ORDER BY e.entry_date DESC,e.created_at DESC,e.id COLLATE BINARY").map_err(|e|e.to_string())?.query_map([id],|r|{
+        let raw:String=r.get(3)?;
+        let text=crate::journal_search::document_text(&raw).split_whitespace().collect::<Vec<_>>().join(" ");
+        let preview=text.chars().take(160).collect::<String>();
+        Ok(JournalTarget{id:r.get(0)?,entry_date:r.get(1)?,title:r.get(2)?,preview,linked:r.get(4)?})
+    }).map_err(|e|e.to_string())?.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+#[tauri::command]
+pub(crate) fn read_bird_journal_entries(
+    state: State<'_, DatabaseState>,
+    generation: u32,
+    id: String,
+) -> Result<Snapshot<Vec<JournalTarget>>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let entries = journal_targets(&state, generation, &id)?;
+        Ok(state.operation(Some(generation))?.snapshot(entries))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (state, generation, id);
         Err("bird_platform_unsupported".into())
     }
 }

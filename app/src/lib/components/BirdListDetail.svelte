@@ -1,13 +1,14 @@
 <script lang="ts">
+ import type {Snippet} from "svelte";
  import type {BirdList} from "$lib/birds";
  import {formatBirdDate,type BirdNamePreferences} from "$lib/bird-names";
  import BirdSpeciesName from "$lib/components/BirdSpeciesName.svelte";
  import EntryOptions from "$lib/components/EntryOptions.svelte";
  import BirdAttribution from "$lib/components/BirdAttribution.svelte";
  import * as m from "$lib/paraglide/messages.js";
- let {list,origin,locale,preferences,preferencesSaved=true,editHref=null,onDelete=null,actionsDisabled=false,onPreferencesChange}:{list:BirdList;origin:string;locale:"sv"|"en";preferences:BirdNamePreferences;preferencesSaved?:boolean;editHref?:string|null;onDelete?:(()=>void)|null;actionsDisabled?:boolean;onPreferencesChange:(p:BirdNamePreferences)=>void}=$props();
+ let {list,origin,locale,standalone=false,links,preferences,preferencesSaved=true,editHref=null,onDelete=null,actionsDisabled=false,onPreferencesChange}:{list:BirdList;origin:string;standalone?:boolean;links?:Snippet;locale:"sv"|"en";preferences:BirdNamePreferences;preferencesSaved?:boolean;editHref?:string|null;onDelete?:(()=>void)|null;actionsDisabled?:boolean;onPreferencesChange:(p:BirdNamePreferences)=>void}=$props();
 </script>
-<header><a href={origin}>← {m.bird_back_entry({}, {locale})}</a><span class="section-label">{m.bird_lists({}, {locale})}</span></header>
+<header><a href={origin}>← {standalone?m.bird_overview({}, {locale}):m.bird_back_entry({}, {locale})}</a><span class="section-label">{m.bird_lists({}, {locale})}</span></header>
 <h1>{list.place.name}</h1>
 <div class="metadata"><time datetime={list.visitDate}>{formatBirdDate(list.visitDate,locale)}</time>{#if list.visitStart||list.visitEnd}<span>{list.visitStart??"…"}–{list.visitEnd??"…"}</span>{/if}{#if editHref||onDelete}<div class="list-options"><EntryOptions {locale}>{#snippet children(close)}{#if editHref&&!actionsDisabled}<a href={editHref} onclick={close}>{m.journal_edit({}, {locale})}</a>{/if}{#if onDelete}<button type="button" disabled={actionsDisabled} onclick={()=>{close();onDelete?.();}}>{m.bird_delete({}, {locale})}</button>{/if}{/snippet}</EntryOptions></div>{/if}</div>
 <p class="visit-context">{m.bird_visit_context({}, {locale})}</p>
@@ -17,6 +18,7 @@
   {#if row.comment}<div class="comment-section"><span class="comment-label">{m.bird_your_comment({}, {locale})}</span><p class="comment">{row.comment}</p></div>{/if}
  </li>{/each}
 </ul>
+{@render links?.()}
 <details class="view-options"><summary>{m.bird_name_display({}, {locale})}</summary>
  <label><input type="checkbox" checked={preferences.showOtherLanguage} onchange={e=>onPreferencesChange({...preferences,showOtherLanguage:e.currentTarget.checked})}/>{locale==="sv"?m.bird_show_english({}, {locale}):m.bird_show_swedish({}, {locale})}</label>
  <label><input type="checkbox" checked={preferences.showScientific} onchange={e=>onPreferencesChange({...preferences,showScientific:e.currentTarget.checked})}/>{m.bird_show_scientific({}, {locale})}</label>

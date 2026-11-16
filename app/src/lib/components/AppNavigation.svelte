@@ -17,9 +17,11 @@
   const readJournal = createJournalReader();
   type Panel = "left" | "top" | "right";
 
+  let birdsAvailable = $state(false);
   let restoreAvailable = $state(false);
   let importAvailable = $state(false);
   onMount(() => {
+    void invoke<boolean>("bird_observations_available").then(available => { birdsAvailable = available; }).catch(() => {});
     void invoke<boolean>("open_import_available").then((available) => { importAvailable = available; }).catch(() => {});
     void invoke<boolean>("restore_available").then((available) => { restoreAvailable = available; }).catch(() => {});
   });
@@ -359,6 +361,7 @@
         />
       </div>
     </div>
+    {#if birdsAvailable}<div class="panel-section"><a class="backup-button" href="/observations" onclick={() => (activePanel = null)}>{m.bird_overview({}, {locale:language.current})}</a></div>{/if}
     <div class="panel-section calendar-section">
       {#if isCalendarMonthPickerOpen}
         <button

@@ -8,7 +8,7 @@
  import {createJournalReader} from "$lib/journal-data";
  import {readJournalPlace,type Place} from "$lib/places";
  import {PLACE_MAP,type PlaceMapController} from "$lib/place-map.svelte";
- import {entryHref,birdHref,speciesLabel,validDate,validTime,validBirdCount,validBirdComment,canSaveBirdList,saveBirdList,reserveBirdRequest,confirmSavedBirdList,updateBirdList,type BirdList,type Species,type BirdRow} from "$lib/birds";
+ import {entryHref,birdHref,localVisitDate,speciesLabel,validDate,validTime,validBirdCount,validBirdComment,canSaveBirdList,saveBirdList,reserveBirdRequest,confirmSavedBirdList,updateBirdList,type BirdList,type Species,type BirdRow} from "$lib/birds";
  import {DEFAULT_BIRD_NAMES,loadBirdNamePreferences,capitalizeCommonName,type BirdNamePreferences} from "$lib/bird-names";
  import BirdSpeciesName from "$lib/components/BirdSpeciesName.svelte";
  let namePreferences=$state<BirdNamePreferences>({...DEFAULT_BIRD_NAMES});
@@ -18,7 +18,7 @@
  import * as m from "$lib/paraglide/messages.js";
  let {editId=null}:{editId?:string|null}=$props();
  let expectedToken=$state("");
- const entryId=page.params.id!;const origin=$derived(editId?birdHref(entryId,editId):entryHref(entryId));const map=getContext<PlaceMapController>(PLACE_MAP);
+ const entryId=page.params.id??null;const origin=$derived(editId?birdHref(entryId,editId):entryId?entryHref(entryId):"/observations");const map=getContext<PlaceMapController>(PLACE_MAP);
  let initialized=$state(false);
  let proposedDate=$state(false),proposedPlace=$state(false);
  let searchInput=$state<HTMLInputElement|undefined>(undefined);
@@ -35,10 +35,15 @@
    const enabled=await invoke<boolean>("bird_observations_available");if(disposed)return;available=enabled;if(!enabled)return;
    if(editId){
     const session=await invoke<{generation:number}>("new_journal_session");
-    const response=await createJournalReader()<BirdList>("read_journal_bird_list",{entryId,id:editId,generation:session.generation});if(disposed)return;
+    const response=await createJournalReader()<BirdList>("read_journal_bird_list",{entryId:null,id:editId,generation:session.generation});if(disposed)return;
     generation=response.generation;const list=response.data;expectedToken=list.editToken;
     date=list.visitDate;place=list.place;start=list.visitStart??"";end=list.visitEnd??"";
     rows=list.rows.map(row=>({id:row.speciesId,taxonomyVersion:row.taxonomyVersion,english:row.english,swedish:row.swedish,scientific:row.scientific,count:row.count,comment:row.comment??"",commentOpen:!!row.comment}));
+    baseline=JSON.stringify([date,place?.id,start,end,rows]);initialized=true;return;
+   }
+   if(!entryId){
+    const session=await invoke<{generation:number}>("new_journal_session");if(disposed)return;
+    generation=session.generation;date=localVisitDate();
     baseline=JSON.stringify([date,place?.id,start,end,rows]);initialized=true;return;
    }
    const response=await createJournalReader()<{id:string;entryDate:string}|null>("get_journal_entry",{id:entryId});if(disposed)return;
@@ -111,9 +116,9 @@
   busy=true;error="";
   try{
    if(editId){
-    const token=await updateBirdList(generation,entryId,editId,expectedToken,date,place,rows,start,end);
+    const token=await updateBirdList(generation,null,editId,expectedToken,date,place,rows,start,end);
     expectedToken=token;savedListId=editId;saved=true;saveUncertain=false;
-    try {await confirmSavedBirdList(generation,entryId,editId);dirty=false;window.dispatchEvent(new Event("mno:journal-changed"));await goto(origin);}catch(cause){console.error("bird-list: edit saved, reopening failed",cause);error="saved";}
+    try {await confirmSavedBirdList(generation,null,editId);dirty=false;window.dispatchEvent(new Event("mno:journal-changed"));await goto(origin);}catch(cause){console.error("bird-list: edit saved, reopening failed",cause);error="saved";}
     return;
    }
    requestId??=await reserveBirdRequest(generation);
@@ -135,7 +140,7 @@
 <svelte:head><title>{editId?m.bird_edit({}, {locale:language.current}):m.bird_create({}, {locale:language.current})} — MNO</title></svelte:head>
 <main class="bird-page">
  <header class="page-header">
-  <button class="back" type="button" onclick={cancel} disabled={busy}>← {editId?m.bird_back_list({}, {locale:language.current}):m.bird_back_entry({}, {locale:language.current})}</button>
+  <button class="back" type="button" onclick={cancel} disabled={busy}>← {editId?m.bird_back_list({}, {locale:language.current}):entryId?m.bird_back_entry({}, {locale:language.current}):m.bird_overview({}, {locale:language.current})}</button>
   <span class="section-label">{m.bird_lists({}, {locale:language.current})}</span>
  </header>
  {#if error==="load"}<p class="error" role="alert">{m.bird_initialization_failed({}, {locale:language.current})}</p>

@@ -3,7 +3,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
 import {render} from 'svelte/server';
-import {birds,source,previewUrl,creationUrl,names,detailUrl} from './bird-test-modules.mjs';
+import {birds,source,previewUrl,creationUrl,names,detailUrl,overviewUrl,visitPreviewUrl,journalLinksUrl} from './bird-test-modules.mjs';
 const place={id:'place',name:'Lake',latitude:59,longitude:18,revision:'1'};
 const species={id:'avibase-DF1E2A1D',english:'Ruddy Duck',scientific:'Oxyura jamaicensis',swedish:null};
 test('missing Swedish name keeps English/scientific fallback and registration identity',()=>{
@@ -23,10 +23,10 @@ test('one preview per list is below journal text, shows first three rows and pre
  const reading=source('../src/lib/components/JournalReading.svelte');assert.ok(reading.indexOf('<BirdJournalLists')>reading.indexOf('<JournalContent'));
  assert.equal(birds.birdHref('another-origin','same-list'),'/journal/entries/another-origin/birds/same-list');
 });
-function formHarness({editId=null,editList=null,reject=false,rejectNavigation=false,rejectConfirmation=false,saveImplementation=null,journalPlace=place,entry=async()=>({generation:7,data:{id:"origin",entryDate:"2026-11-12"}}),failAt=null,enabled=true}={}){
+function formHarness({entryId="origin",editId=null,editList=null,reject=false,rejectNavigation=false,rejectConfirmation=false,saveImplementation=null,journalPlace=place,entry=async()=>({generation:7,data:{id:"origin",entryDate:"2026-11-12"}}),failAt=null,enabled=true}={}){
  const calls=[],navigation=[],effects=[],mounts=[],initialization=[],focus=[],diagnostics=[],confirmations=[];let before;
  const check=stage=>{initialization.push(stage);if(failAt===stage)throw Error("injected "+stage);};
- const context=vm.createContext({$props:()=>({editId}),$state:v=>v,$derived:v=>v,$effect:fn=>effects.push(fn),page:{params:{id:'origin'}},getContext:()=>({open:()=>()=>{}}),PLACE_MAP:'map',onMount:fn=>mounts.push(fn),invoke:async command=>{check(command);if(command==="bird_observations_available")return enabled;if(command==="new_journal_session")return {generation:7};if(command==="list_places")return {generation:7,data:[place]};throw Error("unexpected command "+command);},createJournalReader:()=>async(command)=>{check(command);if(command==="read_journal_bird_list")return {generation:7,data:editList};return entry();},readJournalPlace:async()=>{check("read_journal_place");return {place:journalPlace};},getCurrentWindow:()=>({onCloseRequested:async()=>()=>{}}),tick:()=>Promise.resolve(),beforeNavigate:fn=>before=fn,goto:async href=>{navigation.push(href);if(rejectNavigation)throw Error("navigation failed");},entryHref:birds.entryHref,birdHref:birds.birdHref,speciesLabel:birds.speciesLabel,capitalizeCommonName:names.capitalizeCommonName,validDate:birds.validDate,validTime:birds.validTime,validBirdCount:birds.validBirdCount,validBirdComment:birds.validBirdComment,DEFAULT_BIRD_NAMES:names.DEFAULT_BIRD_NAMES,loadBirdNamePreferences:()=>({...names.DEFAULT_BIRD_NAMES}),canSaveBirdList:birds.canSaveBirdList,
+ const context=vm.createContext({$props:()=>({editId}),$state:v=>v,$derived:v=>v,$effect:fn=>effects.push(fn),page:{params:{id:entryId??undefined}},getContext:()=>({open:()=>()=>{}}),PLACE_MAP:'map',onMount:fn=>mounts.push(fn),invoke:async command=>{check(command);if(command==="bird_observations_available")return enabled;if(command==="new_journal_session")return {generation:7};if(command==="list_places")return {generation:7,data:[place]};throw Error("unexpected command "+command);},createJournalReader:()=>async(command)=>{check(command);if(command==="read_journal_bird_list")return {generation:7,data:editList};return entry();},readJournalPlace:async()=>{check("read_journal_place");return {place:journalPlace};},getCurrentWindow:()=>({onCloseRequested:async()=>()=>{}}),tick:()=>Promise.resolve(),beforeNavigate:fn=>before=fn,goto:async href=>{navigation.push(href);if(rejectNavigation)throw Error("navigation failed");},localVisitDate:birds.localVisitDate,entryHref:birds.entryHref,birdHref:birds.birdHref,speciesLabel:birds.speciesLabel,capitalizeCommonName:names.capitalizeCommonName,validDate:birds.validDate,validTime:birds.validTime,validBirdCount:birds.validBirdCount,validBirdComment:birds.validBirdComment,DEFAULT_BIRD_NAMES:names.DEFAULT_BIRD_NAMES,loadBirdNamePreferences:()=>({...names.DEFAULT_BIRD_NAMES}),canSaveBirdList:birds.canSaveBirdList,
  reserveBirdRequest:async()=>"33333333-3333-4333-8333-333333333333",crypto:{randomUUID:()=>"33333333-3333-4333-8333-333333333333"},confirmSavedBirdList:async(...args)=>{confirmations.push(args);if(rejectConfirmation)throw Error("confirmation failed");},updateBirdList:async(...args)=>{calls.push(args);if(reject)throw Error("bird_edit_stale");return "b".repeat(64);},saveBirdList:async(...args)=>{calls.push(args);if(saveImplementation)return saveImplementation(...args);if(reject)throw typeof reject==='string'?reject:Error('lost response');return 'saved-list';},window:{dispatchEvent:()=>{},addEventListener:()=>{},removeEventListener:()=>{}},Event,JSON,Error,console:{error:(...args)=>diagnostics.push(args)},
  searchControl:{focus:()=>focus.push('search')},
  document:{getElementById:id=>{const i=Number(id.replace(/^bird-(?:count|comment)-/,''));return i>=0&&i<vm.runInContext('rows.length',context)?{focus:()=>focus.push(id),select:()=>{}}:null;},querySelector:()=>({focus:()=>focus.push('result-0')}),querySelectorAll:()=>[0,1,2].map(i=>({focus:()=>focus.push(`result-${i}`)}))}});
@@ -51,7 +51,7 @@ async function creationHtml(h,locale='sv') {
  for(const [name,initial] of Object.entries({initialized:'$state(false)',available:'$state<boolean|null>(null)',generation:'$state<number|null>(null)',date:'$state("")',error:'$state("")',rows:'$state<BirdRow[]>([])',saveUncertain:'$state(false)',savedListId:'$state<string|null>(null)',proposedDate:'$state(false)',proposedPlace:'$state(false)',query:'$state("")',results:'$state<Species[]>([])'})) {
   text=text.replace(`${name}=${initial}`,`${name}=$state(${JSON.stringify(h.run(name))})`);
  }
- const {default:component}=await import(creationUrl(text,locale));
+ const {default:component}=await import(creationUrl(text,locale,h.run('entryId')));
  return render(component).body;
 }
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
@@ -154,7 +154,7 @@ test('post-commit confirmation failure retains saved identity without resubmissi
 test('opening failure after a committed response keeps the saved identity and never saves twice',async()=>{
  const h=formHarness({rejectNavigation:true});ready(h);h.run('initialized=true');await h.run('save()');
  assert.equal(h.run('savedListId'),'saved-list');assert.equal(h.run('saved'),true);assert.equal(h.run('error'),'saved');assert.equal(h.diagnostics[0][0],'bird-list: saved, navigation failed');await h.run('save()');assert.equal(h.calls.length,1);
- const html=await creationHtml(h);assert.match(html,/Listan sparades men kunde inte öppnas/);assert.match(html,/href="\/journal\/entries\/origin\/birds\/saved-list"/);
+ const html=await creationHtml(h);assert.match(html,/Observationen sparades men kunde inte öppnas/);assert.match(html,/href="\/journal\/entries\/origin\/birds\/saved-list"/);
 });
 
 test('real saved-list confirmation checks the read contract, current generation and returned identity',async()=>{
@@ -333,16 +333,16 @@ test('mounted journal previews reread edited content on the shared change event 
  cleanup();unmount();assert.equal(listeners.size,0);
 });
 
-function deletionHarness({mode='success',originExists=true,rejectNavigation=false}={}){
- const list={id:'visit',editToken:'a'.repeat(64),visitDate:'2026-11-12',visitStart:'08:00',visitEnd:'09:00',place,rows:[{...species,count:'4',comment:'Keep until confirmed'}]};
+function deletionHarness({mode='success',originExists=true,rejectNavigation=false,entryId='origin',refreshToken=null,refreshFails=false}={}){
+ let listReads=0;const list={id:'visit',editToken:'a'.repeat(64),visitDate:'2026-11-12',visitStart:'08:00',visitEnd:'09:00',place,rows:[{...species,count:'4',comment:'Keep until confirmed'}]};
  const mounts=[],calls=[],checks=[],navigation=[],events=[];let exists=true,failStatus=mode==='unknown';
- const context=vm.createContext({$state:v=>v,onMount:fn=>mounts.push(fn),page:{params:{id:'origin',listId:'visit'}},entryHref:birds.entryHref,birdHref:birds.birdHref,DEFAULT_BIRD_NAMES:names.DEFAULT_BIRD_NAMES,loadBirdNamePreferences:()=>({...names.DEFAULT_BIRD_NAMES}),saveBirdNamePreferences:()=>true,
+ const context=vm.createContext({$props:()=>({entryId,listId:'visit'}),$derived:v=>v,$state:v=>v,onMount:fn=>mounts.push(fn),page:{params:{id:'origin',listId:'visit'}},localVisitDate:birds.localVisitDate,entryHref:birds.entryHref,birdHref:birds.birdHref,DEFAULT_BIRD_NAMES:names.DEFAULT_BIRD_NAMES,loadBirdNamePreferences:()=>({...names.DEFAULT_BIRD_NAMES}),saveBirdNamePreferences:()=>true,
  invoke:async cmd=>{if(cmd==='bird_observations_available')return true;if(cmd==='new_journal_session')return {generation:7};throw Error(cmd);},
- makeBirdReader:()=>async cmd=>({generation:7,data:cmd==='read_journal_bird_list'?list:originExists?{id:'origin'}:null}),
+ makeBirdReader:()=>async cmd=>{if(cmd==='read_journal_bird_list'){listReads++;if(listReads>1&&refreshFails)throw Error('refresh failed');return {generation:7,data:refreshToken&&listReads>1?{...list,editToken:refreshToken}:list};}return {generation:7,data:originExists?{id:'origin'}:null};},
  deleteBirdList:async(...args)=>{calls.push(args);if(mode==='failed')throw Error('journal_generation_conflict');exists=false;if(mode==='lost'||mode==='unknown')throw Error('response lost');},
  birdListExists:async(...args)=>{checks.push(args);if(failStatus)throw Error('status unavailable');return exists;},
  goto:async href=>{navigation.push(href);if(rejectNavigation)throw Error('navigation failed');},window:{dispatchEvent:e=>events.push(e.type)},Event,console:{error:()=>{}}});
- const script=source('../src/routes/journal/entries/[id]/birds/[listId]/+page.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');
+ const script=source('../src/lib/components/BirdListPage.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
  return {run:s=>vm.runInContext(s,context),mount:()=>mounts[0](),calls,checks,navigation,events,resolveStatus:()=>{failStatus=false;}};
 }
@@ -386,7 +386,7 @@ test('whole-list confirmation identifies the visit and retained data, with Cance
  context.dialog={showModal:()=>opened++,close:()=>closed++,querySelector:()=>({focus:()=>focused++})};
  vm.runInContext('const action=mountDialog(dialog);action.destroy()',context);assert.equal(opened,1);assert.equal(focused,1);assert.equal(restored,1);assert.equal(closed,1);
  const {default:Detail}=await import(detailUrl());const html=render(Detail,{props:{list:{id:'visit',visitDate:'2026-11-12',place,rows:[]},origin:'/journal/entries/origin',editHref:'/journal/entries/origin/birds/visit/edit',onDelete:()=>{},locale:'en',preferences:names.DEFAULT_BIRD_NAMES,onPreferencesChange:()=>{}}}).body;
- assert.match(html,/>Edit</);assert.match(html,/>Delete observation list</);assert.match(html,/aria-expanded="false"/);
+ assert.match(html,/>Edit</);assert.match(html,/>Delete bird observation</);assert.match(html,/aria-expanded="false"/);
 });
 
 test('real read-only deletion status rejects malformed data and changed generations',async()=>{
@@ -434,7 +434,7 @@ test('real time control has localized labels, complete hour/minute selectors and
    assert.match(html,/id="bird-start"/);assert.match(html,/type="text"/);assert.match(html,/aria-describedby="bird-start-help"/);assert.match(html,new RegExp(`aria-invalid="${!birds.validTime(value)}"`));
    assert.match(html,locale==='sv'?/>Timmar</:/>Hours</);assert.match(html,locale==='sv'?/>Minuter</:/>Minutes</);
    assert.equal((html.match(/<option /g)??[]).length,86);assert.match(html,/>59</);assert.match(html,/>23</);assert.match(html,locale==='sv'?/>Rensa tid</:/>Clear time</);assert.equal((html.match(/size="5"/g)??[]).length,2);assert.match(html,/<label[^>]*for="bird-start"/);
-   assert.ok(html.includes(`value="${value}"`));
+   const [hours,minutes]=value.split(":");assert.match(html,new RegExp(`id="bird-start"[^>]*value="${hours}"`));assert.match(html,new RegExp(`id="bird-start-minute"[^>]*value="${minutes??""}"`));
   }
  }
 });
@@ -487,4 +487,119 @@ test('backend reservations precede creation and retired/unreserved attempts reta
  const previous=globalThis.window;const calls=[];globalThis.window={__TAURI_INTERNALS__:{invoke:async(command,args)=>{calls.push({command,args});return '33333333-3333-4333-8333-333333333333';}}};
  try{assert.equal(await birds.reserveBirdRequest(7),'33333333-3333-4333-8333-333333333333');assert.deepEqual(calls,[{command:'reserve_bird_creation',args:{generation:7}}]);}
  finally{if(previous===undefined)delete globalThis.window;else globalThis.window=previous;}
+});
+
+
+test('standalone creation initializes without reading/creating an entry, cancels cleanly and saves a null origin',async()=>{
+ const h=formHarness({entryId:null});h.mount();await settle();
+ assert.equal(h.run('initialized'),true);assert.equal(h.run('proposedDate'),false);assert.equal(h.run('proposedPlace'),false);
+ assert.deepEqual(h.initialization,['bird_observations_available','new_journal_session']);
+ assert.equal(h.run('origin'),'/observations');h.run('cancel()');await settle();assert.deepEqual(h.navigation,['/observations']);assert.equal(h.calls.length,0);
+ const draft=formHarness({entryId:null});draft.mount();await settle();ready(draft);draft.run('cancel()');await settle();assert.equal(draft.run('leave'),true);await draft.run('discard()');assert.equal(draft.calls.length,0);
+ const saved=formHarness({entryId:null});saved.mount();await settle();ready(saved);await saved.run('save()');assert.equal(saved.calls[0][1],null);assert.deepEqual(saved.navigation,['/observations/saved-list']);
+ const failed=formHarness({entryId:null,reject:true});failed.mount();await settle();ready(failed);await failed.run('save()');assert.equal(failed.run('rows[0].count'),'6');assert.equal(failed.navigation.length,0);
+ assert.equal(birds.birdHref(null,'one'),'/observations/one');assert.equal(birds.birdHref('journal-2','one'),'/journal/entries/journal-2/birds/one');
+});
+test('standalone editing returns to the same independent detail on save or cancel',async()=>{
+ const list={id:'existing',editToken:'a'.repeat(64),visitDate:'2026-11-12',visitStart:null,visitEnd:null,place,rows:[{...species,speciesId:species.id,taxonomyVersion:'AviList v2026',count:'3',comment:'Keep'}]};
+ for(const save of [true,false]){const h=formHarness({entryId:null,editId:'existing',editList:list});h.mount();await settle();assert.equal(h.run('origin'),'/observations/existing');if(save){h.run('valid=true');await h.run('save()');assert.equal(h.calls[0][1],null);}else{h.run('cancel()');await settle();assert.equal(h.calls.length,0);}assert.deepEqual(h.navigation,['/observations/existing']);}
+});
+test('link response loss is confirmed read-only; unlink never sends a list deletion',async()=>{
+ const code=p=>ts.transpileModule(source(p).replace(/^import .*;\n/gm,'').replace(/^export /gm,''),{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
+ let linked=false,stale=false;const commands=[];
+ const context=vm.createContext({invoke:async(command,args)=>{
+  commands.push({command,args});if(command==='set_journal_bird_link'){if(stale)throw Error('stale generation');linked=args.linked;throw Error('lost response');}
+  if(command==='read_journal_bird_lists')return {generation:7,data:linked?[{id:'one'}]:[]};if(command==='new_journal_session')return {generation:7,data:null};throw Error(command);
+ },Error});
+ vm.runInContext(code('../src/lib/journal-data.ts')+'\n'+code('../src/lib/birds.ts'),context);
+ const change=value=>vm.runInContext(`setBirdLink(7,'origin','one',${value})`,context);
+ await change(true);await change(true);await change(false);assert.equal(linked,false);assert.equal(commands.filter(c=>c.command==='set_journal_bird_link').length,3);assert.equal(commands.some(c=>c.command.includes('delete')),false);
+ stale=true;await assert.rejects(()=>change(true),/stale generation/);
+});
+
+
+test('overview shows each provided list once, dates and visits, and always opens standalone context',async()=>{
+ const data=['unlinked','shared'].map((id,i)=>({id,place,visitDate:'2026-11-13',visitStart:i?'18:07':null,visitEnd:null,rows:[{...species,count:'4'}]}));
+ const text=source('../src/routes/observations/+page.svelte').replace('available=$state<boolean|null>(null)','available=$state<boolean|null>(true)').replace('lists=$state<BirdList[]>([])',`lists=$state<BirdList[]>(${JSON.stringify(data)})`).replace('loading=$state(true)','loading=$state(false)');
+ for(const locale of ['sv','en']){const {default:component}=await import(overviewUrl(text,locale));const html=render(component).body;assert.equal((html.match(/class="bird-preview/g)||[]).length,2);assert.ok(html.includes('href="/observations/unlinked"'));assert.ok(html.includes('href="/observations/shared"'));assert.match(html,/18:07/);assert.match(html,/november|November/);assert.ok(html.includes('/observations/new'));}
+ const unavailable=source('../src/routes/observations/+page.svelte').replace('available=$state<boolean|null>(null)','available=$state<boolean|null>(false)');const {default:component}=await import(overviewUrl(unavailable));assert.doesNotMatch(render(component).body,/href="\/observations\/new"/);
+ const nav=source('../src/lib/components/AppNavigation.svelte');assert.match(nav,/invoke<boolean>\("bird_observations_available"\)/);assert.match(nav,/\{#if birdsAvailable\}[\s\S]*?href="\/observations"/);
+});
+test('standalone detail keeps the overview return context even when the list has journal links',async()=>{
+ const {default:component}=await import(detailUrl());const html=render(component,{props:{list:{id:'visit',place,visitDate:'2026-11-13',rows:[{...species,count:'1',comment:null}]},origin:'/observations',standalone:true,locale:'sv',preferences:{showOtherLanguage:false,showScientific:false},onPreferencesChange:()=>{}}}).body;
+ assert.match(html,/href="\/observations"/);assert.match(html,/Observationer/);assert.doesNotMatch(html,/Tillbaka till anteckningen/);
+});
+function linkPickerHarness({reject=false}={}){
+ const mounts=[],calls=[],events=[],focus=[];let props;
+ const context=vm.createContext({$props:()=>props,$state:v=>v,onMount:fn=>mounts.push(fn),makeBirdReader:()=>async()=>({generation:7,data:[{id:'linked'},{id:'free'}]}),setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('stale');}});
+ props={entryId:'origin',generation:7,linkedIds:['linked'],locale:'sv',oncancel:()=>events.push('cancel'),onlinked:()=>events.push('linked')};
+ const script=source('../src/lib/components/BirdLinkPicker.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
+ return {run:s=>vm.runInContext(s,context),mount:()=>mounts[0](),calls,events,focus,props};
+}
+test('link picker cancellation writes nothing, existing links cannot duplicate and errors retain the picker',async()=>{
+ const h=linkPickerHarness();h.mount();await settle();h.props.oncancel();assert.deepEqual(h.events,['cancel']);assert.equal(h.calls.length,0);
+ await h.run('link({id:"linked"})');assert.equal(h.calls.length,0);await h.run('link({id:"free"})');assert.deepEqual(h.calls,[[7,'origin','free',true]]);assert.deepEqual(h.events,['cancel','linked']);
+ const fail=linkPickerHarness({reject:true});fail.mount();await settle();await fail.run('link({id:"free"})');assert.equal(fail.run('saveError'),true);assert.equal(fail.run('lists.length'),2);assert.deepEqual(fail.events,[]);
+ const sourceText=source('../src/lib/components/BirdLinkPicker.svelte');assert.match(sourceText,/cancelButton\?\.focus\(\)/);assert.match(sourceText,/oncancel=\{event=>\{event.preventDefault\(\);if\(!busy\)oncancel\(\);\}\}/);
+});
+test('unlink cancellation does not write; confirmation changes only the selected journal link and refreshes previews',async()=>{
+ const calls=[],events=[];let reject=false;
+ const context=vm.createContext({$props:()=>({entryId:'origin',generation:7,locale:'sv',allowCreate:true}),$state:v=>v,$effect:()=>{},onMount:()=>{},makeBirdReader:()=>()=>{},setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('failed');},window:{dispatchEvent:e=>events.push(e.type)},Event});
+ const script=source('../src/lib/components/BirdJournalLists.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
+ const run=s=>vm.runInContext(s,context);await run('unlink()');assert.equal(calls.length,0);run('unlinkTarget={id:"second"};unlinkTarget=null');await run('unlink()');assert.equal(calls.length,0);
+ run('unlinkTarget={id:"second"}');await run('unlink()');assert.deepEqual(calls,[[7,'origin','second',false]]);assert.deepEqual(events,['mno:journal-changed']);assert.equal(run('unlinkTarget'),null);
+ reject=true;run('unlinkTarget={id:"first"}');await run('unlink()');assert.equal(run('unlinkFailed'),true);assert.equal(events.length,1);
+});
+
+test('deleting from standalone detail returns to overview, regardless of journal links',async()=>{
+ const h=deletionHarness({entryId:null});h.mount();await settle();h.run('requestDeletion()');await h.run('confirmDeletion()');assert.deepEqual(h.navigation,['/observations']);assert.deepEqual(h.calls,[[7,'visit','a'.repeat(64)]]);assert.equal(h.run('origin'),'/observations');
+});
+
+
+test('date grouping uses newest days, ascending starts, untimed last and binary identity ties without mutation',()=>{
+ const visit=(id,date,start)=>({id,visitDate:date,visitStart:start,visitEnd:null,place,rows:[]});
+ const data=[visit('z','2026-11-13',null),visit('c','2026-11-13','08:15'),visit('d','2026-11-12','00:01'),visit('b','2026-11-13','18:07'),visit('a','2026-11-13','08:15')];
+ const before=JSON.stringify(data),groups=birds.groupBirdVisits(data);assert.deepEqual(groups.map(g=>g.date),['2026-11-13','2026-11-12']);assert.deepEqual(groups[0].visits.map(v=>v.id),['a','c','b','z']);assert.equal(groups[0].visits[3].visitStart,null);assert.equal(JSON.stringify(data),before);
+});
+test('hour and minute typing keeps partial values invalid, colon advances, and clearing both is optional',()=>{
+ const h=timeHarness('');h.run('typePart("hour",{currentTarget:{value:"08"}})');assert.equal(h.run('value'),'08:');assert.equal(h.run('validTime(value)'),false);
+ h.run('typePart("minute",{currentTarget:{value:"07"}})');assert.equal(h.run('value'),'08:07');
+ h.run('typePart("hour",{currentTarget:{value:""}})');assert.equal(h.run('value'),':07');assert.equal(h.run('validTime(value)'),false);h.run('typePart("minute",{currentTarget:{value:""}})');assert.equal(h.run('value'),'');
+ h.run('minuteInput={focus:focusTrigger,select(){}};hourKeydown({key:":",preventDefault(){}})');assert.equal(h.triggerFocused(),1);
+ h.run('pasteTime({clipboardData:{getData:()=>"23:59"},preventDefault(){}})');assert.equal(h.run('value'),'23:59');
+ const text=source('../src/lib/components/VisitTimePicker.svelte');assert.doesNotMatch(text,/event.key==="Tab"/);assert.ok(text.indexOf('class="hour-entry"')<text.indexOf('class="minute-entry"'));
+});
+
+function journalLinksHarness({reject=false,refreshReject=false}={}){
+ const mounts=[],calls=[],events=[];let changed=0;let data=[{id:'a',entryDate:'2026-11-13',title:'A',preview:'',linked:true},{id:'b',entryDate:'2026-11-12',title:'',preview:'Useful text',linked:false}];
+ const context=vm.createContext({$props:()=>({listId:'visit',generation:7,locale:'sv',onchanged:async()=>{changed++;if(refreshReject)throw Error('refresh');},onbusy:()=>{}}),$state:v=>v,onMount:fn=>mounts.push(fn),makeBirdReader:()=>async()=>({generation:7,data:JSON.parse(JSON.stringify(data))}),setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('stale');data=data.map(e=>e.id===args[1]?{...e,linked:args[3]}:e);},window:{dispatchEvent:e=>events.push(e.type)},Event});
+ const script=source('../src/lib/components/BirdJournalLinks.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
+ return {run:s=>vm.runInContext(s,context),mount:()=>mounts[0](),calls,events,changed:()=>changed};
+}
+test('detail links choose an exact entry, prevent duplicates and unlink only that entry',async()=>{
+ const h=journalLinksHarness();h.mount();await settle();h.run('choosing=true;cancelChoice()');assert.equal(h.calls.length,0);assert.equal(h.run('choosing'),false);
+ await h.run('change(entries[0],true)');assert.equal(h.calls.length,0);await h.run('change(entries[1],true)');assert.deepEqual(h.calls,[[7,'b','visit',true]]);assert.equal(h.run('entries.filter(e=>e.linked).length'),2);
+ h.run('requestUnlink(entries[0]);cancelUnlink()');await h.run('confirmUnlink()');assert.equal(h.calls.length,1);
+ h.run('requestUnlink(entries[0])');await h.run('confirmUnlink()');assert.deepEqual(h.calls[1],[7,'a','visit',false]);assert.equal(h.run('entries.find(e=>e.id==="b").linked'),true);assert.equal(h.run('entries.find(e=>e.id==="a").linked'),false);assert.equal(h.changed(),2);assert.deepEqual(h.events,['mno:journal-changed','mno:journal-changed']);
+ const fail=journalLinksHarness({reject:true});fail.mount();await settle();await fail.run('change(entries[1],true)');assert.equal(fail.run('saveError'),true);assert.equal(fail.run('entries[0].linked'),true);assert.equal(fail.changed(),0);
+ assert.equal(birds.birdJournalLabel({title:'',preview:'Useful text'},'Untitled'),'Useful text');assert.equal(birds.birdJournalLabel({title:'Named',preview:'Other'},'Untitled'),'Named');
+});
+test('link refresh preserves both return contexts and reloads independent observation access',async()=>{
+ for(const entryId of ['origin',null]){const h=deletionHarness({entryId});h.mount();await settle();await h.run('linksChanged()');assert.equal(h.run('origin'),entryId?'/journal/entries/origin':'/observations');assert.equal(h.run('linksRefreshFailed'),false);assert.equal(h.navigation.length,0);}
+ const h=formHarness({editId:'existing'});ready(h);await h.run('save()');assert.equal(h.calls[0][1],null);assert.deepEqual(h.navigation,['/journal/entries/origin/birds/existing']);
+});
+
+test('detail journal chooser renders localized dates, title or safe preview, and targeted unlink confirmation',async()=>{
+ const entries=[{id:'a',entryDate:'2026-11-13',title:'Morning birds',preview:'Text',linked:true},{id:'b',entryDate:'2026-11-12',title:'',preview:'Useful <birds>',linked:false}];
+ for(const locale of ['sv','en']){
+  let text=source('../src/lib/components/BirdJournalLinks.svelte').replace('entries=$state<BirdJournalEntry[]>([])',`entries=$state<BirdJournalEntry[]>(${JSON.stringify(entries)})`).replace('loading=$state(true)','loading=$state(false)').replace('choosing=$state(false)','choosing=$state(true)');
+  let {default:component}=await import(journalLinksUrl(text));let html=render(component,{props:{listId:'visit',generation:7,locale,onchanged:async()=>{}}}).body;
+  assert.match(html,/href="\/journal\/entries\/a"/);assert.match(html,/Morning birds/);assert.match(html,/Useful &lt;birds>/);assert.doesNotMatch(html,/<birds>/);assert.match(html,/november|November/);assert.match(html,/aria-labelledby="bird-journal-chooser-heading"/);assert.match(html,locale==='sv'?/Koppla till journalanteckning/:/Link to journal entry/);assert.match(html,locale==='sv'?/Redan kopplad/:/Already linked/);
+  text=text.replace('choosing=$state(true)','choosing=$state(false)').replace('unlinkTarget=$state<BirdJournalEntry|null>(null)',`unlinkTarget=$state<BirdJournalEntry|null>(${JSON.stringify(entries[0])})`);({default:component}=await import(journalLinksUrl(text)));html=render(component,{props:{listId:'visit',generation:7,locale,onchanged:async()=>{}}}).body;
+  assert.match(html,locale==='sv'?/Bara denna koppling tas bort/:/Only this link is removed/);assert.match(html,/Morning birds/);assert.match(html,locale==='sv'?/alla andra kopplingar finns kvar/:/all other links are kept/);
+ }
+});
+test('after link changes a refreshed token is used and failed refresh blocks destructive actions',async()=>{
+ const h=deletionHarness({refreshToken:'b'.repeat(64)});h.mount();await settle();await h.run('linksChanged()');assert.equal(h.run('list.editToken'),'b'.repeat(64));h.run('requestDeletion()');await h.run('confirmDeletion()');assert.equal(h.calls[0][2],'b'.repeat(64));
+ const fail=deletionHarness({refreshFails:true});fail.mount();await settle();await fail.run('linksChanged()');assert.equal(fail.run('linksRefreshFailed'),true);fail.run('requestDeletion()');assert.equal(fail.run('deleteDialog'),false);assert.equal(fail.calls.length,0);
 });

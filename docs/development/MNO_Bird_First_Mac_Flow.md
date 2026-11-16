@@ -534,3 +534,212 @@ linking existing lists and additional-link UI/unlinking, paste review, row photo
 list weather, catalog updates and regional search/map selection. Readability and
 performance refinements can be reviewed separately; no broad refactor is needed
 for this checkpoint. No push, PR, CI, merge or publication is part of this step.
+
+
+## Standalone lists, overview and journal links — local next stage
+
+Base: public main `788a740734ca871f7590641a9a563df7fff11e24`, branch
+`codex/mac-bird-observations-overview`. Local implementation, **not manually
+accepted yet**. The existing synthetic profile has not been opened or modified by
+the development tools. UX-005 remains non-blocking and was not investigated or
+changed in this stage.
+
+- The existing main navigation exposes **Observationer / Observations** only when
+  the backend reports bird availability. The overview reads `bird_lists` owners,
+  not joined journal links, and shows linked and unlinked visits once each, with
+  date/place/optional times and a compact species preview. Order is visit date
+  descending, then start time and ID; separate visits remain separate rows.
+- Standalone creation reuses `BirdListForm`, time picker, comments, species search,
+  name preferences and leave-page protection. It defaults to the local calendar
+  date and sends a null journal origin. The same creation transaction writes no
+  journal entry or link. Durable request reservation/replay protection is unchanged.
+- Journal and standalone routes mount the same `BirdListPage` detail/controller.
+  Context is carried by the route, not inferred from a list's links. Opening from
+  a journal returns to that entry; overview opening returns to the overview, even
+  when the list has several links. Edit Save/Cancel returns to the corresponding
+  detail route; deletion returns to the origin or the existing safe fallback.
+- The saved journal entry offers a picker for existing lists and a separate
+  **Remove link / Ta bort koppling** confirmation. Link/unlink uses one guarded
+  transaction, checks both owners, and changes only the selected join row. The
+  primary key makes linking idempotent. The UI checks the desired state read-only
+  after an uncertain command response; neither action invokes whole-list deletion.
+  Cancel is focused by default and dialog focus returns when its trigger survives.
+- Existing edit/delete guards, cascades, source protection and platform gates are
+  retained. No schema, archive, taxonomy, application identity or directory change
+  is needed: schema **9**, archive/proof **10** already represent these states.
+
+Local checks: **610 complete frontend tests passed**; **52 relevant Rust library
+regressions passed** (`cargo test --locked --lib bird_`), including existing
+candidate upgrades, archive activation/retry and receipt preservation. After the
+last focused additions, **53 bird UI tests** and **2 overview command tests**
+passed; Svelte reported **0 errors / 0 warnings**; all-targets compilation,
+CI-pinned Rust **1.99.1** formatting and whitespace checks passed.
+
+New synthetic backend tests exercise null-origin creation through the command
+contract, no extra journal entry/link, lost-response replay and retired requests,
+overview uniqueness across two links, standalone editing/link preservation,
+unlink/journal-deletion preservation, stale/missing-owner rejection, rollback and
+restart. Format-10 Backup and Export candidates independently match the complete
+content proof for unlinked and multi-linked lists. Existing full activation
+regressions were reused; this does not claim new native desktop archive acceptance.
+Frontend tests exercise route context, cancellation, link/unlink failures,
+localization/rendering, availability and existing journal/Settings regressions.
+The one earlier frontend failure group was an export fixture that did not model
+the new availability query; only that mock and a gate regression were updated.
+
+### Same-profile macOS DEV check (pending)
+
+Close the existing DEV process and relaunch from this checkout with the same
+isolated directory; do not reset it:
+
+```sh
+cd /Users/stefanantonsson/Projects/my-nature-observations-public/app
+MNO_TEST_DATA_DIR=/Users/stefanantonsson/mno-birds-AFP613/journal npm run tauri dev
+```
+
+1. Confirm existing synthetic journal entries/lists still open. In main navigation,
+   open **Observations**; check old linked and unlinked lists are discoverable.
+2. Start a standalone list, enter a row and cancel/discard. Confirm there is no new
+   list or journal entry. Then save a new disposable visit with counts/comment and
+   optional times. Reopen it, edit or cancel, and return to the overview.
+3. From a disposable saved journal entry, choose **Link an existing list**. Cancel
+   once, then link the new visit. Link it from a second synthetic entry. The
+   overview must show it once; opening from each entry returns to that origin.
+4. Edit the shared list and check both journal previews. Cancel removal of one
+   link, then confirm it. The list and second link must remain. Check Swedish and
+   English labels, keyboard focus, Escape and the existing leave-page protection.
+5. If testing journal deletion, use a newly created disposable entry: its list
+   must stay discoverable. Cancel then confirm deletion of a newly created list;
+   its links disappear, while journal prose, saved place and unrelated lists stay.
+6. Restart with the same profile and verify saved content and link state. UX-005
+   remains known: click the species name to select directly; blank-area behavior
+   is not part of this stage's acceptance claim.
+
+No push, PR, CI, package or publication action was performed. Paste, photos, list
+weather, catalog/region updates and calendar markers remain deferred.
+
+
+## Owner acceptance of standalone/linking flow and local refinements
+
+The owner reports that the supplied standalone/linking macOS DEV acceptance
+checklist passed on the existing isolated profile. This accepts that earlier local
+flow within the checklist's scope; it is not packaged-release acceptance, native
+Windows/Linux acceptance or a new claim about archive/crash failure scenarios.
+The following requested refinements were initially awaiting a new DEV check;
+the owner acceptance recorded on 2026-11-16 below supersedes that pending status. They do not resume investigation of non-blocking UX-005.
+
+- Creation actions/headings now say **Skapa fågelobservation / Create bird
+  observation**. Related user-facing labels use observation consistently; one
+  observation is still one visit with multiple species. Storage/API table names
+  remain list-based and unchanged.
+- The overview groups by calendar date, newest first. Start times sort ascending
+  within a day; null start times come after timed visits. A binary list-ID tie
+  break is stable. Missing times are not fabricated. Each owner remains one item,
+  with place/optional times and its species preview under the date heading.
+- The same time control now contains two native text inputs in one cohesive field.
+  Tab and Shift+Tab follow the native hour/minute focus order and can leave the
+  control normally. Typing a colon advances to minutes; full HH:mm paste is
+  supported. Clearing, all 60 minutes, the existing picker and strict optional-time
+  validation remain. Partially entered times stay invalid rather than acquiring
+  invented missing values. Stored representation stays nullable HH:mm.
+- Observation detail has a compact journal-links section and **Link to journal
+  entry** chooser. Entries are identified by localized date and title, falling
+  back to a plain-text excerpt from the existing journal-search text helper (or
+  the existing untitled label when no text exists). Existing links are displayed
+  as navigation links and disabled as duplicate choices. Separate unlink confirms
+  the selected entry and preserves observation, prose and all other links.
+- Link writes reuse the existing guarded transaction. The new journal-target read
+  runs under a generation permit and a verified SQLite snapshot; it never writes.
+  Link changes refresh the detail's edit token before edit/delete is allowed. If
+  refresh fails, actions stay blocked with an actionable message.
+- Return context stays route-owned even after the originating link is removed.
+  Reading/editing the independent owner uses the existing null-origin boundary;
+  first creation from a journal still commits its first link. The backend's
+  generation, identity and optimistic-token guards remain intact, as does its
+  explicit link check when a journal origin is supplied to that boundary.
+
+Verification: **616 complete frontend tests passed** (including **59 bird UI
+checks**), **1 real-rendered time-keyboard browser test passed**, **53 bird Rust
+regressions passed** and **10 journal-search regressions passed**. Svelte: **0
+errors / 0 warnings**. All-targets compilation, CI-pinned Rust **1.99.1** formatting
+and whitespace checks passed. The browser test uses temporary Chrome data and
+native key events to verify Tab/Shift+Tab into/out of segments, colon typing,
+clearing and invalid-time preservation; it is not a Tauri desktop acceptance claim.
+Synthetic production tests verify untimed-last ordering, stable ties, unique
+journal choices, title/excerpt metadata, duplicate links and targeted preservation.
+A failed renderer assertion was corrected to match Svelte's safe `<` escaping;
+HTML-like user text remains plain text.
+
+### Same-profile retry for these refinements (accepted; procedure retained)
+
+Use the same DEV launch command and profile above; close/restart the DEV process
+so new Rust commands are registered. Do not recreate or reset the directory.
+
+1. Check **Skapa fågelobservation / Create bird observation** in both languages.
+   Confirm existing visits still show their species, counts and comments.
+2. Within one date, compare e.g. 08:15, 18:07 and no start time. The untimed visit
+   must be last; the newest date group is first and each visit appears once.
+3. Enter hours, Tab to minutes, Shift+Tab back, then Tab out. Try colon-based
+   HH:mm typing, clear, an exact minute and an invalid/partial time. Save only valid
+   complete or empty values, then reopen to verify the existing representation.
+4. From an observation opened through a journal, link another synthetic entry.
+   Check date/title or excerpt, Cancel and existing-link disabling. Unlink the
+   original entry with confirmation: the observation and other link must remain,
+   and Back still goes to the original entry.
+5. Edit/save after that unlink to verify refreshed token and unchanged return
+   context. Open from the overview and verify return to the overview. Restart and
+   check links/content. UX-005 remains unchanged; select by clicking the species
+   name when registering.
+
+All changes remain local and uncommitted. No schema/archive change, profile reset,
+main-navigation redesign, calendar marker, photo/paste-input/list-weather/catalog
+or region feature was added. Windows/Linux gates are unchanged. No push, PR, CI,
+build packaging or release action was performed.
+
+
+## Standalone flow checkpoint review — 2026-11-16
+
+**Accepted macOS DEV checks**, as reported by the owner: date grouping and visit
+ordering; segmented keyboard time entry; linking and targeted unlinking from
+observation detail; return navigation and persistence after restart. This records
+owner-observed desktop behavior, separate from automated synthetic/failure tests.
+It is not packaged-release acceptance or a claim of Windows/Linux bird support.
+
+Reviewed the complete tracked and new-file change set on
+`codex/mac-bird-observations-overview` against public main
+`788a740734ca871f7590641a9a563df7fff11e24`. Public origin is
+`MyNatureObservations/my-nature-observations`. **No concrete correctness or
+data-preservation blocker remains in this review.** No implementation changes
+were made during this checkpoint review.
+
+| Boundary reviewed | Finding |
+| --- | --- |
+| [Command boundary](../../app/src-tauri/src/bird_app.rs) and [creation form](../../app/src/lib/components/BirdListForm.svelte) | Standalone creation supplies no journal origin; the existing atomic creation operation inserts no journal entry or link in this case. Durable reserved request IDs still prevent duplicates after a lost response and resurrection after deletion. Journal-origin creation retains its first-link transaction. |
+| Overview read and [grouping](../../app/src/lib/birds.ts) | SQL reads list owners without joining journal links; each identity appears once, including unlinked observations. Both SQL and UI order newest date first, ascending actual start times, untimed visits last and binary ID ties. Sorting does not write or fill missing times. |
+| [Link transaction](../../app/src-tauri/src/bird_observations.rs) | The search-write guard, expected generation permit and SQLite transaction cover owner checks and the exact selected join row. The primary key prevents duplicate links; unlink never deletes an owner. Verification precedes commit, and injected failure rolls back. Missing/deleted owners and stale generations fail rather than being recreated. |
+| Journal deletion | Existing foreign-key cascades remove its join rows, not the independently owned list or species rows. Tests preserve both observation content and shared place references; unlinked observations remain discoverable. |
+| Read/edit/delete lifecycle | Ready/generation checks and optimistic edit tokens remain. Link changes refresh the token before edit/delete, and failed refresh disables those actions. Late updates cannot upsert a missing observation; creation receipts survive whole-list deletion. Uncertain link responses use read-only confirmation; uncertain whole-list deletion is not blindly repeated. |
+| [Return context](../../app/src/lib/components/BirdListPage.svelte) | Route context controls Back independently of link membership. Opening from a journal returns there even after unlinking it; overview opening returns to the overview. Independent-owner read/edit uses null origin while retaining list identity, generation and content-token checks. |
+| Archives/platforms | Database schema, schema-upgrade code, storage proofs, Backup/Restore and Export/Open Import implementations are byte-unchanged from the base. Schema 9 / format 10 already preserve linked, multi-linked and unlinked lists and receipts. New archive candidates match full content proofs; existing activation/retry regressions passed. New commands explicitly reject non-macOS use; Windows/Linux startup/feature gates stay unchanged. |
+
+Reused the recorded passing results: **616 frontend tests** (including **59 bird
+UI tests**), **1 rendered time-keyboard browser test**, **53 bird Rust regressions**
+and **10 journal-search regressions**; Svelte **0 errors / 0 warnings**; all-targets
+compilation and CI-pinned Rust 1.99.1 formatting passed. No test uncertainty required
+another application test run. Documentation file links and whitespace are checked
+again for the checkpoint, including new files after staging.
+
+**Non-blocking follow-ups retained:**
+
+- [UX-005](https://github.com/MyNatureObservations/my-nature-observations/issues/4):
+  clicking a species name selects immediately, but the blank right side can still
+  require two clicks in the owner's macOS Tauri DEV window. The earlier hit-area
+  change did not resolve it. It was not reinvestigated or changed here.
+- Main-navigation **design** remains deferred. The functional Observations entry
+  is part of this flow, but no broader navigation redesign is implemented or
+  claimed accepted by these checks.
+- The already deferred calendar markers, species paste input, photos, list weather,
+  catalog updates and regional features remain outside this checkpoint.
+
+The existing test profile and unrelated files remain untouched. This work order
+ends with a local checkpoint only: no push, PR, CI, merge or release action.
