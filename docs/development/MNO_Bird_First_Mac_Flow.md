@@ -10,7 +10,7 @@ integer counts. Saving uses the existing generation/search write guards and one
 transaction for list, rows and first link. Cancellation does not save a list/link.
 Linked previews show place/times, a differing visit date and the first three rows; reopening carries
 an explicit originating-entry route. Editing and whole-list deletion were subsequently
-added. Standalone, paste, photo and list-weather interfaces remain deferred.
+added. Standalone and reviewed paste input were added in subsequent steps; photo and list-weather interfaces remain deferred.
 Optional plain-text comments are supported during creation, editing and reopening. Windows/Linux commands reject this flow.
 
 ## Persistence boundary
@@ -743,3 +743,131 @@ again for the checkpoint, including new files after staging.
 
 The existing test profile and unrelated files remain untouched. This work order
 ends with a local checkpoint only: no push, PR, CI, merge or release action.
+
+
+## Reviewed paste input — accepted macOS DEV flow
+
+Branch `codex/mac-bird-paste-review`, based on public main
+`38a2859337ba973f9707e1537c94a98393bfd2ae`.
+
+The existing macOS creation/editing form offers a localized paste-review dialog.
+LF/CRLF lines such as `Talgoxe 6`, `Blåmes 4st` and `Nötväcka 1 st`
+retain their original text beside editable species/count interpretations. A read-only,
+macOS-gated catalog command returns all exact Swedish, English, scientific-name and
+sourced-referral matches. Recognition is case-insensitive, including Å/Ä/Ö.
+Only a unique exact canonical match is initially selected. Unknown, ambiguous and
+referral-only names require explicit selection or exclusion; correction search uses
+the existing catalog search, without automatically choosing a similar name.
+
+Duplicate taxon concepts require explicit combination into a specific existing or
+previously reviewed row, or explicit exclusion. Combination uses checked integer
+arithmetic, changes only the chosen target's count, and retains its comment and
+recorded taxonomy version. Legacy duplicate rows remain separate. Invalid or
+out-of-range counts and unresolved duplicates block Apply. Limits are 200 nonblank
+lines and 64 KiB per review; oversized input remains available for correction and
+is never silently truncated. Blank lines are counted and disclosed.
+
+Apply changes only the unsaved form draft. Cancel/Escape preserve existing form
+content and return focus. Normal Save still uses the existing guarded create/edit
+operation; no schema, archive, receipt or platform-activation changes are involved.
+A changed form baseline prevents application of stale review results. Lookup failure
+retains the source and offers localized retry/cancel guidance. UX-005 is untouched.
+The existing user test profile was not opened, reset or modified during implementation.
+
+Local verification:
+
+- 66 focused frontend tests passed, covering parsing, invalid counts, explicit
+  ambiguity/referral resolution, duplicate decisions, comment/legacy-row preservation,
+  overflow, cancellation, and draft-only application through both create/edit forms.
+- 1 isolated Chrome rendered-dialog test passed: actual pointer opening, initial
+  textarea focus, duplicate review, Escape/cancel, focus restoration, and application
+  without any save command. Its transport is mocked; it is not Tauri desktop acceptance.
+- 6 Rust catalog tests passed, including the real bundled catalog, sourced crow
+  referral, Unicode case handling and the actual read-only command response contract.
+  Ambiguous names are tested with synthetic catalog entries, rather than claiming
+  that a current real-catalog duplicate exists.
+- Svelte: zero errors/warnings. All-targets Rust compilation passed with local
+  Rust 1.100.0. Formatting check passed with the checksum-verified official Rust
+  1.99.1 formatter matching CI. `git diff --check` passed.
+
+Manual follow-up: reuse the same isolated DEV profile, restart the DEV application
+for the new command registration, and test paste in both creation and editing.
+Review unknown names/invalid counts; cancel once; explicitly combine/exclude repeats;
+apply, then use normal Save and reopen. Verify existing comments remain and that
+cancelling paste or the surrounding edit leaves stored content unchanged. This
+manual checklist was subsequently followed by the owner’s positive DEV assessment of
+paste review. The revised validation wording was subsequently accepted in the
+checkpoint work order recorded below.
+No CI, packaging or publication was performed.
+
+
+### Paste-review validation copy follow-up
+
+The owner reports a positive macOS DEV assessment of paste review. This records the
+reported assessment without attributing additional individual checks to the user.
+The owner subsequently accepted the final copy and its field placement in macOS
+DEV (2026-11-17 checkpoint work order):
+
+| Condition | Swedish | English |
+| --- | --- | --- |
+| Missing or nonnumeric count | Ange ett antal. | Enter a count. |
+| Zero, negative or fractional count | Ange minst 1, utan decimaler. | Enter at least 1, without decimals. |
+| Unresolved species | Välj en art eller uteslut raden. | Choose a species or exclude the row. |
+
+Messages appear directly with their count or species control, retaining
+`aria-invalid` and `aria-describedby` associations. Both errors can be displayed
+when both fields need correction. The strict positive-integer validation, limits,
+matching, duplicate decisions and save behavior are unchanged; the new helper
+classifies invalid input only to select presentation text.
+
+Follow-up local verification: 68 focused frontend tests and the isolated rendered
+Chrome dialog test passed; Svelte reported zero errors/warnings. Compilation with
+`cargo check --all-targets --locked` also passed using the exact CI-pinned Rust
+**1.99.1**, including matching Cargo and standard library, isolated in temporary
+storage. The repository CI pin and lockfile are unchanged. CI-pinned formatting
+and `git diff --check` passed. No checkpoint commit, push, PR or CI was performed.
+
+
+### Paste-review checkpoint review — 2026-11-17
+
+**Manual acceptance:** the project owner accepted the macOS DEV paste-review flow
+and final Swedish/English validation copy above. This is DEV acceptance, not a
+packaged-release or cross-platform desktop acceptance claim. The recorded user
+assessment does not assert that every automated edge-case fixture was also tested
+manually.
+
+**Code review:** reviewed the complete tracked and new-file diff from
+`38a2859337ba973f9707e1537c94a98393bfd2ae` on
+`codex/mac-bird-paste-review`. No concrete correctness or data-preservation blocker
+was identified:
+
+- [Parsing and application planning](../../app/src/lib/bird-paste.ts) retain original
+  lines, validate counts without coercion and operate on copies. Explicit duplicate
+  decisions target one specific row; comments, taxonomy versions and legacy duplicate
+  rows survive. Invalid sums and stale targets block application.
+- [Catalog recognition](../../app/src-tauri/src/species_registry.rs) returns every
+  exact case-insensitive match; ambiguity and sourced referrals require explicit
+  UI selection. Similar-name correction search never automatically selects a result.
+- [Review dialog](../../app/src/lib/components/BirdPasteReview.svelte) preserves
+  unresolved lines for correction/exclusion, localized field-associated errors,
+  keyboard access and cancellation. It makes only read-only catalog requests.
+- [Shared creation/editing form](../../app/src/lib/components/BirdListForm.svelte)
+  applies the review to draft state only, protects against stale form content and
+  blocks Save while reviewing. The unchanged guarded Save operation is the only
+  persistence path. Cancel does not apply reviewed changes.
+- The new catalog command retains the existing macOS gate. Schema, archive formats,
+  database write guards, catalog source data and Windows/Linux activation are unchanged.
+
+**Automated evidence reused:** 68 focused frontend tests, 6 Rust catalog/command
+checks, 1 isolated rendered-dialog test, Svelte with zero errors/warnings, exact
+CI-pinned Rust 1.99.1 all-targets compilation and CI-pinned formatting all passed
+in the preceding implementation checks. Browser transport and controller fixtures
+use mocks; Rust tests exercise the real catalog and command function. Ambiguous
+catalog fixtures are synthetic. No application tests were rerun for this
+review/documentation-only step. Repository-local documentation links and
+`git diff --check` were checked for the checkpoint.
+
+UX-005, deferred catalog/region work, photos, list weather and broader navigation
+redesign remain outside this checkpoint. No schema/archive or unrelated changes
+were added. The user's isolated journal was not opened or modified. Delivery is a
+local checkpoint only; no push, PR, CI, merge or release action is authorized here.

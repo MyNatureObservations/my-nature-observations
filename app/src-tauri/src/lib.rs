@@ -188,6 +188,7 @@ pub fn run() {
             place_registry::set_weather_default_place,
             bird_app::bird_observations_available,
             bird_app::search_bird_species,
+            bird_app::match_bird_paste_names,
             bird_app::reserve_bird_creation,
             bird_app::create_journal_bird_list,
             bird_app::update_journal_bird_list,

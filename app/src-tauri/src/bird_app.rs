@@ -63,6 +63,22 @@ pub(crate) fn search_bird_species(
     Ok(crate::species_registry::search(&query))
 }
 #[tauri::command]
+pub(crate) fn match_bird_paste_names(
+    names: Vec<String>,
+) -> Result<Vec<Vec<crate::species_registry::Species>>, String> {
+    if !cfg!(target_os = "macos") {
+        return Err("bird_platform_unsupported".into());
+    }
+    if names.len() > 200 || names.iter().any(|name| name.len() > 200) {
+        return Err("bird_paste_limit".into());
+    }
+    Ok(names
+        .iter()
+        .map(|name| crate::species_registry::exact(name))
+        .collect())
+}
+
+#[tauri::command]
 pub(crate) fn create_journal_bird_list(
     state: State<'_, DatabaseState>,
     search: State<'_, SearchState>,

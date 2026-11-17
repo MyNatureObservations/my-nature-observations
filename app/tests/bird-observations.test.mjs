@@ -603,3 +603,16 @@ test('after link changes a refreshed token is used and failed refresh blocks des
  const h=deletionHarness({refreshToken:'b'.repeat(64)});h.mount();await settle();await h.run('linksChanged()');assert.equal(h.run('list.editToken'),'b'.repeat(64));h.run('requestDeletion()');await h.run('confirmDeletion()');assert.equal(h.calls[0][2],'b'.repeat(64));
  const fail=deletionHarness({refreshFails:true});fail.mount();await settle();await fail.run('linksChanged()');assert.equal(fail.run('linksRefreshFailed'),true);fail.run('requestDeletion()');assert.equal(fail.run('deleteDialog'),false);assert.equal(fail.calls.length,0);
 });
+
+// The shared production form serves both create and edit; paste only changes its draft.
+test('paste apply and cancel preserve create/edit drafts until normal guarded Save',async()=>{
+ for(const editId of [null,'existing']){
+  const h=formHarness({editId});ready(h);const before=h.run('JSON.stringify(rows)');
+  h.run('pasteOpen=true');await h.run('save()');assert.equal(h.calls.length,0);
+  h.run('pasteOpen=false');assert.equal(h.run('JSON.stringify(rows)'),before);
+  assert.equal(h.run(`applyPaste([{...rows[0],count:'9',comment:'kept'}],JSON.stringify(rows))`),true);
+  assert.equal(h.run('rows[0].count'),'9');assert.equal(h.run('dirty'),true);assert.equal(h.calls.length,0);
+  assert.equal(h.run(`applyPaste([],${JSON.stringify(before)})`),false);assert.equal(h.run('rows.length'),1);
+  await h.run('save()');assert.equal(h.calls.length,1);
+ }
+});
