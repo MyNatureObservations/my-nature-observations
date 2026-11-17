@@ -48,12 +48,18 @@ fn full(db: &mut Connection, schema: u32) -> Result<Proof> {
         7 => crate::storage_content::verify_v8(db, &flag),
         8 => crate::storage_content::verify_v9(db, &flag),
         9 => crate::storage_content::verify_v10(db, &flag),
+        10 => crate::storage_content::verify_v11(db, &flag),
+        11 => crate::storage_content::verify_v12(db, &flag),
         _ => return Err("bird_schema_unsupported".into()),
     })
     .map_err(error)
 }
 fn preserved(db: &Connection, schema: u32) -> Result<Proof> {
-    (if schema == 9 {
+    (if schema == 11 {
+        crate::storage_content::verified_snapshot_v12(db, &AtomicBool::new(false))
+    } else if schema == 10 {
+        crate::storage_content::verified_snapshot_v11(db, &AtomicBool::new(false))
+    } else if schema == 9 {
         crate::storage_content::verified_snapshot_v10(db, &AtomicBool::new(false))
     } else if schema == 8 {
         crate::storage_content::verified_snapshot_v9(db, &AtomicBool::new(false))
@@ -101,7 +107,7 @@ pub(crate) fn initialize(path: &Path) -> Result<()> {
     })
 }
 pub(crate) fn initialize_current(path: &Path) -> Result<()> {
-    initialize_to(path, 9, |point, _| {
+    initialize_to(path, 11, |point, _| {
         #[cfg(test)]
         if std::env::var("MNO_BIRD_UPGRADE_CRASH").as_deref() == Ok(point) {
             std::process::exit(77);
@@ -128,7 +134,7 @@ fn initialize_to(
         .map_err(error);
     if version
         .as_ref()
-        .is_ok_and(|v| *v != 4 && !(*v >= 5 && *v < target && *v <= 8))
+        .is_ok_and(|v| *v != 4 && !(*v >= 5 && *v < target && *v <= 10))
     {
         if active.close_inner().is_err() {
             std::process::abort();
@@ -186,8 +192,14 @@ fn initialize_to(
         if source_schema < 8 && target >= 8 {
             crate::database::bird_comments::upgrade(next)?;
         }
-        if target >= 9 {
+        if source_schema < 9 && target >= 9 {
             crate::database::bird_requests::upgrade(next)?;
+        }
+        if source_schema < 10 && target >= 10 {
+            crate::database::bird_photos::upgrade(next)?;
+        }
+        if source_schema < 11 && target >= 11 {
+            crate::database::bird_captions::upgrade(next)?;
         }
         point("upgraded", &candidate)?;
         full(next, target)?;
@@ -274,4 +286,14 @@ pub(crate) fn initialize_schema7(path: &Path) -> Result<()> {
 #[cfg(test)]
 pub(crate) fn initialize_schema8(path: &Path) -> Result<()> {
     initialize_to(path, 8, |_, _| Ok(()))
+}
+
+#[cfg(test)]
+pub(crate) fn initialize_schema9(path: &Path) -> Result<()> {
+    initialize_to(path, 9, |_, _| Ok(()))
+}
+
+#[cfg(test)]
+pub(crate) fn initialize_schema10(path: &Path) -> Result<()> {
+    initialize_to(path, 10, |_, _| Ok(()))
 }

@@ -1,4 +1,6 @@
 <script lang="ts">
+ import PhotoThumbnail from "$lib/components/PhotoThumbnail.svelte";
+ import {observationPhotos} from "$lib/photo-gallery";
  import {onMount} from "svelte";
  import { invoke } from "@tauri-apps/api/core";
  import { makeBirdReader, birdHref, entryHref, setBirdLink, type BirdList } from "$lib/birds";
@@ -31,6 +33,7 @@
   {#if failed}<p role="alert">{m.bird_load_failed({}, {locale})}</p>{/if}
   {#each lists as list (list.id)}
    <div class="linked-visit"><BirdVisitPreview {list} {locale} {journalDate} href={birdHref(entryId,list.id)}/>
+    {#if list.rows.some(row=>row.photo)}<div class="bird-photo-thumbnails">{#each observationPhotos([list],locale) as item (item.key)}<PhotoThumbnail {item} {locale} compact/>{/each}</div>{/if}
     {#if allowCreate}<button class="unlink" type="button" disabled={unlinkBusy} aria-label={m.bird_unlink_for({place:list.place.name,date:formatBirdDate(list.visitDate,locale)}, {locale})} onclick={()=>{unlinkTarget=list;unlinkFailed=false;}}>{m.bird_unlink({}, {locale})}</button>{/if}
    </div>
   {/each}
@@ -42,5 +45,7 @@
  {#if unlinkFailed}<p role="alert">{m.bird_unlink_failed({}, {locale})}</p>{/if}
 {/if}
 <style>
+ .bird-photo-thumbnails :global(button>img){max-height:76px;max-width:104px}
+ .bird-photo-thumbnails{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 10px}
  .bird-links{margin-top:20px;color:var(--text-muted,#686d63);font:13px/1.5 system-ui,sans-serif}h2{font:12px system-ui,sans-serif;color:var(--accent,#435b47);margin:0 0 6px}.section-context{font:12px/1.5 system-ui,sans-serif;color:var(--text-muted,#686d63);margin:0 0 6px}.linked-visit{margin:3px 0}.unlink{border:0;background:transparent;color:#686d63;font:11px system-ui,sans-serif;min-height:32px;padding:4px}.create-birds{display:inline-flex;align-items:center;min-height:40px;padding:0;margin-right:18px;border:0;background:transparent;text-decoration:underline;cursor:pointer;color:var(--accent,#435b47);font:12px system-ui,sans-serif}a:focus-visible,button:focus-visible{outline:2px solid #788e7b;outline-offset:3px}[role=alert]{color:#9a403b}
 </style>

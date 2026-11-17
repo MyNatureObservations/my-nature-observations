@@ -54,12 +54,22 @@ pub(crate) fn initialize_database(path: &Path) -> Result<(), String> {
     if version < SCHEMA_VERSION {
         return Err("database_schema_upgrade_required".into());
     }
-    if matches!(version, 5 | 6 | 7 | 8 | 9) {
+    if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11) {
         #[cfg(not(target_os = "macos"))]
         return Err("database_schema_platform_unsupported".into());
         #[cfg(target_os = "macos")]
         {
-            (if version == 9 {
+            (if version == 11 {
+                crate::storage_content::verify_v12(
+                    &mut connection,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+            } else if version == 10 {
+                crate::storage_content::verify_v11(
+                    &mut connection,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+            } else if version == 9 {
                 crate::storage_content::verify_v10(
                     &mut connection,
                     &std::sync::atomic::AtomicBool::new(false),
@@ -288,3 +298,9 @@ pub(crate) mod bird_comments;
 
 #[path = "database/bird_requests.rs"]
 pub(crate) mod bird_requests;
+
+#[path = "database/bird_photos.rs"]
+pub(crate) mod bird_photos;
+
+#[path = "database/bird_captions.rs"]
+pub(crate) mod bird_captions;

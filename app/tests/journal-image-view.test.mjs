@@ -15,6 +15,7 @@ class Element {
   removeAttribute(key) { delete this[key]; delete this.attrs[key]; }
   focus() { globalThis.document.activeElement = this; this.onfocus?.(); }
   closest() { return ["button","input","textarea","label"].includes(this.tagName) ? this : this.parentElement?.closest(); }
+  dispatchEvent(event){this.lastEvent=event;return true;}
   remove() { this.isConnected = false; if(this.parentElement) this.parentElement.children=this.parentElement.children.filter(x=>x!==this); }
   contains(other) { return this === other || this.children.some(child=>child.contains(other)); }
   getBoundingClientRect() { return {left:20,top:20,width:200,height:200}; }
@@ -53,7 +54,7 @@ test("NodeView shares layout attributes, preserves preview and opens keyboard/ri
   s.menu().onkeydown(key("End"));assert.equal(document.activeElement.textContent,"remove");s.menu().onkeydown(key("Home"));assert.equal(document.activeElement.textContent,"caption");s.menu().onkeydown(key("ArrowUp"));assert.equal(document.activeElement.textContent,"remove");
   s.menu().onkeydown(key("Escape"));assert.equal(document.activeElement,s.view.dom);
   s.view.dom.oncontextmenu({clientX:4,clientY:5,preventDefault(){},stopPropagation(){}});assert.equal(s.menu().attrs.role,"menu");
-  s.editor.isEditable=false;for(const cb of s.listeners.get("update"))cb();assert.equal(edit.hidden,true);assert.equal(s.view.dom.tabIndex,-1);assert.equal(body.children.length,0);
+  s.editor.isEditable=false;for(const cb of s.listeners.get("update"))cb();assert.equal(edit.hidden,true);assert.equal(s.view.dom.tabIndex,0);assert.equal(s.view.dom.attrs.role,"button");assert.equal(body.children.length,0);
   s.destroy();
 });
 
@@ -174,4 +175,12 @@ test("selection refresh keeps the options label DOM stable; locale changes still
   Object.defineProperty(button,"textContent",{get:()=>label,set:value=>{label=value;writes++;}});
   s.view.dom.focus();s.editor.view.dispatch(s.editor.state.tr);assert.equal(writes,0);
   const old=labels.edit;labels.edit="Bildalternativ";s.editor.view.dispatch(s.editor.state.tr);assert.equal(writes,1);assert.equal(button.textContent,"Bildalternativ");labels.edit=old;s.destroy();
+});
+
+test("read-only journal photograph opens the shared viewer by click or keyboard without a document change",async()=>{
+ const s=setup();await Promise.resolve();s.editor.isEditable=false;for(const cb of s.listeners.get("update"))cb();
+ const before=JSON.stringify(s.editor.state.doc.toJSON());let prevented=0,stopped=0;
+ s.view.dom.onclick({target:s.view.dom.children[0],preventDefault:()=>prevented++,stopPropagation:()=>stopped++});assert.equal(s.view.dom.lastEvent.type,"mno:photo-open");assert.equal(s.view.dom.lastEvent.detail.key,`journal:${attrs.nodeId}`);assert.equal(s.view.dom.lastEvent.detail.trigger,s.view.dom);
+ for(const key of ["Enter"," "])s.view.dom.onkeydown({key,preventDefault:()=>prevented++,stopPropagation:()=>stopped++});assert.equal(prevented,3);assert.equal(stopped,3);assert.equal(JSON.stringify(s.editor.state.doc.toJSON()),before);assert.equal(s.changes,0);
+ s.view.destroy();s.controls.destroy();
 });

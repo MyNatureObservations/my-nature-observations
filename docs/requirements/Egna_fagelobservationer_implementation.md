@@ -132,3 +132,38 @@ Slutgranskningen mot basen ovan fann inga konkreta korrekthets- eller
 bevarandeblockerare. UX-005 och den uppskjutna utformningen av huvudnavigationen
 kvarstår som icke blockerande uppföljningar. Se
 [granskning och lokal checkpoint](../development/MNO_Bird_First_Mac_Flow.md#standalone-flow-checkpoint-review--2026-11-16).
+
+## Lokalt fotosteg efter granskad inklistring — 17 november 2026
+
+Ett frivilligt foto per fågelrad implementeras på `codex/mac-bird-row-photo` utan
+att ändra produktkraven. Bildval och förhandsvisningsbearbetning återanvänds, men
+ägarskapet ligger hos fågelraden så att journalradering inte tar bort bilden.
+Skyddad kandidatuppgradering till schema 10 och arkiv-/innehållsformat 11 omfattar
+förhandsvisningar och originalreferenser innan formuläret tillåts spara dem.
+Originalfiler ingår fortsatt inte i arkiven och ändras aldrig. Sparande är fortsatt
+atomiskt via listans befintliga generations-/skrivskydd; avbruten redigering sparar
+inte bildändringar. Se [implementation, verifiering och DEV-checklista](../development/MNO_Bird_First_Mac_Flow.md#optional-bird-row-photo--local-implementation-pending-macos-dev-acceptance).
+Manuell macOS DEV-acceptans av fotosteget återstår. Väder, regionala funktioner,
+kataloguppdatering och UX-005 ändras inte.
+
+
+### Frivillig bildtext i det lokala fotosteget
+
+Bildtext lagras separat från radkommentar och sparas bara med formulärets vanliga
+Spara. Bildbyte behåller texten för granskning; bildborttagning tar även bort bildtexten
+vid sparande. Avbryt lämnar lagrat innehåll oförändrat. Den gemensamma bildvisaren visar
+bildtext och art/plats/datum separat, även från journalens länkade miniatyrer. Schema 11
+/ arkivformat 12 följer befintlig skyddad uppgradering och bevarar äldre läsare.
+Se [lokal verifiering och återstående manuell acceptans](../development/MNO_Bird_First_Mac_Flow.md#optional-bird-photo-captions--local-follow-up-17-november-2026).
+
+
+### Fotostegets DEV-acceptans och lokal granskning
+
+Projektägaren har godkänt tillägg/byte/borttagning/Avbryt, bildtexter, kontrollernas
+placering och den gemensamma bildvisaren. Separata målprofiler har godkänts för både
+Backup → Restore och Export → Open Import, inklusive ännu en omstart och bevarade
+journalbilder, länkade/olänkade observationsbilder, bildtexter, radkommentarer och
+journalkopplingar. Detta är manuell macOS DEV-acceptans, inte paketerad releaseacceptans.
+Se [slutlig lokal granskning och testbevisning](../development/MNO_Bird_First_Mac_Flow.md#bird-photos-and-shared-viewer--final-local-review-and-accepted-macos-dev-checks).
+Denna acceptans ersätter tidigare väntande fotostatus ovan. Windows/Linux-grindar,
+UX-005 och övrig uppskjuten produktomfattning är oförändrade.

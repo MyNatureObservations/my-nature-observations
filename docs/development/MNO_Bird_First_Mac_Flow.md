@@ -10,7 +10,7 @@ integer counts. Saving uses the existing generation/search write guards and one
 transaction for list, rows and first link. Cancellation does not save a list/link.
 Linked previews show place/times, a differing visit date and the first three rows; reopening carries
 an explicit originating-entry route. Editing and whole-list deletion were subsequently
-added. Standalone and reviewed paste input were added in subsequent steps; photo and list-weather interfaces remain deferred.
+added. Standalone and reviewed paste input were added in subsequent steps; local photo support and its pending DEV acceptance are recorded below. List weather remains deferred.
 Optional plain-text comments are supported during creation, editing and reopening. Windows/Linux commands reject this flow.
 
 ## Persistence boundary
@@ -871,3 +871,363 @@ UX-005, deferred catalog/region work, photos, list weather and broader navigatio
 redesign remain outside this checkpoint. No schema/archive or unrelated changes
 were added. The user's isolated journal was not opened or modified. Delivery is a
 local checkpoint only; no push, PR, CI, merge or release action is authorized here.
+
+## Optional bird-row photo — local implementation, pending macOS DEV acceptance
+
+Branch `codex/mac-bird-row-photo`, based on public main
+`08dfc4db7537bd2470c3b5cc3f83c4b279954696`.
+
+Creation and editing offer Add/Replace/Remove photo per species row. They reuse the
+existing native JPEG/PNG picker, bounded decoding, orientation handling and stored
+preview generation. The form remains a draft until normal Save. Cancelling the
+picker or the edit leaves the saved attachment unchanged. Saved species cards show
+the stored preview below their existing identity/count/comment content. Controls
+and messages are localized; keyboard focus returns to the attachment action.
+Original files are read only, never modified or deleted. Previews remain readable
+when an original has moved or disappeared; original paths remain inert metadata.
+Original files are not included in MNO archives, following the existing policy.
+
+### Ownership, versioning and write protection
+
+- Schema **10** adds only `bird_row_photos`, with one attachment per `bird_rows.id`,
+  a unique asset ID, original path, validated MIME/dimensions and bounded preview
+  bytes. The row owns the photo via a cascading foreign key; journals do not own it.
+- Schema 4–9 macOS startup uses the existing verified private-candidate upgrade
+  and preserves an independent source copy. Schema-9 preservation proofs stay
+  frozen. Schema 10 has preservation proof **11**; older schema validators reject it.
+- Save keeps existing row IDs, comments, counts, taxonomy identities and all journal
+  links. Photo addition/replacement/removal is inside the existing guarded list
+  transaction. Failure rolls the entire change back. Removing a row/list cascades
+  only its stored attachment, leaving original files and shared data untouched.
+- Preparation makes no SQLite writes. Its generation permit, the frontend task
+  identity/row/context checks and session recheck reject late results. Pending
+  preparation blocks normal Save; removal or unmount invalidates the task. Backend
+  generation and optimistic content-token checks still protect subsequent writes.
+- Durable creation receipts include photo content; generated storage row IDs alone
+  do not change the frozen no-photo creation payload. Lost-response retries return
+  the existing list, changed photo payloads conflict, and deletion retires the request.
+- Windows/Linux startup behavior and bird-feature gates remain unchanged. No photo,
+  weather, region or catalog feature is enabled there; no new application identity,
+  application version or dependency is introduced.
+
+### Archives and interruption handling
+
+Backup and Export use format **11/schema 10**. SQLite backups include the owned
+preview table. Export adds `bird_row_photos.jsonl` with the existing checksum and
+row-count manifest conventions. Import strictly validates the file inventory,
+metadata, preview bytes, row ownership and references before activation. Supported
+older readers remain; older supported exports normalize through the existing
+candidate chain to schema 10 with their source proofs checked before conversion.
+The replaced journal, including photos, remains in pre-restore protection.
+
+New activation records keep explicit source-format/schema/proof bindings. Import
+marker IDs 27–33 map exactly to source formats 5–11, target schema 10 and proof 11;
+unknown or mismatched combinations remain rejected. Old marker contracts remain
+unchanged. Migration tests cover injected errors at copied/upgraded/source-flush/
+candidate-flush/before-publish/after-publish/publication-flush/verified boundaries,
+invalid candidates and retry. These callbacks model interruption; they are not
+claims of physical power-loss durability.
+
+### Local automated evidence
+
+- Full frontend suite: **630 passed**, no failures or skipped tests. Following the
+  final focus/replacement-state refinement, the **73 affected frontend tests** passed.
+- Full macOS Rust library suite with CI-pinned **Rust 1.99.1**: **998 passed, 0 failed,
+  2 existing ignored tests**. Coverage includes production photo writes, rollback,
+  stale/late writes, unchanged original bytes, stable row identities, request replay,
+  real command JSON, linked/unlinked archives and protected Restore/Open Import
+  activation followed by startup admission and ordinary reopening.
+- Both archive activation tests use native macOS child processes to isolate the
+  existing hooks. Frontend controller/transport fixtures use mocks. No desktop
+  acceptance, native Windows/Linux execution or packaging acceptance is claimed.
+- Svelte: **0 errors, 0 warnings**. All-targets compilation and formatting use the
+  unchanged CI-pinned Rust 1.99.1. `git diff --check` is part of final local review.
+
+### Same-profile macOS DEV checklist (not yet accepted)
+
+Reuse `/Users/stefanantonsson/mno-birds-AFP613/journal`; do not reset it or remove
+its migration copies. From `app`, restart with:
+
+```sh
+MNO_TEST_DATA_DIR=/Users/stefanantonsson/mno-birds-AFP613/journal npm run tauri dev
+```
+
+Use disposable JPEG/PNG originals and note their SHA-256 before starting.
+
+1. Open an existing visit: counts/comments/links should remain. Create a new visit
+   with an optional row photo, save normally, then reopen and restart.
+2. Edit: replace a photo and Cancel; the saved photo should remain. Repeat and Save
+   changes; the replacement should survive restart. Remove it, save and reopen.
+3. Cancel the native picker and try an invalid photo. Keep the form open: its other
+   data and existing attachment should remain. Try photo actions with the keyboard.
+4. Start photo preparation, then remove its row or leave/discard the edit. A late
+   result must not add it back. Do not manipulate live database/generation files.
+5. Create Backup and Export outside the app data directory. On disposable data only,
+   use the existing verified Restore/Open Import flow, restart and check linked and
+   unlinked photos, comments/counts and journal links. A moved disposable original
+   should not prevent the stored preview from displaying.
+6. Recalculate original-file SHA-256 values: add/replace/remove must not change them.
+
+The existing user test profile was not opened or changed during implementation.
+Changes remain local and uncommitted; no push, PR, CI, package or release was made.
+
+## Shared journal/observation photo viewer — local follow-up, 2026-11-17
+
+**User-reported DEV result:** photo operations work and the preview size is broadly
+acceptable. This does not accept the new presentation below. Manual archive
+acceptance remains outstanding; the existing automated archive results are separate.
+
+The [photograph design review](MNO_Photographs_Stage_2B_Design_Review.md) and
+[MNO design specification](../design/MNO_Design_Specification_v1.0.md) informed this
+presentation-only follow-up: warm neutrals, existing typography, restrained controls
+and preserved journal captions/placement. Bird detail cards put a modest preview
+beside the text on wide layouts and below it at narrow widths. Journal detail and
+reading views add small linked-observation thumbnails outside the visit link.
+
+There was no existing browsing lightbox: the existing `journal-image-view.ts` is
+an editor NodeView, and `JournalPhotograph.svelte` is its read-only counterpart.
+Both now open the same [PhotoViewer](../../app/src/lib/components/PhotoViewer.svelte)
+used by bird photos. No separate competing viewers or media library are added.
+
+- A journal scope contains its journal photos in document-node order, followed by
+  linked visits in the existing date/time/ID ordering, then persisted row order.
+  Reused assets keep their independent node captions; duplicate links do not repeat
+  a visit's images. Observation detail scopes contain only that visit's photos.
+- Bird images are identified by primary species name, place and localized date.
+  Captions and alternative text of journal photos remain independent and unchanged.
+- Loading uses existing read-only photo/list commands and rechecks the generation.
+  Missing stored assets remain visible failures; failed linked-image loading is
+  disclosed. Closing, scope changes or journal-change events invalidate late loads.
+- All displayed images use existing stored previews, including when originals are
+  missing. The viewer explicitly labels them **Stored preview / Sparad förhandsbild**;
+  it does not read the original, even if it still exists. The existing original and
+  backup policy is available under expandable **About the photo / Om bilden**.
+- Native dialog semantics, Previous/Next, arrows, Escape, focus containment and
+  restoration to the thumbnail are shared. Thumbnail activation stops at the native
+  button boundary, so native and Svelte parent click handlers cannot open an entry.
+  Read-only TipTap figures use the same scope event; editor controls and caption
+  selection are preserved.
+
+### Native picker investigation
+
+Bird and journal selection already use the same `select_journal_photograph`
+command. It previously received no UI locale and supplied no localized panel text.
+Both callers now pass MNO's locale and the shared command supplies Swedish/English
+text with the existing `.set_title` API. In pinned `tauri-plugin-dialog 2.8.3` /
+`rfd 0.16.0`, that becomes AppKit's `setMessage`; it does not translate the system's
+Open/Cancel and other native controls. The pinned file-dialog API exposes no
+per-panel language option. No replacement picker, global language override or new
+dependency is introduced.
+
+The package **already** declares `CFBundleLocalizations = [en, sv]` in `Info.plist`.
+The existing DEV executable's embedded plist has the same declaration. The file is
+unchanged; missing language declarations are therefore **not** the explanation.
+A read-only investigation found system preference `sv-SE` and no production
+app-specific `AppleLanguages` override. An isolated, unbundled AppKit probe with
+the same embedded declarations reported preferred bundle language `sv`, while an
+**undisplayed** `NSOpenPanel` returned default prompt `Open`. This corroborates the
+reported DEV mismatch at the property level; it does not establish the language
+of every control after a real panel is shown, or packaged-app behavior.
+
+MNO-controlled panel text follows the app selection. System-owned text cannot be
+switched independently through this dialog API; it still needs observation in the
+real DEV picker and later a packaged app. Apple's documentation describes
+[manually declared localizations](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundlelocalizations)
+and [bundle language preference selection](https://developer.apple.com/documentation/foundation/bundle/preferredlocalizations).
+No OS preferences or installed apps were changed by the investigation.
+
+### Focused checks and manual follow-up
+
+- Full frontend suite: **637 passed**, no failures/skips.
+- Real rendered Chrome test: **1 passed**, covering journal/linked-image scope and
+  stable order, direct thumbnail opening without navigation, captions, actual preview
+  decoding with missing original paths, Previous/Next, arrows/Escape, repeated Tab /
+  Shift+Tab containment, trigger focus restoration and wide/narrow card layout.
+  Its transport is mocked and asserts only read commands; it is not Tauri acceptance.
+- Focused Rust photograph/picker checks with CI-pinned Rust 1.99.1: **12 passed,
+  1 existing ignored**. Svelte: zero errors/warnings. All-targets compilation and
+  formatting use the same unchanged CI pin. The earlier full persistence/archive
+  evidence is retained rather than repeating the unchanged full Rust suite.
+
+Reuse the same isolated DEV profile and restart for the updated picker command:
+
+```sh
+cd /Users/stefanantonsson/Projects/my-nature-observations-public/app
+MNO_TEST_DATA_DIR=/Users/stefanantonsson/mno-birds-AFP613/journal npm run tauri dev
+```
+
+1. In an observation with several photos, check image placement and open a preview.
+   Browse only that visit, then close with Escape; focus should return to the image.
+2. In a journal entry containing journal photos and linked observations, open a small
+   bird thumbnail from both the individual entry and journal reading view. It should
+   open the viewer directly, without opening the observation or navigating the entry.
+   Browse journal photos first, then linked visit photos; check captions and identity.
+3. Try arrows, Tab/Shift+Tab, Previous/Next, Close and Escape. Expand **Om bilden**.
+   Check the stored-preview label and that a moved disposable original is unnecessary.
+4. Switch Swedish/English and open the native picker from both journal and observation
+   editing. Record the MNO-provided message separately from macOS button/system text.
+   Cancel the picker and edit to verify the saved content remains unchanged.
+
+No storage schema, archive contract, original-file policy or platform gate was changed
+in this follow-up. The real test journal was not accessed. All work remains local and
+uncommitted; no PR, CI, push, release or manual archive acceptance is claimed.
+
+
+## Optional bird-photo captions — local follow-up, 17 November 2026
+
+The owner reports a positive macOS DEV assessment of the shared photo viewer.
+This is manual viewer feedback, separate from automated coverage. Manual archive
+acceptance remains outstanding; caption behavior itself awaits the DEV check below.
+
+A localized **Bildtext / Caption** field belongs to each attached bird-row photo,
+independently of the species comment. It changes only the draft until ordinary Save.
+Cancel leaves stored metadata unchanged. Replacement keeps the current caption for
+review; removing the photo removes its caption on Save. Original files are never
+renamed, changed or removed. Journal-photo caption storage and presentation remain
+unchanged. The shared viewer displays the caption separately from species/place/date,
+including when opened from a linked journal thumbnail.
+
+Persistence advances to **schema 11 / archive and content-proof version 12** using
+the existing independently verified candidate upgrade and retained source-copy path.
+The sole schema addition is nullable `bird_row_photos.caption` (up to 4,000 UTF-16
+code units, 16,384 UTF-8 bytes, no NUL). Existing photos receive no caption. The frozen
+schema-10/format-11 photo reader still rejects extra fields; format 12 requires its
+nullable caption field. Supported older exports are verified against their original
+proof before private candidate normalization. New activation marker bindings are
+strictly source/schema/proof-specific; older marker contracts remain accepted under
+their original rules. Receipts include nonempty caption content; absent captions keep
+the previous serialization, so old completed-request protection survives migration.
+macOS startup performs the protected upgrade; Windows/Linux activation gates remain.
+
+### Same-profile manual check (pending)
+
+Restart DEV with the same `MNO_TEST_DATA_DIR` shown above; do not reset the profile.
+1. Edit a disposable observation photo, add a caption different from its row comment,
+   then Cancel. Reopen and confirm both saved values are unchanged.
+2. Add a caption, Save, restart, and reopen. Open the image from observation detail
+   and its linked journal: caption and species/place/date should remain distinct.
+3. Replace the image: retain and review the caption, then Save. Remove it and Save:
+   neither photo nor caption should return. Check the disposable original separately.
+4. Switch Swedish/English to check field labels. Manual Backup/Restore and Export/Open
+   Import acceptance is still pending and must use only synthetic copies.
+
+No commit, push, PR, CI, installer or release was created. The user's existing
+isolated journal was not accessed by these checks.
+
+### Caption verification
+
+- Frontend suite: **638 passed**, no failures or skips. The final focused set,
+  including the subsequently added rendered bilingual caption-field check:
+  **73 passed**, no failures or skips.
+- Rendered shared-viewer test: **1 passed**, including the bird caption reached
+  through a linked journal thumbnail, with its separate species/place/date context.
+- CI-pinned Rust 1.99.1: native photo persistence/older archive/verified activation
+  checks **5 passed**; actual save-command JSON contract **1 passed**; strict caption
+  DTO and protected schema-10 → 11 migration with stored photo and interruption/retry
+  checks **2 passed**. New strict activation-marker tests passed in the library run.
+- Svelte: **0 errors, 0 warnings**. All-targets compilation, pinned formatting,
+  documentation file links and `git diff --check` passed.
+
+The first full library run after fixture updates had **1,002 passes, one failure and
+2 existing ignored tests**: an `alias-p-race` child of the pre-existing
+`production_c_phases_keep_real_outer_resources` test aborted with SIGABRT before
+writing its expected trace. Its isolated rerun passed. That test and its safety
+assertions were not changed; no root cause is claimed from the passing rerun alone.
+
+The final complete Rust 1.99.1 library rerun passed: **1,003 passed, 0 failed,
+2 existing ignored**. No unrelated test assertions were relaxed.
+
+
+### Caption DEV feedback and control placement — 17 November 2026
+
+The owner reports a positive macOS DEV assessment of caption behavior. This records
+manual feedback, separately from automated tests. Manual archive acceptance remains
+outstanding. The subsequent presentation-only refinement orders the form as preview,
+Replace/Remove, caption, then the secondary About disclosure. The viewer keeps its
+localized accessible heading visually hidden and Close at the upper right. Storage,
+schema, archives, save/cancel behavior and original files are unchanged by this
+refinement. The new placement itself awaits visual DEV review.
+
+Presentation checks: **73 focused UI tests passed**, including rendered bilingual
+form ordering and exactly one About disclosure. The rendered browser test passed
+with the heading visually hidden, Close initially focused, and existing keyboard
+containment/Escape/focus restoration checks retained. Svelte reported zero errors
+and warnings; `git diff --check` passed. No backend suites were repeated for this
+presentation-only refinement.
+
+
+## Bird photos and shared viewer — final local review and accepted macOS DEV checks
+
+### Owner-reported manual acceptance, 17 November 2026
+
+The owner accepted the following in macOS DEV on `codex/mac-bird-row-photo`:
+
+- Adding, replacing and removing a bird-row photo, and cancelling photo changes.
+- Photo captions and the final control order: preview, Replace/Remove, Caption,
+  then the secondary About disclosure. The viewer's generic heading is visually
+  hidden while its localized accessible dialog name remains.
+- The shared viewer from observation detail and both journal views.
+- Backup → Restore into a separate disposable target profile, followed by another
+  restart of that same target profile.
+- Export → Open Import into another separate disposable target profile, followed
+  by another restart of that same target profile.
+- Preserved journal photos, linked and unlinked observation photos, photo captions,
+  separate row comments and journal links through those two archive flows.
+
+The synthetic source profile was `/Users/stefanantonsson/mno-birds-AFP613/journal`.
+The target paths and archive filenames were not supplied in the acceptance report;
+they are not inferred here. These are owner-reported **DEV** results, not packaged
+release acceptance or tests performed by this review. This section supersedes the
+historical pending photo, caption, control-placement and manual archive acceptance
+notes above. It does not establish every crash, permission or filesystem scenario.
+
+### Combined review against main base
+
+Reviewed all branch changes, including previously uncommitted files, against
+`08dfc4db7537bd2470c3b5cc3f83c4b279954696` (the branch's main base).
+No concrete correctness or data-preservation blocker was identified.
+
+- Protected upgrades to schema 10 and 11 verify the private candidate and preserved
+  source content, retain independent source copies, and reuse existing publication,
+  interrupted-startup and retry handling. No upgrade runs underneath unfinished
+  Restore/Import/Recovery.
+- Schema 11 / archive format 12 includes previews, original references and captions;
+  older supported readers and frozen proof contracts remain. Format 11 rejects
+  caption fields; format 12 requires nullable captions. Activation records bind
+  the source format to the resulting schema and proof explicitly.
+- Photo writes occur only in normal atomic list create/update transactions under
+  the existing write/generation guards. Draft selection/caption/cancel never writes
+  an attachment. Ownership checks, stale edit tokens, persistent creation receipts
+  and request invalidation protect against cross-row writes, replay and late replies.
+  Original files are only read; removal/replacement affects stored attachments.
+- The viewer has stable journal-document then linked-visit/row ordering, separate
+  caption/context, stored-preview labelling, keyboard containment and focus return.
+  Read-only gallery loads and invalidation on generation/content changes or unmount
+  do not mutate journals. Preview-loading failures remain visible.
+- Bird creation/photo preparation and schema activation remain macOS-only.
+  Windows/Linux gates and their supported ordinary journal schema remain unchanged.
+- MNO-controlled native picker text follows the selected language. The existing
+  dialog API does not supply independent localization for system-owned panel text;
+  the AppKit probe described above did not display a panel. No claim is made that
+  all native controls follow MNO's language, especially in packaged builds.
+
+### Reused validation evidence and remaining work
+
+No application suite was repeated for this review: production code is unchanged
+since the recorded final results. Rust 1.99.1 library: **1,003 passed, 0 failed,
+2 existing ignored**; full frontend: **638 passed**, followed by the final focused
+presentation set: **73 passed**. The rendered browser viewer test passed. Svelte
+reported **0 errors/0 warnings**; pinned all-targets compilation and formatting
+passed. The earlier broad-run subprocess abort and successful isolated/full reruns
+remain recorded above rather than being omitted.
+
+Documentation links and `git diff --check` are checked again for this checkpoint.
+There is no new automated evidence for packaged macOS or native Windows/Linux in
+this review. Packaged acceptance, native picker system-language observations and
+larger-gallery loading performance can be assessed later. Deferred product scope,
+including list weather and regional/catalog work, is unchanged. UX-005 remains a
+separate accepted non-blocking follow-up and was not investigated.
+
+The local checkpoint includes only this feature's code, tests and documentation.
+All test profiles, archives and unrelated files are preserved. No push, PR, CI,
+merge, installer build or publication is part of this review.

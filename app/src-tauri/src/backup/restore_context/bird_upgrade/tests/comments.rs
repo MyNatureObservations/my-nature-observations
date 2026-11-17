@@ -47,12 +47,16 @@ pub(super) fn current(root: &Path) -> (DatabaseState, PathBuf, String) {
         &place,
         &[
             birds::SpeciesCount {
+                row_id: None,
+                photo: None,
                 avibase_id: "avibase-E15BC0CB".into(),
                 taxonomy_version: crate::species_registry::VERSION.into(),
                 count: 6,
                 comment: Some("I björken.\n<script>plain text</script>".into()),
             },
             birds::SpeciesCount {
+                row_id: None,
+                photo: None,
                 avibase_id: "avibase-9BE53D34".into(),
                 taxonomy_version: crate::species_registry::VERSION.into(),
                 count: 4,

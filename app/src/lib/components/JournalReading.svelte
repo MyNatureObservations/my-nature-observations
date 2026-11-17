@@ -1,4 +1,5 @@
 <script lang="ts">
+  import JournalPhotoScope from "$lib/components/JournalPhotoScope.svelte";
   import BirdJournalLists from "$lib/components/BirdJournalLists.svelte";
   import { tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
@@ -127,8 +128,10 @@
           {#if deleteFailedId === entry.id}
             <p class="message error" role="alert">{m.journal_delete_failed({}, { locale })}</p>
           {/if}
+          <JournalPhotoScope entryId={entry.id} {generation} contentJson={entry.contentJson} {locale}>
           <JournalContent contentJson={entry.contentJson} entryId={entry.id} documentVersion={entry.documentVersion ?? 1} {generation} {locale} editable={entry.editable === true} />
           <BirdJournalLists entryId={entry.id} {generation} {locale} journalDate={entry.entryDate}/>
+          </JournalPhotoScope>
         </article>
       {/each}
     </section>

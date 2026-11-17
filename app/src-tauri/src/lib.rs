@@ -6,6 +6,7 @@ mod startup_error;
 #[allow(dead_code)]
 mod backup;
 mod bird_app;
+mod bird_photos;
 mod database;
 mod species_registry;
 // Internal schema-5 persistence; no command or UI registration.
@@ -189,6 +190,7 @@ pub fn run() {
             bird_app::bird_observations_available,
             bird_app::search_bird_species,
             bird_app::match_bird_paste_names,
+            bird_photos::prepare_bird_photograph,
             bird_app::reserve_bird_creation,
             bird_app::create_journal_bird_list,
             bird_app::update_journal_bird_list,

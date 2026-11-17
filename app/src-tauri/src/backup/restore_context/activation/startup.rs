@@ -90,7 +90,11 @@ fn protection(root: &Path, marker: &Marker) -> Outcome<()> {
     let candidate =
         super::super::super::restore::prepare_candidate(&path, Arc::new(AtomicBool::new(false)))
             .map_err(Error::Candidate)?;
-    let actual = if marker.old_content.version == 10 {
+    let actual = if marker.old_content.version == 12 {
+        preserved_fingerprint_v12(&candidate, &AtomicBool::new(false))
+    } else if marker.old_content.version == 11 {
+        preserved_fingerprint_v11(&candidate, &AtomicBool::new(false))
+    } else if marker.old_content.version == 10 {
         preserved_fingerprint_v10(&candidate, &AtomicBool::new(false))
     } else if marker.old_content.version == 9 {
         preserved_fingerprint_v9(&candidate, &AtomicBool::new(false))
@@ -162,13 +166,14 @@ fn assess(root: &Path, marker: &Marker) -> View {
             actions: vec![Action::FinishNew],
         };
     }
-    let previous_matches =
-        if marker.is_import() || matches!(marker.version, 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10) {
-            verify_file_version(&active_path, marker.old_content.version)
-                .is_ok_and(|v| v == marker.old_content)
-        } else {
-            verify_new_file(&active_path, marker).is_ok_and(|v| v == marker.old_content)
-        };
+    let previous_matches = if marker.is_import()
+        || matches!(marker.version, 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12)
+    {
+        verify_file_version(&active_path, marker.old_content.version)
+            .is_ok_and(|v| v == marker.old_content)
+    } else {
+        verify_new_file(&active_path, marker).is_ok_and(|v| v == marker.old_content)
+    };
     if previous_matches {
         let mut actions = vec![Action::KeepPrevious];
         if verify_new_file(&root.join("recovery").join(&marker.candidate_file), marker)
@@ -210,7 +215,7 @@ fn v2(session: &RecoverySession<'_, '_>) -> Outcome<bool> {
     }
     if serde_json::from_slice::<Header>(&bytes).is_ok_and(|h| {
         (h.format == "mno-database-activation"
-            && matches!(h.version, 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10))
+            && matches!(h.version, 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12))
             || (h.format == IMPORT_FORMAT && h.version == 4)
             || (h.format == IMPORT_FORMAT
                 && matches!(
@@ -236,6 +241,21 @@ fn v2(session: &RecoverySession<'_, '_>) -> Outcome<bool> {
                         | 24
                         | 25
                         | 26
+                        | 27
+                        | 28
+                        | 29
+                        | 30
+                        | 31
+                        | 32
+                        | 33
+                        | 34
+                        | 35
+                        | 36
+                        | 37
+                        | 38
+                        | 39
+                        | 40
+                        | 41
                 ))
     }) {
         return Ok(false);
@@ -255,9 +275,11 @@ pub(crate) fn status(state: &DatabaseState) -> Outcome<View> {
     let mut view = assess(&root, &marker);
     if !state.permits_legacy_protocol_fixture() {
         view.actions.retain(|action| match action {
-            Action::KeepPrevious => matches!(marker.old_content.version, 5 | 6 | 7 | 8 | 9 | 10),
+            Action::KeepPrevious => {
+                matches!(marker.old_content.version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12)
+            }
             Action::FinishNew | Action::Continue => {
-                matches!(marker.new_content.version, 5 | 6 | 7 | 8 | 9 | 10)
+                matches!(marker.new_content.version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12)
             }
         });
     }
@@ -402,7 +424,7 @@ pub(crate) fn run_confirmed(
         } else {
             marker.new_content.version
         };
-        if !matches!(selected_version, 5 | 6 | 7 | 8 | 9 | 10) && !legacy {
+        if !matches!(selected_version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) && !legacy {
             // Validate the Ready contract before complete() can retire Recovery.
             return Err(Error::Binding);
         }

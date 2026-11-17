@@ -1,4 +1,5 @@
 <script lang="ts">
+  import JournalPhotoScope from "$lib/components/JournalPhotoScope.svelte";
   import BirdJournalLists from "$lib/components/BirdJournalLists.svelte";
   import { onMount, untrack, tick, type Snippet } from "svelte";
   import DeleteEntryDialog from "$lib/components/DeleteEntryDialog.svelte";
@@ -88,7 +89,7 @@
       if (currentSave) await currentSave;
       if (!current()) return;
       const owner = entryId ?? (draftEntryId ??= crypto.randomUUID());
-      const path = await invoke<string | null>("select_journal_photograph");
+      const path = await invoke<string | null>("select_journal_photograph",{locale:language.current});
       if (!path || !current()) return;
       const asset = await invoke<PhotographAsset>("prepare_journal_photograph", { generation, path, entryId: owner });
       if (!current()) return;
@@ -132,7 +133,7 @@
   let pendingClose = $state(false);
   let pendingNavigationUrl = $state<string | null>(null);
   let allowDiscardNavigation = false;
-  let savedContentJson = "";
+  let savedContentJson = $state("");
   let savedTitle = $state("");
   let showDeleteConfirmation = $state(false);
   let deletingEntry = $state(false);
@@ -931,6 +932,7 @@ for (const block of blocks) {
   {#if photoBusy}<p class="load-status" role="status">{m.photo_processing({}, { locale: language.current })}</p>{/if}
   {#if photoError}<p class="load-status error" role="alert">{photoError}</p>{/if}
 
+  <JournalPhotoScope entryId={entryId??""} generation={sessionGeneration} contentJson={savedContentJson} locale={language.current} enabled={!isEditing}>
   <article class="journal-entry">
 
     <div bind:this={editorElement}></div>
@@ -938,6 +940,7 @@ for (const block of blocks) {
   {#if canDeleteEntry() && !documentProtected && !deletingEntry && entryId && sessionGeneration!==null}
     <BirdJournalLists entryId={entryId} generation={sessionGeneration} locale={language.current} journalDate={savedEntryDate} allowCreate={true}/>
   {/if}
+  </JournalPhotoScope>
 
 </div>
 

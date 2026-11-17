@@ -34,7 +34,8 @@ export function createPhotographView({ node: initialNode, editor, getPos }: Node
     // Keep the pointer target stable during focus/selection transactions.
     if (edit.textContent !== labels.edit) edit.textContent = labels.edit;
     edit.hidden = !editor.isEditable;
-    dom.tabIndex = editor.isEditable ? 0 : -1;
+    dom.tabIndex = 0;
+    if(editor.isEditable)dom.removeAttribute("role");else {dom.setAttribute("role","button");dom.setAttribute("aria-label",`${labels.photograph}${node.attrs.caption||node.attrs.alt?": "+(node.attrs.caption||node.attrs.alt):""}`);}
     dom.dataset.placement = node.attrs.placement;
     dom.dataset.size = node.attrs.size;
     if (!status.hidden) status.textContent = status.dataset.failed ? labels.unavailable : labels.loading;
@@ -51,12 +52,15 @@ export function createPhotographView({ node: initialNode, editor, getPos }: Node
       }).catch(() => { if (!destroyed && current === request) { status.dataset.failed = "true"; status.textContent = options.labels().unavailable; } });
     }
   }
+  function view(){dom.dispatchEvent(new CustomEvent("mno:photo-open",{bubbles:true,detail:{key:`journal:${node.attrs.nodeId}`,trigger:dom}}));}
+  dom.onclick=event=>{if(!editor.isEditable&&(event.target===image||event.target===dom)){event.preventDefault();event.stopPropagation();view();}};
   edit.onclick = () => open();
   dom.oncontextmenu = event => {
     if (!editor.isEditable) return;
     event.preventDefault(); event.stopPropagation(); open({ x: event.clientX, y: event.clientY });
   };
   dom.onkeydown = event => {
+    if(!editor.isEditable&&(event.key==="Enter"||event.key===" ")){event.preventDefault();event.stopPropagation();view();return;}
     if (editor.isEditable && event.target === dom && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
       const pos = getPos();
       if (typeof pos === "number") {

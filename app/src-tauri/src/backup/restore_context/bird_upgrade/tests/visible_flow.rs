@@ -23,12 +23,16 @@ fn source(root: &Path) -> (DatabaseState, PathBuf, String) {
     let g = state.operation(None).unwrap().snapshot(()).generation;
     let rows = [
         birds::SpeciesCount {
+            row_id: None,
+            photo: None,
             avibase_id: "avibase-DF1E2A1D".into(),
             taxonomy_version: crate::species_registry::VERSION.into(),
             count: 6,
             comment: None,
         },
         birds::SpeciesCount {
+            row_id: None,
+            photo: None,
             avibase_id: "avibase-40329BB6".into(),
             taxonomy_version: crate::species_registry::VERSION.into(),
             count: 2,

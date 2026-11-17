@@ -18,8 +18,8 @@ const LINE_LIMIT: usize = ROW_LIMIT * 6 + 1024;
 const LINE_LIMIT_V2: usize = (ROW_LIMIT + 2 * crate::weather::storage::PART_LIMIT) * 6 + 2048;
 mod v3;
 pub(crate) use v3::{
-    build_v3, build_v4, build_v5, build_v6, build_v7, build_v8, build_v9, build_v10, is_v3, is_v4,
-    is_v5, is_v6, is_v7, is_v8, is_v9, is_v10,
+    build_v3, build_v4, build_v5, build_v6, build_v7, build_v8, build_v9, build_v10, build_v11,
+    build_v12, is_v3, is_v4, is_v5, is_v6, is_v7, is_v8, is_v9, is_v10, is_v11, is_v12,
 };
 type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
@@ -802,7 +802,7 @@ fn next_record_version(
         created_at: wire.created_at,
         updated_at: wire.updated_at,
     };
-    if matches!(version, 5 | 6 | 7 | 8 | 9 | 10) && r.document_version == 2 {
+    if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) && r.document_version == 2 {
         let mut legacy = r.clone();
         legacy.document_version = 1;
         validate_record(&legacy)?;
@@ -900,6 +900,20 @@ pub(crate) fn verify_database_version(
                 crate::storage_content::Error::Limit => Error::ResourceLimit,
                 _ => Error::Verification,
             }),
+        12 => crate::storage_content::verify_v12(db, flag)
+            .map(|p| ContentProof {
+                version: 12,
+                sha256: p.sha256,
+                entry_count: p.entry_count,
+            })
+            .map_err(|_| Error::Verification),
+        11 => crate::storage_content::verify_v11(db, flag)
+            .map(|p| ContentProof {
+                version: 11,
+                sha256: p.sha256,
+                entry_count: p.entry_count,
+            })
+            .map_err(|_| Error::Verification),
         10 => crate::storage_content::verify_v10(db, flag)
             .map(|p| ContentProof {
                 version: 10,
@@ -930,4 +944,76 @@ pub(crate) fn verify_database_version(
             .map_err(|_| Error::Verification),
         _ => Err(Error::Verification),
     }
+}
+
+pub(crate) fn build_for_schema10(
+    a: &mut File,
+    p: &Path,
+    f: &AtomicBool,
+    source: u32,
+) -> Result<Candidate> {
+    if source == 11 {
+        return build_v11(a, p, f);
+    }
+    let mut c = build_for_schema9(a, p, f, source)?;
+    let old = c.proof.clone();
+    let mut db = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    )?));
+    if verify_database_version(db.get(), f, 10)? != old {
+        return Err(Error::Verification);
+    }
+    crate::database::bird_photos::upgrade(db.get()).map_err(|_| Error::Verification)?;
+    let tx = db.get().transaction()?;
+    let preserved =
+        crate::storage_content::verified_snapshot_v10(&tx, f).map_err(|_| Error::Verification)?;
+    if preserved.sha256 != old.sha256 || preserved.entry_count != old.entry_count {
+        return Err(Error::Verification);
+    }
+    tx.commit()?;
+    drop(db);
+    let mut read = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?));
+    c.proof = verify_database_version(read.get(), f, 11)?;
+    drop(read);
+    Ok(c)
+}
+
+pub(crate) fn build_for_schema11(
+    a: &mut File,
+    p: &Path,
+    f: &AtomicBool,
+    source: u32,
+) -> Result<Candidate> {
+    if source == 12 {
+        return build_v12(a, p, f);
+    }
+    let mut c = build_for_schema10(a, p, f, source)?;
+    let old = c.proof.clone();
+    let mut db = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    )?));
+    if verify_database_version(db.get(), f, 11)? != old {
+        return Err(Error::Verification);
+    }
+    crate::database::bird_captions::upgrade(db.get()).map_err(|_| Error::Verification)?;
+    let tx = db.get().transaction()?;
+    let preserved =
+        crate::storage_content::verified_snapshot_v11(&tx, f).map_err(|_| Error::Verification)?;
+    if preserved.sha256 != old.sha256 || preserved.entry_count != old.entry_count {
+        return Err(Error::Verification);
+    }
+    tx.commit()?;
+    drop(db);
+    let mut read = Database(Some(Connection::open_with_flags(
+        c.path(),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?));
+    c.proof = verify_database_version(read.get(), f, 12)?;
+    drop(read);
+    Ok(c)
 }

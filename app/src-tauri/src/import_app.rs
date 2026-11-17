@@ -148,7 +148,11 @@ fn prepare(state: &DatabaseState, path: &Path) -> Result<Choice, Error> {
         return Err(Error::Changed);
     }
     let staging = tempfile::tempdir().map_err(|_| Error::Failed)?;
-    let format = if open_import::is_v10(&mut archive).map_err(|_| Error::InvalidPackage)? {
+    let format = if open_import::is_v12(&mut archive).map_err(|_| Error::InvalidPackage)? {
+        12
+    } else if open_import::is_v11(&mut archive).map_err(|_| Error::InvalidPackage)? {
+        11
+    } else if open_import::is_v10(&mut archive).map_err(|_| Error::InvalidPackage)? {
         10
     } else if open_import::is_v9(&mut archive).map_err(|_| Error::InvalidPackage)? {
         9
@@ -167,58 +171,75 @@ fn prepare(state: &DatabaseState, path: &Path) -> Result<Choice, Error> {
     } else {
         0
     };
-    if !matches!(format, 5 | 6 | 7 | 8 | 9 | 10) && !state.permits_legacy_protocol_fixture() {
+    if !matches!(format, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12)
+        && !state.permits_legacy_protocol_fixture()
+    {
         return Err(Error::InvalidPackage);
     }
-    let candidate = (if matches!(format, 5 | 6 | 7 | 8 | 9 | 10) && old_content.version == 10 {
-        open_import::build_for_schema9(
-            &mut archive,
-            staging.path(),
-            &AtomicBool::new(false),
-            format,
-        )
-    } else if matches!(format, 5 | 6 | 7 | 8 | 9) && old_content.version == 9 {
-        open_import::build_for_schema8(
-            &mut archive,
-            staging.path(),
-            &AtomicBool::new(false),
-            format,
-        )
-    } else if matches!(format, 5 | 6 | 7 | 8) && old_content.version == 8 {
-        open_import::build_for_schema7(
-            &mut archive,
-            staging.path(),
-            &AtomicBool::new(false),
-            format,
-        )
-    } else if matches!(format, 5 | 6 | 7) && old_content.version == 7 {
-        open_import::build_for_schema6(
-            &mut archive,
-            staging.path(),
-            &AtomicBool::new(false),
-            format,
-        )
-    } else if matches!(format, 5 | 6) && old_content.version == 6 {
-        open_import::build_for_schema5(
-            &mut archive,
-            staging.path(),
-            &AtomicBool::new(false),
-            format,
-        )
-    } else if format == 6 {
-        open_import::build_v6(&mut archive, staging.path(), &AtomicBool::new(false))
-    } else if format == 5 {
-        open_import::build_v5(&mut archive, staging.path(), &AtomicBool::new(false))
-    } else if format == 4 {
-        open_import::build_v4(&mut archive, staging.path(), &AtomicBool::new(false))
-    } else if format == 3 {
-        open_import::build_v3(&mut archive, staging.path(), &AtomicBool::new(false))
-    } else if old_content.version == 2 {
-        open_import::build_current(&mut archive, staging.path(), &AtomicBool::new(false))
-    } else {
-        open_import::build(&mut archive, staging.path(), &AtomicBool::new(false))
-    })
-    .map_err(|_| Error::InvalidPackage)?;
+    let candidate =
+        (if matches!(format, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) && old_content.version == 12 {
+            open_import::build_for_schema11(
+                &mut archive,
+                staging.path(),
+                &AtomicBool::new(false),
+                format,
+            )
+        } else if matches!(format, 5 | 6 | 7 | 8 | 9 | 10 | 11) && old_content.version == 11 {
+            open_import::build_for_schema10(
+                &mut archive,
+                staging.path(),
+                &AtomicBool::new(false),
+                format,
+            )
+        } else if matches!(format, 5 | 6 | 7 | 8 | 9 | 10) && old_content.version == 10 {
+            open_import::build_for_schema9(
+                &mut archive,
+                staging.path(),
+                &AtomicBool::new(false),
+                format,
+            )
+        } else if matches!(format, 5 | 6 | 7 | 8 | 9) && old_content.version == 9 {
+            open_import::build_for_schema8(
+                &mut archive,
+                staging.path(),
+                &AtomicBool::new(false),
+                format,
+            )
+        } else if matches!(format, 5 | 6 | 7 | 8) && old_content.version == 8 {
+            open_import::build_for_schema7(
+                &mut archive,
+                staging.path(),
+                &AtomicBool::new(false),
+                format,
+            )
+        } else if matches!(format, 5 | 6 | 7) && old_content.version == 7 {
+            open_import::build_for_schema6(
+                &mut archive,
+                staging.path(),
+                &AtomicBool::new(false),
+                format,
+            )
+        } else if matches!(format, 5 | 6) && old_content.version == 6 {
+            open_import::build_for_schema5(
+                &mut archive,
+                staging.path(),
+                &AtomicBool::new(false),
+                format,
+            )
+        } else if format == 6 {
+            open_import::build_v6(&mut archive, staging.path(), &AtomicBool::new(false))
+        } else if format == 5 {
+            open_import::build_v5(&mut archive, staging.path(), &AtomicBool::new(false))
+        } else if format == 4 {
+            open_import::build_v4(&mut archive, staging.path(), &AtomicBool::new(false))
+        } else if format == 3 {
+            open_import::build_v3(&mut archive, staging.path(), &AtomicBool::new(false))
+        } else if old_content.version == 2 {
+            open_import::build_current(&mut archive, staging.path(), &AtomicBool::new(false))
+        } else {
+            open_import::build(&mut archive, staging.path(), &AtomicBool::new(false))
+        })
+        .map_err(|_| Error::InvalidPackage)?;
     let entry_count = candidate.entry_count;
     let new_content = candidate.proof().clone();
     // Keep unsupported cross-schema replacement explicit; never reinterpret a
@@ -315,7 +336,43 @@ fn activate(state: &DatabaseState, mut choice: Choice) -> Result<Success, Error>
     if digest(&mut choice.original)? != choice.hash || digest(&mut choice.archive)? != choice.hash {
         return Err(Error::Changed);
     }
-    if choice.new_content.version == 10 {
+    if choice.new_content.version == 12 {
+        if crate::backup::restore_context::activation::journal_proof(&active)
+            .map_err(|_| Error::Failed)?
+            != choice.old_content
+        {
+            return Err(Error::Changed);
+        }
+        let activated = crate::backup::restore_context::activation::importing::activate_schema11(
+            &maintenance,
+            &mut choice.archive,
+            &choice.old_content,
+            &choice.new_content,
+            Arc::new(AtomicBool::new(false)),
+            choice.source_format,
+        )
+        .map_err(|_| Error::Failed)?;
+        drop(activated);
+        return Ok(Success::Activated);
+    } else if choice.new_content.version == 11 {
+        if crate::backup::restore_context::activation::journal_proof(&active)
+            .map_err(|_| Error::Failed)?
+            != choice.old_content
+        {
+            return Err(Error::Changed);
+        }
+        let activated = crate::backup::restore_context::activation::importing::activate_schema10(
+            &maintenance,
+            &mut choice.archive,
+            &choice.old_content,
+            &choice.new_content,
+            Arc::new(AtomicBool::new(false)),
+            choice.source_format,
+        )
+        .map_err(|_| Error::Failed)?;
+        drop(activated);
+        return Ok(Success::Activated);
+    } else if choice.new_content.version == 10 {
         if crate::backup::restore_context::activation::journal_proof(&active)
             .map_err(|_| Error::Failed)?
             != choice.old_content

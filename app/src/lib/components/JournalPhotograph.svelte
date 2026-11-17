@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PhotoThumbnail from "$lib/components/PhotoThumbnail.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { readPhotograph, photographSource, type PhotographAsset, type PhotographAttrs } from "$lib/journal-photographs";
   import * as m from "$lib/paraglide/messages.js";
@@ -20,7 +21,7 @@
 
 <figure data-placement={attrs.placement} data-size={attrs.size} style:--photo-natural-width={asset ? `${asset.width}px` : undefined} class="mno-photograph" aria-label={m.photo_photograph({}, { locale })}>
   {#if asset}
-    <img src={photographSource(asset)} width={asset.width} height={asset.height} alt={attrs.alt ?? ""} />
+    <PhotoThumbnail item={{key:`journal:${attrs.nodeId}`,src:photographSource(asset),alt:attrs.alt??"",caption:attrs.caption??"",description:"",width:asset.width,height:asset.height}} {locale} journal/>
   {:else}
     <span role="status">{failed ? m.photo_unavailable({}, { locale }) : m.photo_loading({}, { locale })}</span>
   {/if}

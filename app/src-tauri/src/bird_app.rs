@@ -8,6 +8,10 @@ use tauri::State;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RowInput {
+    #[serde(default)]
+    row_id: Option<String>,
+    #[serde(default)]
+    photo: Option<crate::bird_photos::Photo>,
     species_id: String,
     taxonomy_version: String,
     count: String,
@@ -17,6 +21,8 @@ pub(crate) struct RowInput {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RowView {
+    row_id: Option<String>,
+    photo: Option<crate::bird_photos::Photo>,
     species_id: String,
     taxonomy_version: String,
     count: String,
@@ -48,7 +54,7 @@ fn available(state: &DatabaseState) -> bool {
         let path = state.ready_database_path()?;
         let _permit = state.operation(None)?;
         let db = crate::database::open_existing(&path)?;
-        crate::database::bird_requests::validate_schema(&db).map_err(|e| e.to_string())
+        crate::database::bird_captions::validate_schema(&db).map_err(|e| e.to_string())
     })()
     .unwrap_or(false)
 }
@@ -188,6 +194,8 @@ fn validate_rows(
                 return Err("bird_count_invalid".into());
             }
             Ok(crate::bird_observations::SpeciesCount {
+                row_id: r.row_id,
+                photo: r.photo,
                 avibase_id: r.species_id,
                 taxonomy_version: r.taxonomy_version,
                 count,
@@ -201,6 +209,8 @@ mod tests {
     use super::*;
     fn row(id: &str, count: &str, version: &str) -> RowInput {
         RowInput {
+            row_id: None,
+            photo: None,
             species_id: id.into(),
             taxonomy_version: version.into(),
             count: count.into(),
@@ -422,9 +432,11 @@ mod tests {
         let state = DatabaseState::default();
         let path = state.initialize_startup(&root).unwrap();
         let mut request = input();
-        let expected: serde_json::Value =
+        let mut expected: serde_json::Value =
             serde_json::from_str(include_str!("../../tests/fixtures/bird-crow-view.json")).unwrap();
         request.rows = vec![RowInput {
+            row_id: None,
+            photo: None,
             species_id: expected["speciesId"].as_str().unwrap().into(),
             taxonomy_version: expected["taxonomyVersion"].as_str().unwrap().into(),
             count: expected["count"].as_str().unwrap().into(),
@@ -447,6 +459,11 @@ mod tests {
         )
         .unwrap();
         let id = create_in_session(&state, &SearchState::default(), request).unwrap();
+        expected["rowId"] = serde_json::to_value(
+            &read_view(&state, 1, entry.as_deref(), &id).unwrap().rows[0].row_id,
+        )
+        .unwrap();
+        expected["photo"] = serde_json::Value::Null;
         assert_eq!(
             serde_json::to_value(&read_view(&state, 1, entry.as_deref(), &id).unwrap().rows[0])
                 .unwrap(),
@@ -565,6 +582,8 @@ fn read_view(
                 None
             };
             RowView {
+                row_id: r.row_id,
+                photo: r.photo,
                 species_id: r.avibase_id.clone(),
                 taxonomy_version: r.taxonomy_version,
                 count: r.count.to_string(),
@@ -679,6 +698,8 @@ fn update_in_session(
                 return Err("bird_count_invalid".to_owned());
             }
             Ok(crate::bird_observations::SpeciesCount {
+                row_id: r.row_id,
+                photo: r.photo,
                 avibase_id: r.species_id,
                 taxonomy_version: r.taxonomy_version,
                 count,
@@ -1003,7 +1024,7 @@ mod overview_tests {
         db.close().unwrap();
     }
     #[test]
-    fn standalone_and_multi_linked_lists_are_in_existing_format10_archives() {
+    fn standalone_and_multi_linked_lists_are_in_current_archives() {
         let (temp, state, path, search) = fixture();
         let unlinked = create(&state, &search);
         let linked = create(&state, &search);
@@ -1013,7 +1034,7 @@ mod overview_tests {
             birds::set_link(&state, &search, 1, &linked, e, true).unwrap();
         }
         let mut db = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
-        let proof = crate::storage_content::verify_v10(&mut db, &AtomicBool::new(false)).unwrap();
+        let proof = crate::storage_content::verify_v12(&mut db, &AtomicBool::new(false)).unwrap();
         let backup = temp.path().join("visits.mno-backup");
         crate::backup::create_backup(&db, &backup, crate::backup::BackupKind::Manual).unwrap();
         let export = temp.path().join("visits.mno-export");
@@ -1023,7 +1044,7 @@ mod overview_tests {
             crate::backup::restore::prepare_candidate(&backup, Arc::new(AtomicBool::new(false)))
                 .unwrap();
         assert_eq!(
-            crate::storage_content::verified_snapshot_v10(
+            crate::storage_content::verified_snapshot_v12(
                 candidate.source().unwrap(),
                 &AtomicBool::new(false)
             )
@@ -1045,16 +1066,16 @@ mod overview_tests {
             );
         }
         drop(candidate);
-        let imported = crate::open_import::build_for_schema9(
+        let imported = crate::open_import::build_for_schema11(
             &mut fs::File::open(export).unwrap(),
             temp.path(),
             &AtomicBool::new(false),
-            10,
+            12,
         )
         .unwrap();
         assert_eq!(imported.proof().sha256, proof.sha256);
         let mut db = crate::database::open_existing(imported.path()).unwrap();
-        crate::storage_content::verify_v10(&mut db, &AtomicBool::new(false)).unwrap();
+        crate::storage_content::verify_v12(&mut db, &AtomicBool::new(false)).unwrap();
         db.close().unwrap();
     }
     #[test]
@@ -1158,7 +1179,7 @@ fn journal_targets(
     let _permit = state.operation(Some(generation))?;
     let mut db = crate::database::open_existing(&path)?;
     let tx = db.transaction().map_err(|e| e.to_string())?;
-    crate::storage_content::snapshot_v10(&tx, &std::sync::atomic::AtomicBool::new(false))
+    crate::storage_content::snapshot_v12(&tx, &std::sync::atomic::AtomicBool::new(false))
         .map_err(|_| "bird_list_invalid")?;
     if !tx
         .query_row(
@@ -1194,5 +1215,56 @@ pub(crate) fn read_bird_journal_entries(
     {
         let _ = (state, generation, id);
         Err("bird_platform_unsupported".into())
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod photo_contract_tests {
+    use super::*;
+    #[test]
+    fn photo_creation_command_json_saves_and_reopens_owned_preview() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let state = DatabaseState::default();
+        let path = state
+            .initialize_startup(&temp.path().join("journal"))
+            .unwrap();
+        let db = crate::database::open_existing(&path).unwrap();
+        let place = "11111111-1111-4111-8111-111111111111";
+        db.execute(
+            "INSERT INTO places VALUES(?1,'Test place',59,18,1)",
+            [place],
+        )
+        .unwrap();
+        db.close().unwrap();
+        let original = temp.path().join("photo.png");
+        image::RgbImage::from_pixel(5, 4, image::Rgb([20, 40, 60]))
+            .save(&original)
+            .unwrap();
+        let bytes = std::fs::read(&original).unwrap();
+        let row_id = uuid::Uuid::new_v4().to_string();
+        let mut photo = crate::bird_photos::Photo::from_asset(
+            crate::photographs::prepare(&original, row_id.clone()).unwrap(),
+        );
+        photo.caption = Some("A caption, not a row comment".into());
+        let search = SearchState::default();
+        let request = crate::bird_observations::reserve(&state, &search, 1).unwrap();
+        let json = serde_json::json!({"generation":1,"requestId":request,"entryId":null,"visitDate":"2026-11-17","placeId":place,"visitStart":"08:07","visitEnd":null,"rows":[{"speciesId":"avibase-FBBBA943","taxonomyVersion":crate::species_registry::VERSION,"count":"4","comment":"Keep comment","rowId":row_id,"photo":photo}]});
+        let id = create_in_session(
+            &state,
+            &search,
+            serde_json::from_value(json.clone()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(id, request);
+        let view = read_view(&state, 1, None, &id).unwrap();
+        assert_eq!(view.rows[0].row_id.as_ref(), Some(&row_id));
+        assert_eq!(view.rows[0].photo.as_ref(), Some(&photo));
+        assert_eq!(view.rows[0].comment.as_deref(), Some("Keep comment"));
+        assert_eq!(view.rows[0].count, "4");
+        assert_eq!(
+            create_in_session(&state, &search, serde_json::from_value(json).unwrap()).unwrap(),
+            id
+        );
+        assert_eq!(std::fs::read(original).unwrap(), bytes);
     }
 }
