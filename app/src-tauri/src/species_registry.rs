@@ -128,6 +128,43 @@ pub(crate) fn search(query: &str) -> Vec<Species> {
         .map(|(_, species)| species)
         .collect()
 }
+
+// Paste recognition accepts exact labels only, without search's result limit.
+// Referral-only matches retain their explanation and require explicit UI choice.
+pub(crate) fn exact(query: &str) -> Vec<Species> {
+    exact_in(&DISPLAY_DATA, &SUPPLEMENTS, query)
+}
+fn exact_in(data: &[Species], supplements: &[NameSupplement], query: &str) -> Vec<Species> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() || q.len() > 200 {
+        return Vec::new();
+    }
+    data.iter()
+        .filter_map(|species| {
+            let canonical = [
+                Some(species.english.as_str()),
+                species.swedish.as_deref(),
+                Some(species.scientific.as_str()),
+            ]
+            .into_iter()
+            .flatten()
+            .any(|name| name.to_lowercase() == q);
+            let referral = supplements
+                .iter()
+                .filter(|a| a.id == species.id)
+                .flat_map(|a| a.referrals.iter())
+                .find(|name| name.to_lowercase() == q);
+            if !canonical && referral.is_none() {
+                return None;
+            }
+            let mut found = species.clone();
+            if !canonical {
+                found.referral = referral.cloned();
+            }
+            Some(found)
+        })
+        .collect()
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,6 +277,87 @@ mod crow_tests {
                 .unwrap()
                 .swedish,
             None
+        );
+    }
+}
+
+#[cfg(test)]
+mod paste_tests {
+    use super::*;
+    #[test]
+    fn real_catalog_exact_paste_names_and_referrals() {
+        for (swedish, scientific) in [
+            ("Talgoxe", "Parus major"),
+            ("Blåmes", "Cyanistes caeruleus"),
+            ("Nötväcka", "Sitta europaea"),
+            ("Skata", "Pica pica"),
+        ] {
+            let species = exact(scientific).remove(0);
+            for name in [swedish, scientific, &species.english] {
+                for query in [
+                    name.to_lowercase(),
+                    name.to_uppercase(),
+                    format!(" {name} "),
+                ] {
+                    let hits = exact(&query);
+                    assert_eq!(hits.len(), 1, "{query}");
+                    assert_eq!(hits[0].id, species.id);
+                    assert!(hits[0].referral.is_none());
+                }
+            }
+        }
+        for query in ["Talgox", "Parus", "Not a bird", "", "Great Ti"] {
+            assert!(exact(query).is_empty(), "{query}");
+        }
+        let referral = exact("GRÅKRÅKA");
+        assert_eq!(referral.len(), 1);
+        assert_eq!(referral[0].scientific, "Corvus corone");
+        assert!(referral[0].referral.is_some());
+        assert_eq!(exact("Kråka")[0].id, referral[0].id);
+        assert!(exact("Kråka")[0].referral.is_none());
+    }
+    #[test]
+    fn ambiguous_exact_names_are_not_limited_or_guessed() {
+        let data: Vec<_> = (0..35)
+            .map(|i| Species {
+                id: format!("concept-{i}"),
+                english: "Shared name".into(),
+                scientific: format!("Genus species{i}"),
+                swedish: None,
+                referral: None,
+            })
+            .collect();
+        assert_eq!(exact_in(&data, &[], "SHARED NAME").len(), 35);
+        assert!(exact_in(&data, &[], "Shared").is_empty());
+    }
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn paste_command_contract_preserves_order_unknowns_and_limits() {
+        let hits = crate::bird_app::match_bird_paste_names(vec![
+            "Talgoxe".into(),
+            "unknown".into(),
+            "CYANISTES CAERULEUS".into(),
+        ])
+        .unwrap();
+        let json = serde_json::to_value(&hits).unwrap();
+        assert_eq!(json[0][0]["scientific"], "Parus major");
+        assert!(hits[1].is_empty());
+        assert_eq!(json[2][0]["swedish"], "blåmes");
+        assert_eq!(
+            crate::bird_app::match_bird_paste_names(vec!["a".repeat(201)]).unwrap_err(),
+            "bird_paste_limit"
+        );
+        assert_eq!(
+            crate::bird_app::match_bird_paste_names(vec!["a".into(); 201]).unwrap_err(),
+            "bird_paste_limit"
+        );
+    }
+    #[test]
+    #[cfg(not(target_os = "macos"))]
+    fn paste_command_preserves_platform_gate() {
+        assert_eq!(
+            crate::bird_app::match_bird_paste_names(vec!["Talgoxe".into()]).unwrap_err(),
+            "bird_platform_unsupported"
         );
     }
 }

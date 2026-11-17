@@ -10,8 +10,11 @@ export const birdsUrl=url(resolve(transpile(source('../src/lib/birds.ts')),{'$li
 export const birds=await import(birdsUrl);
 export const namesUrl=url(resolve(transpile(source('../src/lib/bird-names.ts')),{}));
 export const names=await import(namesUrl);
+export const pasteUrl=url(resolve(transpile(source('../src/lib/bird-paste.ts')),{'$lib/birds':birdsUrl}));
+export const paste=await import(pasteUrl);
 const messages=new URL('../src/lib/paraglide/messages.js',import.meta.url).href;
 function componentModule(text,aliases){const compiled=compile(text,{generate:'server'});if(compiled.warnings.length)throw Error(JSON.stringify(compiled.warnings));return url(resolve(compiled.js.code,aliases));}
+export function pasteReviewUrl(text=source('../src/lib/components/BirdPasteReview.svelte')){return componentModule(text,{'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/bird-paste':pasteUrl,'$lib/paraglide/messages.js':messages});}
 export const visitPreviewUrl=componentModule(source('../src/lib/components/BirdVisitPreview.svelte'),{'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/paraglide/messages.js':messages});
 export const linkPickerUrl=componentModule(source('../src/lib/components/BirdLinkPicker.svelte'),{'$lib/birds':birdsUrl,'$lib/components/BirdVisitPreview.svelte':visitPreviewUrl,'$lib/paraglide/messages.js':messages});
 export function previewUrl(seeded){const compiled=compile(seeded??source('../src/lib/components/BirdJournalLists.svelte'),{generate:'server',filename:'BirdJournalLists.svelte'});if(compiled.warnings.length)throw Error(JSON.stringify(compiled.warnings));return url(resolve(compiled.js.code,{'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/components/BirdVisitPreview.svelte':visitPreviewUrl,'$lib/components/BirdLinkPicker.svelte':linkPickerUrl,'$lib/components/DeleteEntryDialog.svelte':componentModule(source('../src/lib/components/DeleteEntryDialog.svelte'),{'$lib/paraglide/messages.js':messages}),'$lib/paraglide/messages.js':messages}));}
@@ -30,7 +33,7 @@ export function creationUrl(text, locale='sv',entryId='origin') {
   '$lib/place-map.svelte':url('export const PLACE_MAP="map";'),
   '$app/state':url(`export const page={params:{id:${JSON.stringify(entryId)}}};`),
   '$app/navigation':url('export function beforeNavigate(){};export async function goto(){}'),
-  '$lib/components/VisitTimePicker.svelte':timePickerUrl,'$lib/components/DatePicker.svelte':picker,'$lib/components/BirdAttribution.svelte':attribution
+  '$lib/components/BirdPasteReview.svelte':pasteReviewUrl(),'$lib/components/VisitTimePicker.svelte':timePickerUrl,'$lib/components/DatePicker.svelte':picker,'$lib/components/BirdAttribution.svelte':attribution
  });
 }
 

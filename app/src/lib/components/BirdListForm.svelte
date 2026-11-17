@@ -10,6 +10,7 @@
  import {PLACE_MAP,type PlaceMapController} from "$lib/place-map.svelte";
  import {entryHref,birdHref,localVisitDate,speciesLabel,validDate,validTime,validBirdCount,validBirdComment,canSaveBirdList,saveBirdList,reserveBirdRequest,confirmSavedBirdList,updateBirdList,type BirdList,type Species,type BirdRow} from "$lib/birds";
  import {DEFAULT_BIRD_NAMES,loadBirdNamePreferences,capitalizeCommonName,type BirdNamePreferences} from "$lib/bird-names";
+ import BirdPasteReview from "$lib/components/BirdPasteReview.svelte";
  import BirdSpeciesName from "$lib/components/BirdSpeciesName.svelte";
  let namePreferences=$state<BirdNamePreferences>({...DEFAULT_BIRD_NAMES});
  import VisitTimePicker from "$lib/components/VisitTimePicker.svelte";
@@ -19,6 +20,7 @@
  let {editId=null}:{editId?:string|null}=$props();
  let expectedToken=$state("");
  const entryId=page.params.id??null;const origin=$derived(editId?birdHref(entryId,editId):entryId?entryHref(entryId):"/observations");const map=getContext<PlaceMapController>(PLACE_MAP);
+ let pasteOpen=$state(false);
  let initialized=$state(false);
  let proposedDate=$state(false),proposedPlace=$state(false);
  let searchInput=$state<HTMLInputElement|undefined>(undefined);
@@ -54,8 +56,8 @@
    baseline=JSON.stringify([date,place?.id,start,end,rows]);
    initialized=true;
   }catch{if(!disposed){generation=null;error="load";}}})();
-  void getCurrentWindow().onCloseRequested(event=>{if(saved||(!dirty&&!busy))return;event.preventDefault();if(!busy){pendingClose=true;void askLeave(null);}}).then(stop=>{if(disposed)stop();else unlisten=stop;});
-  const unload=(event:BeforeUnloadEvent)=>{if((dirty||busy)&&!saved){event.preventDefault();event.returnValue="";}};window.addEventListener("beforeunload",unload);
+  void getCurrentWindow().onCloseRequested(event=>{if(saved||(!dirty&&!busy&&!pasteOpen))return;event.preventDefault();if(!busy){pendingClose=true;void askLeave(null);}}).then(stop=>{if(disposed)stop();else unlisten=stop;});
+  const unload=(event:BeforeUnloadEvent)=>{if((dirty||busy||pasteOpen)&&!saved){event.preventDefault();event.returnValue="";}};window.addEventListener("beforeunload",unload);
   return()=>{disposed=true;cancelMap?.();unlisten?.();window.removeEventListener("beforeunload",unload);};
  });
  $effect(()=>{
@@ -71,12 +73,18 @@
   return()=>{stopped=true;clearTimeout(timer);};
  });
  $effect(()=>{if(baseline&&JSON.stringify([date,place?.id,start,end,rows])!==baseline)dirty=true;});
- beforeNavigate(nav=>{if(saved||(!dirty&&!busy))return;nav.cancel();if(!busy)void askLeave(nav.to?.url.href??origin);});
+ beforeNavigate(nav=>{if(saved||(!dirty&&!busy&&!pasteOpen))return;nav.cancel();if(!busy)void askLeave(nav.to?.url.href??origin);});
  function mountLeaveDialog(node:HTMLDialogElement){node.showModal();return {destroy(){node.close();}};}
  async function askLeave(url:string|null){leaveUrl=url;leave=true;await tick();stayButton?.focus();}
  function cancel(){if(busy)return;if(dirty)void askLeave(origin);else {saved=true;void goto(origin);}}
  async function discard(){saved=true;leave=false;if(pendingClose){await invoke("close_journal_window");}else await goto(leaveUrl??origin);}
  function choosePlace(){if(busy||generation===null)return;cancelMap=map.open({mode:"observation",generation,center:place?.latitude!==null&&place?.longitude!==null&&place?{latitude:place.latitude!,longitude:place.longitude!}:null,selectedId:place?.id,select:async p=>{if(p.latitude===null||p.longitude===null)return false;place=p;dirty=true;return true;}});}
+ function openPaste(){if(initialized&&available===true&&generation!==null&&!busy&&!saveUncertain&&savedListId===null)pasteOpen=true;}
+ function applyPaste(next:BirdRow[],previous:string):boolean{
+  if(disposed||busy||saveUncertain||savedListId!==null||generation===null||available!==true||previous!==JSON.stringify(rows))return false;
+  rows=next;dirty=true;pasteOpen=false;
+  void tick().then(()=>{if(!disposed)focusSearch();});return true;
+ }
  function focusSearch(){searchInput?.focus();}
  async function add(species:Species){
   const existing=rows.findIndex(row=>row.id===species.id);
@@ -112,7 +120,7 @@
   if(event.key==="Enter"){event.preventDefault();if(validBirdCount(count))focusSearch();}
  }
  async function save(){
-  if((editId&&saveUncertain)||available!==true||savedListId!==null||(error==="request"||error==="retired"||error==="legacy")||!valid||generation===null||!place||busy)return;
+  if(pasteOpen||(editId&&saveUncertain)||available!==true||savedListId!==null||(error==="request"||error==="retired"||error==="legacy")||!valid||generation===null||!place||busy)return;
   busy=true;error="";
   try{
    if(editId){
@@ -196,6 +204,7 @@
     </ol>
    {/if}
    <div class="add-species">
+    <button class="paste-trigger" type="button" onclick={openPaste}>{m.bird_paste_title({}, {locale:language.current})}</button>
     <label for="species-search">{m.bird_search({}, {locale:language.current})}</label>
     <input id="species-search" type="search" bind:this={searchInput} bind:value={query} autocomplete="off" aria-controls={query.trim()?'species-results':undefined} aria-describedby={rows.length?"bird-search-help":"bird-search-help bird-species-required"} oninput={()=>{results=[];searchError=false;}} onkeydown={searchKeydown}/>
     <small id="bird-search-help">{m.bird_search_help({}, {locale:language.current})}</small>
@@ -216,6 +225,8 @@
  {/if}
 </main>
 {#if leave}<dialog class="leave-dialog" use:mountLeaveDialog aria-labelledby="bird-leave-title" oncancel={event=>{event.preventDefault();leave=false;pendingClose=false;}}><h2 id="bird-leave-title">{m.bird_discard_title({}, {locale:language.current})}</h2><p>{saveUncertain?m.bird_uncertain_leave({}, {locale:language.current}):m.bird_discard_text({}, {locale:language.current})}</p><button bind:this={stayButton} onclick={()=>{leave=false;pendingClose=false;}}>{m.bird_stay({}, {locale:language.current})}</button><button onclick={()=>void discard()}>{m.bird_discard({}, {locale:language.current})}</button></dialog>{/if}
+
+{#if pasteOpen}<BirdPasteReview existingRows={rows} locale={language.current} onapply={applyPaste} oncancel={()=>pasteOpen=false}/>{/if}
 
 <style>
  .bird-page { max-width:824px; margin:0 auto; padding:24px 32px 60px; color:#343530; font-family:Georgia,"Times New Roman",serif; box-sizing:border-box; }
@@ -247,6 +258,7 @@
  .remove-row { min-width:36px; min-height:44px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--text-muted,#686d63); font:22px system-ui,sans-serif; }
  .remove-row:hover { background:#eeede7; color:#9a403b; }
  .row-error { grid-column:1/-1; margin-top:5px; }
+ .paste-trigger{display:block;min-height:38px;margin:0 0 12px;padding:4px 0;border:0;background:transparent;color:var(--accent,#435b47);text-decoration:underline;font:12px system-ui,sans-serif}
  .add-species label { display:block; margin-bottom:7px; font:13px system-ui,sans-serif; color:#5d625a; }
  #species-search { width:100%; }
  #bird-search-help { margin-top:6px; }
