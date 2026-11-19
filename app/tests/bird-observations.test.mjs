@@ -616,3 +616,10 @@ test('paste apply and cancel preserve create/edit drafts until normal guarded Sa
   await h.run('save()');assert.equal(h.calls.length,1);
  }
 });
+
+test('pending photo work blocks normal save and cancelling an attachment edit never writes',async()=>{
+ for(const editId of [null,'existing']){
+  const h=formHarness({editId});ready(h);h.run('photoPending=1');await h.run('save()');assert.equal(h.calls.length,0);h.run('photoPending=0');
+  h.run('rows[0].rowId="stored-row";rows[0].photo={asset_id:"stored-photo",preview:"AQID",caption:"Stored caption"};const storedPhoto=JSON.stringify(rows[0].photo);rows[0].photo=null;dirty=true;cancel()');assert.equal(h.run('leave'),true);assert.equal(h.calls.length,0);await h.run('discard()');assert.equal(h.calls.length,0);
+ }
+});

@@ -3,8 +3,9 @@ import { createJournalReader } from "$lib/journal-data";
 import type { Place } from "$lib/places";
 export const BIRD_CATALOG_VERSION = "AviList v2026";
 export type Species = { id: string; english: string; swedish: string | null; scientific: string; referral?: string };
-export type BirdRow = Species & { count: string; taxonomyVersion?:string; comment?:string; commentOpen?:boolean };
-export type ListRow = Omit<Species, "id"> & { speciesId: string; taxonomyVersion: string; count: string; comment:string|null };
+export type BirdPhoto={caption?:string|null;row_id:string;asset_id:string;original_path:string;mime:string;width:number;height:number;preview:string};
+export type BirdRow = Species & { count: string; rowId?:string;photo?:BirdPhoto|null;taxonomyVersion?:string; comment?:string; commentOpen?:boolean };
+export type ListRow = Omit<Species, "id"> & { speciesId: string;rowId?:string|null;photo?:BirdPhoto|null; taxonomyVersion: string; count: string; comment:string|null };
 export type BirdList = { id: string; editToken:string; visitDate: string; visitStart: string | null; visitEnd: string | null; place: Place; rows: ListRow[] };
 export function speciesLabel(s: Pick<Species,"english"|"swedish"|"scientific">, locale: "sv"|"en"): string {
   return locale === "sv" ? s.swedish ?? `${s.english} · ${s.scientific}` : s.english;
@@ -13,13 +14,14 @@ export function validDate(s: string): boolean { if (!/^\d{4}-\d{2}-\d{2}$/.test(
 export function validTime(s:string):boolean{return !s||/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(s);}
 export function validBirdCount(count:string):boolean{return /^[1-9]\d{0,18}$/.test(count)&&BigInt(count)<=9223372036854775807n;}
 export function validBirdComment(value:string|undefined):boolean{return value===undefined||(!value.includes("\0")&&new TextEncoder().encode(value).length<=8192);}
+export function validBirdPhotoCaption(value:string|null|undefined):boolean{return value==null||(!value.includes("\0")&&value.length<=4000&&new TextEncoder().encode(value).length<=16384);}
 export function canSaveBirdList(date:string,place:Place|null,rows:BirdRow[],start:string,end:string):boolean {
- return validDate(date)&&!!place&&place.latitude!==null&&place.longitude!==null&&Number.isFinite(place.latitude)&&Number.isFinite(place.longitude)&&Math.abs(place.latitude)<=90&&Math.abs(place.longitude)<=180&&validTime(start)&&validTime(end)&&rows.length>0&&rows.every(r=>validBirdCount(r.count)&&validBirdComment(r.comment));
+ return validDate(date)&&!!place&&place.latitude!==null&&place.longitude!==null&&Number.isFinite(place.latitude)&&Number.isFinite(place.longitude)&&Math.abs(place.latitude)<=90&&Math.abs(place.longitude)<=180&&validTime(start)&&validTime(end)&&rows.length>0&&rows.every(r=>validBirdCount(r.count)&&validBirdComment(r.comment)&&validBirdPhotoCaption(r.photo?.caption));
 }
 export function entryHref(id:string):string{return `/journal/entries/${encodeURIComponent(id)}`;}
 export function birdHref(entry:string|null,id:string):string{return entry?`${entryHref(entry)}/birds/${encodeURIComponent(id)}`:`/observations/${encodeURIComponent(id)}`;}
 export async function saveBirdList(generation:number,entryId:string|null,date:string,place:Place,rows:BirdRow[],start:string,end:string,requestId:string):Promise<string>{
- const id=await invoke<string>("create_journal_bird_list",{generation,requestId,entryId,visitDate:date,placeId:place.id,rows:rows.map(r=>({speciesId:r.id,taxonomyVersion:BIRD_CATALOG_VERSION,count:r.count,comment:r.comment||null})),visitStart:start||null,visitEnd:end||null});
+ const id=await invoke<string>("create_journal_bird_list",{generation,requestId,entryId,visitDate:date,placeId:place.id,rows:rows.map(r=>({speciesId:r.id,taxonomyVersion:BIRD_CATALOG_VERSION,count:r.count,comment:r.comment||null,...(r.rowId?{rowId:r.rowId}:{}),...(r.photo?{photo:r.photo}:{})})),visitStart:start||null,visitEnd:end||null});
  if(id!==requestId)throw Error("bird_save_response_invalid");
  return id;
 }
@@ -32,7 +34,7 @@ export async function confirmSavedBirdList(generation:number,entryId:string|null
 }
 
 export async function updateBirdList(generation:number,entryId:string|null,id:string,expectedToken:string,date:string,place:Place,rows:BirdRow[],start:string,end:string):Promise<string>{
- const token=await invoke<string>("update_journal_bird_list",{generation,entryId,id,expectedToken,visitDate:date,placeId:place.id,rows:rows.map(r=>({speciesId:r.id,taxonomyVersion:r.taxonomyVersion??BIRD_CATALOG_VERSION,count:r.count,comment:r.comment||null})),visitStart:start||null,visitEnd:end||null});
+ const token=await invoke<string>("update_journal_bird_list",{generation,entryId,id,expectedToken,visitDate:date,placeId:place.id,rows:rows.map(r=>({speciesId:r.id,taxonomyVersion:r.taxonomyVersion??BIRD_CATALOG_VERSION,count:r.count,comment:r.comment||null,...(r.rowId?{rowId:r.rowId}:{}),...(r.photo?{photo:r.photo}:{})})),visitStart:start||null,visitEnd:end||null});
  if(typeof token!=="string"||!/^[a-f0-9]{64}$/.test(token))throw Error("bird_edit_response_invalid");
  return token;
 }

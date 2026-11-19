@@ -1,4 +1,4 @@
-import { birdPreviewUrl } from "./bird-test-modules.mjs";
+import { birdPreviewUrl, thumbnailUrl, journalScopeUrl } from "./bird-test-modules.mjs";
 import { imageUrl, photographsUrl } from "./photo-test-modules.mjs";
 import { weatherUrl, tileUrl } from "./weather-test-modules.mjs";
 import assert from "node:assert/strict";
@@ -30,6 +30,8 @@ function componentUrl(path, local = {}, contents = source(path)) {
   assert.equal(compiled.warnings.length, 0);
   return moduleUrl(resolveImports(compiled.js.code, {
     "$lib/journal-reading": readingUrl,
+    "$lib/components/PhotoThumbnail.svelte":thumbnailUrl,
+    "$lib/components/JournalPhotoScope.svelte":journalScopeUrl,
     "$lib/paraglide/messages.js": messagesUrl,
     ...local,
   }));

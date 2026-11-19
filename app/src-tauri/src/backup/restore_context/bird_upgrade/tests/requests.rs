@@ -5,7 +5,7 @@ fn current(root: &Path) -> (DatabaseState, PathBuf, String) {
     let bytes = fs::read(&path).unwrap();
     drop(old);
     let state = DatabaseState::default();
-    state.initialize_startup(root).unwrap();
+    state.initialize_schema9_startup(root).unwrap();
     assert!(
         fs::read_dir(root.join("backups/bird-schema-upgrade"))
             .unwrap()
@@ -180,7 +180,7 @@ fn receipt_migration_interruption_retry_and_invalid_candidate_preserve_schema8_s
             assert_eq!(fs::read(&path).unwrap(), bytes);
         }
         let state = DatabaseState::default();
-        state.initialize_startup(&root).unwrap();
+        state.initialize_schema9_startup(&root).unwrap();
         let mut db = crate::database::open_existing(&path).unwrap();
         assert!(crate::storage_content::verify_v10(&mut db, &AtomicBool::new(false)).is_ok());
         close(db);
@@ -395,6 +395,8 @@ fn receipts_activation_child() {
         .unwrap();
     close(db);
     let rows = vec![birds::SpeciesCount {
+        row_id: None,
+        photo: None,
         avibase_id: "avibase-E15BC0CB".into(),
         taxonomy_version: crate::species_registry::VERSION.into(),
         count: 6,

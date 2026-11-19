@@ -166,6 +166,20 @@ fn create_with_publication(
                 )
                 .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
             }
+            11 => {
+                crate::storage_content::verify_v12(
+                    &mut snapshot,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+                .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
+            }
+            10 => {
+                crate::storage_content::verify_v11(
+                    &mut snapshot,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+                .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
+            }
             9 => {
                 crate::storage_content::verify_v10(
                     &mut snapshot,
@@ -299,6 +313,8 @@ fn verify_backup_in(path: &Path, staging: &Path) -> BackupResult<BackupManifest>
                 | (8, 7)
                 | (9, 8)
                 | (10, 9)
+                | (11, 10)
+                | (12, 11)
         )
         || manifest.database_file != DATABASE
         || manifest.book_id.is_some()
@@ -333,7 +349,19 @@ fn verify_backup_in(path: &Path, staging: &Path) -> BackupResult<BackupManifest>
         return Err("Backup schema differs from manifest".into());
     }
     check_database(&database)?;
-    if manifest.format_version == 10 {
+    if manifest.format_version == 12 {
+        crate::storage_content::verify_v12(
+            &mut database,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
+    } else if manifest.format_version == 11 {
+        crate::storage_content::verify_v11(
+            &mut database,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
+    } else if manifest.format_version == 10 {
         crate::storage_content::verify_v10(
             &mut database,
             &std::sync::atomic::AtomicBool::new(false),
@@ -416,7 +444,17 @@ fn check_database(database: &Connection) -> BackupResult<()> {
         return Err(format!("SQLite quick_check failed: {result}").into());
     }
     let version: u32 = database.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version == 9 {
+    if version == 11 {
+        if !crate::database::bird_captions::validate_schema(database)? {
+            return Err("Unsupported database schema".into());
+        }
+        return Ok(());
+    } else if version == 10 {
+        if !crate::database::bird_photos::validate_schema(database)? {
+            return Err("Unsupported database schema".into());
+        }
+        return Ok(());
+    } else if version == 9 {
         if !crate::database::bird_requests::validate_schema(database)? {
             return Err("Unsupported database schema".into());
         }

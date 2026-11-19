@@ -36,7 +36,7 @@ pub(crate) struct Asset {
     #[serde(with = "preview_base64")]
     pub preview: Vec<u8>,
 }
-mod preview_base64 {
+pub(crate) mod preview_base64 {
     use super::*;
     pub fn serialize<S: serde::Serializer>(bytes: &[u8], s: S) -> Result<S::Ok, S::Error> {
         s.serialize_str(&STANDARD.encode(bytes))
@@ -452,11 +452,13 @@ pub(crate) fn get_journal_photograph(
 #[tauri::command]
 pub(crate) async fn select_journal_photograph(
     app: tauri::AppHandle,
+    locale: Option<String>,
 ) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use tauri_plugin_dialog::DialogExt;
         app.dialog()
             .file()
+            .set_title(photo_picker_title(locale.as_deref()))
             .add_filter("JPEG / PNG", &["jpg", "jpeg", "png"])
             .blocking_pick_file()
             .map(|file| {
@@ -470,4 +472,21 @@ pub(crate) async fn select_journal_photograph(
     })
     .await
     .map_err(|_| "photograph_selection_failed".to_string())?
+}
+
+fn photo_picker_title(locale: Option<&str>) -> &'static str {
+    if locale == Some("sv") {
+        "Välj fotografi"
+    } else {
+        "Choose a photo"
+    }
+}
+#[cfg(test)]
+mod picker_locale_tests {
+    #[test]
+    fn explicit_photo_picker_language() {
+        assert_eq!(super::photo_picker_title(Some("sv")), "Välj fotografi");
+        assert_eq!(super::photo_picker_title(Some("en")), "Choose a photo");
+        assert_eq!(super::photo_picker_title(None), "Choose a photo");
+    }
 }

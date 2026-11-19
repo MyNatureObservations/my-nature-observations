@@ -349,7 +349,7 @@ mod established_startup_tests {
         assert_eq!(
             (manifest.format_version, manifest.database_schema_version),
             if cfg!(target_os = "macos") {
-                (10, 9)
+                (12, 11)
             } else {
                 (5, 4)
             }

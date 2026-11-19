@@ -51,6 +51,8 @@ fn add_current_visits(state: &DatabaseState, g: u32, path: &Path) -> Vec<String>
                 "2026-11-11",
                 &place,
                 &[birds::SpeciesCount {
+                    row_id: None,
+                    photo: None,
                     avibase_id: "avibase-E15BC0CB".into(),
                     taxonomy_version: crate::species_registry::VERSION.into(),
                     count: 6,

@@ -62,12 +62,16 @@ fn add_lists(path: &Path) -> Vec<crate::bird_observations::List> {
     close(db);
     let rows = vec![
         SpeciesCount {
+            row_id: None,
+            photo: None,
             avibase_id: "avibase-12345678".into(),
             taxonomy_version: "AviList v2026".into(),
             count: 6,
             comment: None,
         },
         SpeciesCount {
+            row_id: None,
+            photo: None,
             avibase_id: "avibase-87654321".into(),
             taxonomy_version: "AviList v2026".into(),
             count: 2,
@@ -433,6 +437,8 @@ fn restore_process_child() {
                 "2026-11-13",
                 &place,
                 &[crate::bird_observations::SpeciesCount {
+                    row_id: None,
+                    photo: None,
                     avibase_id: "synthetic-after-restore".into(),
                     taxonomy_version: "AviList v2026".into(),
                     count: 1,
@@ -484,6 +490,8 @@ fn restore_process_child() {
             "2026-11-13",
             &place,
             &[crate::bird_observations::SpeciesCount {
+                row_id: None,
+                photo: None,
                 avibase_id: "synthetic-after-restore".into(),
                 taxonomy_version: "AviList v2026".into(),
                 count: 1,
@@ -615,6 +623,8 @@ fn bird_persistence_rolls_back_invalid_rows_missing_link_and_stale_generation() 
         .unwrap();
     close(db);
     let good = SpeciesCount {
+        row_id: None,
+        photo: None,
         avibase_id: "synthetic-species".into(),
         taxonomy_version: "AviList v2026".into(),
         count: 3,
@@ -760,6 +770,8 @@ fn bird_list_places_keep_coordinates_and_remain_startup_and_backup_valid() {
             "2026-11-12",
             &place_id,
             &[SpeciesCount {
+                row_id: None,
+                photo: None,
                 avibase_id: "synthetic-species".into(),
                 taxonomy_version: "AviList v2026".into(),
                 count: 3,
@@ -967,3 +979,7 @@ mod multiple_visits;
 mod comments;
 
 mod requests;
+
+mod photos;
+
+mod captions;
