@@ -22,8 +22,10 @@ fn upgraded(
     let path = root.join("mno.sqlite");
     fs::rename(original, &path).unwrap();
     let state = DatabaseState::default();
-    if schema == 11 {
+    if schema == 12 {
         state.initialize_startup(&root).unwrap();
+    } else if schema == 11 {
+        state.initialize_schema11_startup(&root).unwrap();
     } else {
         state.initialize_schema10_startup(&root).unwrap();
     }
@@ -70,8 +72,8 @@ fn view(state: &DatabaseState, path: &Path) -> serde_json::Value {
     serde_json::to_value(result.data).unwrap()["one"].clone()
 }
 #[test]
-fn ordinary_schema11_startup_reads_preserved_weather_and_manual_save_reopens() {
-    let (_dir, path, state, expected) = upgraded(11);
+fn ordinary_current_startup_reads_preserved_weather_and_manual_save_reopens() {
+    let (_dir, path, state, expected) = upgraded(12);
     let first = view(&state, &path);
     assert_eq!(
         first["manual"],
@@ -103,8 +105,8 @@ fn ordinary_schema11_startup_reads_preserved_weather_and_manual_save_reopens() {
     assert_eq!(view(&restarted, &path)["manual"]["temperatureC"], 7);
 }
 #[test]
-fn ordinary_schema11_startup_fetches_and_saves_exact_fixture_without_network() {
-    let (_dir, path, state, expected) = upgraded(11);
+fn ordinary_current_startup_fetches_and_saves_exact_fixture_without_network() {
+    let (_dir, path, state, expected) = upgraded(12);
     let slots = PreviewState::default();
     let before = fs::read(&path).unwrap();
     let p = preview(&state, &slots, &path);
@@ -128,22 +130,24 @@ fn ordinary_schema11_startup_fetches_and_saves_exact_fixture_without_network() {
     );
 }
 #[test]
-fn supported_schema10_reads_use_its_exact_validator() {
-    let (_dir, path, state, expected) = upgraded(10);
-    assert_eq!(
-        storage::read(&open(&path).unwrap(), "one").unwrap(),
-        expected
-    );
-    assert_eq!(
-        view(&state, &path)["revision"],
-        expected.revision.to_string()
-    );
+fn supported_prior_photo_schemas_use_their_exact_validators() {
+    for schema in [10, 11] {
+        let (_dir, path, state, expected) = upgraded(schema);
+        assert_eq!(
+            storage::read(&open(&path).unwrap(), "one").unwrap(),
+            expected
+        );
+        assert_eq!(
+            view(&state, &path)["revision"],
+            expected.revision.to_string()
+        );
+    }
 }
 #[test]
 fn future_and_malformed_current_schemas_still_reject_weather_without_writes() {
-    for schema in [10, 11] {
+    for schema in [10, 11, 12] {
         for sql in [
-            "PRAGMA user_version=12",
+            "PRAGMA user_version=13",
             "PRAGMA user_version=999",
             "CREATE TABLE unexpected(value TEXT)",
             "ALTER TABLE bird_row_photos ADD COLUMN unexpected TEXT",

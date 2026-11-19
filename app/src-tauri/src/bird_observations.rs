@@ -23,6 +23,8 @@ pub(crate) struct List {
     pub visit_end: Option<String>,
     pub rows: Vec<SpeciesCount>,
     pub journal_entries: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub weather: Vec<crate::bird_visit_weather::Record>,
 }
 
 // Creation only: never an upsert. Place ownership remains with the shared registry.
@@ -83,6 +85,33 @@ pub(crate) fn create_with_identity(
     visit_end: Option<&str>,
     request_id: Option<&str>,
 ) -> Result<String, String> {
+    create_with_weather(
+        state,
+        search,
+        generation,
+        visit_date,
+        place_id,
+        rows,
+        first_journal_entry,
+        visit_start,
+        visit_end,
+        request_id,
+        &[],
+    )
+}
+pub(crate) fn create_with_weather(
+    state: &DatabaseState,
+    search: &SearchState,
+    generation: u32,
+    visit_date: &str,
+    place_id: &str,
+    rows: &[SpeciesCount],
+    first_journal_entry: Option<&str>,
+    visit_start: Option<&str>,
+    visit_end: Option<&str>,
+    request_id: Option<&str>,
+    weather: &[crate::bird_visit_weather::Record],
+) -> Result<String, String> {
     search.with_write(|| {
         // Resolve the immutable startup-owned location before taking the long-lived
         // permit (ready_database_path itself takes a short permit).
@@ -106,7 +135,7 @@ pub(crate) fn create_with_identity(
         let id=if let Some(request)=request_id {
             let parsed=uuid::Uuid::parse_str(request).map_err(|_|"bird_request_invalid")?;
             if !independent||parsed.get_version_num()!=4||parsed.get_variant()!=uuid::Variant::RFC4122||parsed.to_string()!=request {return Err("bird_request_invalid".into());}
-            let payload=request_digest(visit_date,place_id,rows,first_journal_entry,visit_start,visit_end);
+            let payload=request_weather_digest(visit_date,place_id,rows,first_journal_entry,visit_start,visit_end,weather);
             let receipt=if receipts {tx.query_row("SELECT payload_sha256,completed FROM bird_creation_requests WHERE request_id=?1",[request],|r|Ok((r.get::<_,Option<String>>(0)?,r.get::<_,bool>(1)?))).optional().map_err(|e|e.to_string())?}else{None};
             if receipt.as_ref().and_then(|v|v.0.as_ref()).is_some_and(|hash|hash!=&payload){return Err("bird_request_conflict".into());}
             if receipts&&receipt.is_none(){return Err("bird_request_unreserved".into());}
@@ -135,7 +164,7 @@ pub(crate) fn create_with_identity(
             request.to_owned()
         }else{uuid::Uuid::new_v4().to_string()};
         if receipts {
-         let hash=request_id.map(|_|request_digest(visit_date,place_id,rows,first_journal_entry,visit_start,visit_end));
+         let hash=request_id.map(|_|request_weather_digest(visit_date,place_id,rows,first_journal_entry,visit_start,visit_end,weather));
          if request_id.is_some(){
           if tx.execute("UPDATE bird_creation_requests SET payload_sha256=?2,completed=1 WHERE request_id=?1 AND completed=0",params![id,hash]).map_err(|e|e.to_string())?!=1{return Err("bird_request_conflict".into());}
          }else{tx.execute("INSERT INTO bird_creation_requests(request_id,payload_sha256,completed) VALUES (?1,NULL,1)",[&id]).map_err(|e|e.to_string())?;}
@@ -149,6 +178,10 @@ pub(crate) fn create_with_identity(
         }
         if let Some(entry) = first_journal_entry {
             tx.execute("INSERT INTO journal_bird_lists(entry_id,list_id) VALUES (?1,?2)", params![entry,id]).map_err(|e| e.to_string())?;
+        }
+        if !weather.is_empty() {
+            let changes:Vec<_>=weather.iter().cloned().map(|record|crate::bird_visit_weather::Change::Set{record,confirmed:false}).collect();
+            crate::bird_visit_weather::apply(&tx,&id,&changes)?;
         }
         // Validate content and foreign keys inside the same transaction: an invalid
         // date, position or identifier cannot leave an otherwise committed list.
@@ -228,6 +261,11 @@ fn read_list(db: &rusqlite::Connection, id: &str) -> Result<List, String> {
         visit_end,
         rows,
         journal_entries,
+        weather: if database::bird_visit_weather::validate_schema(db).map_err(|e| e.to_string())? {
+            crate::bird_visit_weather::read(db, id)?
+        } else {
+            Vec::new()
+        },
     })
 }
 
@@ -280,6 +318,35 @@ pub(crate) fn update_in_context(
     end: Option<&str>,
     rows: &[SpeciesCount],
 ) -> Result<String, String> {
+    update_with_weather(
+        state,
+        search,
+        generation,
+        id,
+        entry,
+        expected,
+        date,
+        place,
+        start,
+        end,
+        rows,
+        &[],
+    )
+}
+pub(crate) fn update_with_weather(
+    state: &DatabaseState,
+    search: &SearchState,
+    generation: u32,
+    id: &str,
+    entry: Option<&str>,
+    expected: &str,
+    date: &str,
+    place: &str,
+    start: Option<&str>,
+    end: Option<&str>,
+    rows: &[SpeciesCount],
+    weather: &[crate::bird_visit_weather::Change],
+) -> Result<String, String> {
     search.with_write(|| {
   let path=state.ready_database_path()?;
   let _operation=state.operation(Some(generation))?;
@@ -319,6 +386,10 @@ pub(crate) fn update_in_context(
    tx.execute("INSERT INTO bird_rows(id,list_id,position,avibase_id,taxonomy_version,count,comment) VALUES (?1,?2,?3,?4,?5,?6,?7)",params![row_ids[position],id,position as i64,row.avibase_id,row.taxonomy_version,row.count,row.comment]).map_err(|e|e.to_string())?;
   }
   for row in rows {if let Some(photo)=&row.photo{photo.insert(&tx)?;}}
+  if database::bird_visit_weather::validate_schema(&tx).map_err(|e|e.to_string())? {
+    crate::bird_visit_weather::invalidate(&tx,id)?;
+    crate::bird_visit_weather::apply(&tx,id,weather)?;
+  } else if !weather.is_empty(){return Err("visit_weather_schema_unsupported".into());}
   let updated=read_list(&tx,id)?; // Full schema/content/reference verification before commit.
   let token=edit_token(&updated);
   tx.commit().map_err(|e|e.to_string())?;
@@ -602,7 +673,9 @@ fn receipt_snapshot(
     db: &rusqlite::Connection,
     flag: &AtomicBool,
 ) -> Result<crate::storage_content::Proof, crate::storage_content::Error> {
-    if database::bird_captions::validate_schema(db)? {
+    if database::bird_visit_weather::validate_schema(db)? {
+        crate::storage_content::snapshot_v13(db, flag)
+    } else if database::bird_captions::validate_schema(db)? {
         crate::storage_content::snapshot_v12(db, flag)
     } else if crate::bird_photos::supported_schema(db)? {
         crate::storage_content::snapshot_v11(db, flag)
@@ -647,4 +720,25 @@ fn new_row_id(
         photo.validate()?;
     }
     Ok(id)
+}
+
+fn request_weather_digest(
+    date: &str,
+    place: &str,
+    rows: &[SpeciesCount],
+    entry: Option<&str>,
+    start: Option<&str>,
+    end: Option<&str>,
+    weather: &[crate::bird_visit_weather::Record],
+) -> String {
+    let old = request_digest(date, place, rows, entry, start, end);
+    if weather.is_empty() {
+        return old;
+    }
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(b"MNO-create-visit-weather-v1\0");
+    h.update(old.as_bytes());
+    h.update(serde_json::to_vec(weather).expect("serializable weather"));
+    format!("{:x}", h.finalize())
 }

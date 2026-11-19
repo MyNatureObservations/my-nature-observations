@@ -1377,3 +1377,73 @@ pub(crate) fn verified_snapshot_v12(db: &Connection, flag: &AtomicBool) -> Resul
         entry_count: previous.entry_count,
     })
 }
+
+pub(crate) fn verify_v13(db: &mut Connection, flag: &AtomicBool) -> Result<Proof> {
+    use rusqlite::limits::Limit;
+    if !db.is_autocommit() {
+        return Err(Error::Invalid);
+    }
+    let old = db.limit(Limit::SQLITE_LIMIT_LENGTH)?;
+    db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old.min(ROW_LIMIT as i32))?;
+    let result = (|| {
+        let tx = db.transaction()?;
+        let p = snapshot_v13(&tx, flag)?;
+        tx.commit()?;
+        Ok(p)
+    })();
+    let reset = db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old);
+    match (result, reset) {
+        (Ok(p), Ok(_)) => Ok(p),
+        (Err(e), _) => Err(e),
+        (_, Err(e)) => Err(e.into()),
+    }
+}
+pub(crate) fn snapshot_v13(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    if db.is_autocommit() || !crate::database::bird_visit_weather::validate_schema(db)? {
+        return Err(Error::Invalid);
+    }
+    let integrity: String = db.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
+    if integrity != "ok"
+        || db
+            .prepare("PRAGMA foreign_key_check")?
+            .query([])?
+            .next()?
+            .is_some()
+    {
+        return Err(Error::Invalid);
+    }
+    verified_snapshot_v13(db, flag)
+}
+
+pub(crate) fn verified_snapshot_v13(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    let previous = verified_snapshot_v12(db, flag)?;
+    let mut hash = Sha256::new().chain_update(b"MNO-preserved-content\0\x00\x00\x00\x0d");
+    hash.update(previous.sha256.as_bytes());
+    hash.update(b"bird_visit_weather:list_id,kind,context_json,payload_json,stale\0");
+    for row in crate::bird_visit_weather::read_all(db).map_err(|_| Error::Invalid)? {
+        check(flag)?;
+        row.validate().map_err(|_| Error::Invalid)?;
+        let saved: crate::bird_visit_weather::Context =
+            serde_json::from_str(&row.context_json).map_err(|_| Error::Invalid)?;
+        let current =
+            crate::bird_visit_weather::context(db, &row.list_id).map_err(|_| Error::Invalid)?;
+        if !row.stale && saved != current {
+            return Err(Error::Invalid);
+        }
+        hash.update([0x52]);
+        for value in [
+            &row.list_id,
+            &row.kind,
+            &row.context_json,
+            &row.payload_json,
+        ] {
+            field_v3(&mut hash, ValueRef::Text(value.as_bytes()))?;
+        }
+        field_v3(&mut hash, ValueRef::Integer(i64::from(row.stale)))?;
+    }
+    hash.update([0x45]);
+    Ok(Proof {
+        sha256: format!("{:x}", hash.finalize()),
+        entry_count: previous.entry_count,
+    })
+}

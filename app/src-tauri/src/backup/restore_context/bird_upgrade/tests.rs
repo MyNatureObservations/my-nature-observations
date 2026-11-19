@@ -983,3 +983,4 @@ mod requests;
 mod photos;
 
 mod captions;
+mod visit_weather;

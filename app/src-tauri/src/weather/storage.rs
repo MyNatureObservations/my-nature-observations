@@ -40,6 +40,9 @@ pub(super) fn read(db: &Connection, entry: &str) -> Result<StoredWeather, String
     }
     match version {
         #[cfg(target_os = "macos")]
+        12 if crate::database::bird_visit_weather::validate_schema(db)
+            .map_err(|e| e.to_string())? => {}
+        #[cfg(target_os = "macos")]
         11 if crate::database::bird_captions::validate_schema(db).map_err(|e| e.to_string())? => {}
         #[cfg(target_os = "macos")]
         10 if crate::database::bird_photos::validate_schema(db).map_err(|e| e.to_string())? => {}

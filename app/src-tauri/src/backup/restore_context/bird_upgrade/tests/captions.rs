@@ -58,7 +58,7 @@ fn caption_schema_upgrade_preserves_source_and_retries_across_publication_bounda
         {
             assert_eq!(fs::read(&path).unwrap(), bytes);
         }
-        initialize_current(&path).unwrap();
+        initialize_schema11(&path).unwrap();
         assert_eq!(verify_for(&path, 11, 10).unwrap(), proof);
         let mut db = crate::database::open_existing(&path).unwrap();
         full(&mut db, 11).unwrap();

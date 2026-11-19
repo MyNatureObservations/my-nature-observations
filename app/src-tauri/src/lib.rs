@@ -7,6 +7,8 @@ mod startup_error;
 mod backup;
 mod bird_app;
 mod bird_photos;
+#[allow(dead_code)] // Internal foundation: no visit-weather command or UI yet.
+mod bird_visit_weather;
 mod database;
 mod species_registry;
 // Internal schema-5 persistence; no command or UI registration.

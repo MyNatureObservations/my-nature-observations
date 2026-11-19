@@ -48,8 +48,9 @@ impl Photo {
     }
     pub(crate) fn insert(&self, db: &Connection) -> Result<(), String> {
         self.validate()?;
-        let captions =
-            crate::database::bird_captions::validate_schema(db).map_err(|e| e.to_string())?;
+        let captions = crate::database::bird_visit_weather::validate_schema(db)
+            .map_err(|e| e.to_string())?
+            || crate::database::bird_captions::validate_schema(db).map_err(|e| e.to_string())?;
         if !captions && self.caption.is_some() {
             return Err("bird_photo_caption_schema_unsupported".into());
         }
@@ -104,7 +105,7 @@ pub(crate) fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Photo> {
 }
 pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<Photo>, String> {
     use rusqlite::OptionalExtension;
-    db.query_row(if crate::database::bird_captions::validate_schema(db).map_err(|e|e.to_string())? {"SELECT row_id,asset_id,original_path,mime,width,height,preview,caption FROM bird_row_photos WHERE row_id=?1"}else{"SELECT row_id,asset_id,original_path,mime,width,height,preview FROM bird_row_photos WHERE row_id=?1"},[id],row).optional().map_err(|e|e.to_string())
+    db.query_row(if crate::database::bird_visit_weather::validate_schema(db).map_err(|e|e.to_string())? || crate::database::bird_captions::validate_schema(db).map_err(|e|e.to_string())? {"SELECT row_id,asset_id,original_path,mime,width,height,preview,caption FROM bird_row_photos WHERE row_id=?1"}else{"SELECT row_id,asset_id,original_path,mime,width,height,preview FROM bird_row_photos WHERE row_id=?1"},[id],row).optional().map_err(|e|e.to_string())
 }
 #[tauri::command]
 pub(crate) async fn prepare_bird_photograph(
@@ -192,6 +193,7 @@ impl CaptionedPhoto {
     }
 }
 pub(crate) fn supported_schema(db: &Connection) -> rusqlite::Result<bool> {
-    Ok(crate::database::bird_captions::validate_schema(db)?
+    Ok(crate::database::bird_visit_weather::validate_schema(db)?
+        || crate::database::bird_captions::validate_schema(db)?
         || crate::database::bird_photos::validate_schema(db)?)
 }

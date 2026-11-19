@@ -52,6 +52,8 @@ Använd manuellt väder och historisk hämtning när lämpliga data finns för l
 
 **Tester och klartkriterium.** Saknat, manuellt och hämtat väder, nätverksfel, korrigerad plats/tid och sena svar. Journalvädret får inte ändras. Utöka schema, validering, innehållsdigest och backup före vädersparande. Gör slutlig återställningskontroll med alla kravfält, länkade och olänkade listor, foton och flera länkar. Automatiska sammanfattningar och statistik kvarstår som uppskjutna.
 
+**Lagringsgrund, beslut 19 november 2026.** Separata manuella/hämtade väderdelar ägs av besökslistan, med ursprungligt plats-/datum-/tidssammanhang och bestående inaktuell status. Hämtning avser initialt dygnsdata; dagens data märks prognos. Manuellt väder kan beskriva besöket. Inaktuellt väder utesluts från aktuell sammanfattning och manuell återanvändning kräver uttrycklig bekräftelse. Schema 12/arkivformat 13 följer skyddad kandidatmigration och äldre innehållsbevis. Inga besöksväderkommandon, nätverksanrop eller gränssnitt aktiveras i detta steg. Se [lagringsmodell och verifiering](../development/MNO_Bird_Visit_Weather_Persistence.md).
+
 ## Förtydligande för pågående steg 1: presentation och kommentarer
 
 [De nya presentationsbesluten](Egna_fagelobservationer.md#presentation-och-radkommentarer--beslut-12-november-2026) tillämpas i skapande/återöppning: kompakt datumvillkorad journalförhandsvisning, mjuka artkort och gemensamt ihågkomna namnvisningsval. Kommentar flyttas fram från steg 3 till denna etapp, men generell redigering och foton är fortsatt senare arbete. Vid nytt artval fokuseras en redan tillagd arts antal utan förändring av antal/kommentar. Befintliga dubblettrader migreras och visas oförändrade.

@@ -158,6 +158,15 @@ fn activate_version<'m, 's>(
             | (10, 12)
             | (11, 12)
             | (12, 12)
+            | (13, 13)
+            | (5, 13)
+            | (6, 13)
+            | (7, 13)
+            | (8, 13)
+            | (9, 13)
+            | (10, 13)
+            | (11, 13)
+            | (12, 13)
     ) || expected_new.version != version
         || !(if version >= 4 {
             expected_old.version == version
@@ -207,7 +216,9 @@ fn activate_version<'m, 's>(
     let protection =
         pre_restore::create_bound(maintenance, work.active.as_ref().unwrap(), flag.clone())
             .map_err(Error::Protection)?;
-    let protected = if old_schema == 11 {
+    let protected = if old_schema == 12 {
+        preserved_fingerprint_v13(protection.candidate(), &flag)?
+    } else if old_schema == 11 {
         preserved_fingerprint_v12(protection.candidate(), &flag)?
     } else if old_schema == 10 {
         preserved_fingerprint_v11(protection.candidate(), &flag)?
@@ -246,7 +257,9 @@ fn activate_version<'m, 's>(
     point("import-v3-protected")?;
     let staging = root.join("backups/import-staging");
     private::ensure_directory(&staging)?;
-    let candidate = (if version == 12 {
+    let candidate = (if version == 13 {
+        open_import::build_for_schema12(archive, &staging, &flag, source_format)
+    } else if version == 12 {
         open_import::build_for_schema11(archive, &staging, &flag, source_format)
     } else if version == 11 {
         open_import::build_for_schema10(archive, &staging, &flag, source_format)
@@ -295,7 +308,20 @@ fn activate_version<'m, 's>(
     )?;
     let marker = Marker {
         format: IMPORT_FORMAT.into(),
-        version: if version == 12 {
+        version: if version == 13 {
+            match source_format {
+                5 => 42,
+                6 => 43,
+                7 => 44,
+                8 => 45,
+                9 => 46,
+                10 => 47,
+                11 => 48,
+                12 => 49,
+                13 => 50,
+                _ => return Err(Error::Binding),
+            }
+        } else if version == 12 {
             source_format + 29
         } else if version == 11 {
             source_format + 22
@@ -526,4 +552,15 @@ pub(crate) fn activate_schema11<'m, 's>(
     source: u32,
 ) -> Outcome<DiskActivated<'m, 's>> {
     activate_version(m, a, old, new, f, 12, source)
+}
+
+pub(crate) fn activate_schema12<'m, 's>(
+    m: &'m Maintenance<'s>,
+    a: &mut File,
+    old: &open_import::ContentProof,
+    new: &open_import::ContentProof,
+    f: Arc<AtomicBool>,
+    source: u32,
+) -> Outcome<DiskActivated<'m, 's>> {
+    activate_version(m, a, old, new, f, 13, source)
 }

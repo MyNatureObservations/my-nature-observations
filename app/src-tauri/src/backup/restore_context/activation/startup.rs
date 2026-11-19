@@ -90,7 +90,9 @@ fn protection(root: &Path, marker: &Marker) -> Outcome<()> {
     let candidate =
         super::super::super::restore::prepare_candidate(&path, Arc::new(AtomicBool::new(false)))
             .map_err(Error::Candidate)?;
-    let actual = if marker.old_content.version == 12 {
+    let actual = if marker.old_content.version == 13 {
+        preserved_fingerprint_v13(&candidate, &AtomicBool::new(false))
+    } else if marker.old_content.version == 12 {
         preserved_fingerprint_v12(&candidate, &AtomicBool::new(false))
     } else if marker.old_content.version == 11 {
         preserved_fingerprint_v11(&candidate, &AtomicBool::new(false))
@@ -167,8 +169,10 @@ fn assess(root: &Path, marker: &Marker) -> View {
         };
     }
     let previous_matches = if marker.is_import()
-        || matches!(marker.version, 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12)
-    {
+        || matches!(
+            marker.version,
+            3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13
+        ) {
         verify_file_version(&active_path, marker.old_content.version)
             .is_ok_and(|v| v == marker.old_content)
     } else {
@@ -212,6 +216,15 @@ fn v2(session: &RecoverySession<'_, '_>) -> Outcome<bool> {
     struct Header {
         format: String,
         version: u32,
+    }
+    // New visit-weather markers must pass their full, exact schema/proof binding
+    // parser before selecting the modern path. A header alone grants nothing.
+    if serde_json::from_slice::<Header>(&bytes).is_ok_and(|h| {
+        (h.format == "mno-database-activation" && h.version == 13)
+            || (h.format == IMPORT_FORMAT && matches!(h.version, 42..=50))
+    }) {
+        super::parse_marker(&bytes)?;
+        return Ok(false);
     }
     if serde_json::from_slice::<Header>(&bytes).is_ok_and(|h| {
         (h.format == "mno-database-activation"
@@ -276,10 +289,16 @@ pub(crate) fn status(state: &DatabaseState) -> Outcome<View> {
     if !state.permits_legacy_protocol_fixture() {
         view.actions.retain(|action| match action {
             Action::KeepPrevious => {
-                matches!(marker.old_content.version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12)
+                matches!(
+                    marker.old_content.version,
+                    5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13
+                )
             }
             Action::FinishNew | Action::Continue => {
-                matches!(marker.new_content.version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12)
+                matches!(
+                    marker.new_content.version,
+                    5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13
+                )
             }
         });
     }
@@ -424,7 +443,7 @@ pub(crate) fn run_confirmed(
         } else {
             marker.new_content.version
         };
-        if !matches!(selected_version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) && !legacy {
+        if !matches!(selected_version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13) && !legacy {
             // Validate the Ready contract before complete() can retire Recovery.
             return Err(Error::Binding);
         }
