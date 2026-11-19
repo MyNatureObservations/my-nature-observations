@@ -1,4 +1,6 @@
 <script lang="ts">
+ import BirdVisitWeather from "$lib/components/BirdVisitWeather.svelte";
+ import {visitContext} from "$lib/bird-weather";
  import type {Snippet} from "svelte";
  import type {BirdList} from "$lib/birds";
  import {formatBirdDate,type BirdNamePreferences} from "$lib/bird-names";
@@ -13,7 +15,7 @@
 </script>
 <header><a href={origin}>← {standalone?m.bird_overview({}, {locale}):m.bird_back_entry({}, {locale})}</a><span class="section-label">{m.bird_lists({}, {locale})}</span></header>
 <h1>{list.place.name}</h1>
-<div class="metadata"><time datetime={list.visitDate}>{formatBirdDate(list.visitDate,locale)}</time>{#if list.visitStart||list.visitEnd}<span>{list.visitStart??"…"}–{list.visitEnd??"…"}</span>{/if}{#if editHref||onDelete}<div class="list-options"><EntryOptions {locale}>{#snippet children(close)}{#if editHref&&!actionsDisabled}<a href={editHref} onclick={close}>{m.journal_edit({}, {locale})}</a>{/if}{#if onDelete}<button type="button" disabled={actionsDisabled} onclick={()=>{close();onDelete?.();}}>{m.bird_delete({}, {locale})}</button>{/if}{/snippet}</EntryOptions></div>{/if}</div>
+<div class="metadata"><time datetime={list.visitDate}>{formatBirdDate(list.visitDate,locale)}</time>{#if list.visitStart||list.visitEnd}<span>{list.visitStart??"…"}–{list.visitEnd??"…"}</span>{/if}<BirdVisitWeather records={list.weather??[]} context={visitContext(list.visitDate,list.place,list.visitStart??"",list.visitEnd??"")} {locale} editHref={actionsDisabled?null:editHref}/>{#if editHref||onDelete}<div class="list-options"><EntryOptions {locale}>{#snippet children(close)}{#if editHref&&!actionsDisabled}<a href={editHref} onclick={close}>{m.journal_edit({}, {locale})}</a>{/if}{#if onDelete}<button type="button" disabled={actionsDisabled} onclick={()=>{close();onDelete?.();}}>{m.bird_delete({}, {locale})}</button>{/if}{/snippet}</EntryOptions></div>{/if}</div>
 <p class="visit-context">{m.bird_visit_context({}, {locale})}</p>
 <PhotoScope {locale} version={`${list.id}:${list.editToken}`} load={async()=>({items:observationPhotos([list],locale),incomplete:false})}>
 <ul class="species-cards" aria-label={m.bird_species({}, {locale})}>

@@ -15,7 +15,7 @@ pub(crate) struct Context {
     pub end: Option<String>,
 }
 impl Context {
-    fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         let format = format_description::parse_borrowed::<2>("[year]-[month]-[day]").unwrap();
         if self.date.len() != 10
             || Date::parse(&self.date, &format)

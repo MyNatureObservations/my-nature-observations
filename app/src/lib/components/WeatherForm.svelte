@@ -4,23 +4,29 @@
   import { weatherIcon, weatherConditionKey, type WeatherPart } from '$lib/weather';
   import { commonWeatherCodes, manualNumericFields, makeDraft, parseDraft, type NumericField } from '$lib/weather-form';
   import { weatherLabels } from '$lib/weather-labels';
-  let { manual, date, locale, busy, onSave, onCancel, onDirty }: {manual: WeatherPart | null; date: string; locale:'sv'|'en'; busy:boolean; onSave:(part:WeatherPart)=>void; onCancel:()=>void; onDirty:(value:boolean)=>void} = $props();
+  let { manual, date, locale, busy, embedded=false, wide=false, onSave=()=>{}, onCancel=()=>{}, onDirty }: {manual: WeatherPart | null; date: string; locale:'sv'|'en'; busy:boolean; embedded?:boolean; wide?:boolean; onSave?:(part:WeatherPart)=>void; onCancel?:()=>void; onDirty:(value:boolean)=>void} = $props();
   let draft = $state(untrack(() => makeDraft(manual, locale)));
-  const initial = JSON.stringify(draft);
+  const initial = untrack(() => JSON.stringify(draft));
   const baseline = JSON.parse(initial);
   let errors = $state<Partial<Record<NumericField|'code'|'empty',true>>>({});
   const label = (key:string) => weatherLabels[key as keyof typeof weatherLabels]?.({}, {locale}) ?? key;
   $effect(() => { onDirty(JSON.stringify(draft) !== initial); });
   export function getPart(): WeatherPart|null { const parsed=parseDraft(draft,manual,date,locale,baseline);errors=parsed.errors;return Object.keys(errors).length ? null : parsed.result; }
+  // Local panel cancellation restores the draft; neither method persists weather.
+  export function draftSnapshot() { return JSON.parse(JSON.stringify({draft,errors})); }
+  export function restoreDraft(snapshot:ReturnType<typeof draftSnapshot>) { draft=snapshot.draft;errors=snapshot.errors; }
   function save(event:SubmitEvent) { event.preventDefault();const part=getPart();if(part)onSave(part); }
   const mainFields: NumericField[] = ['temperatureC','windSpeedMs','precipitationMm'];
   const moreFields: NumericField[] = ['cloudCoverPercent','relativeHumidityPercent','snowDepthMm'];
   const errorLabel = (key:NumericField) => key === 'temperatureC' ? 'form_invalidTemperature' : ['cloudCoverPercent','relativeHumidityPercent'].includes(key) ? 'form_invalidPercent' : 'form_invalidNonnegative';
   const units: Record<NumericField,string> = {temperatureC:'°C',windSpeedMs:'m/s',precipitationMm:'mm',cloudCoverPercent:'%',relativeHumidityPercent:'%',snowDepthMm:'mm'};
 </script>
-<form onsubmit={save}>
+{#snippet fields()}
   <fieldset disabled={busy}>
-    <legend>{label('conditions')}</legend>
+    <legend class:sr-only={wide}>{label('conditions')}</legend>
+    <div class:two-column={wide}>
+    <div class="condition-column">
+    {#if wide}<h3>{label('conditions')}</h3>{/if}
     <div class="choices">
       <label class:selected={draft.code === null}><input type="radio" name="condition" checked={draft.code === null} onchange={() => {draft.code = null;}} /><WeatherIcon name="neutral" size={23}/><span>{label('form_none')}</span></label>
       {#each commonWeatherCodes as code}
@@ -30,6 +36,8 @@
         <label class:selected={draft.code === baseline.code}><input type="radio" name="condition" checked={draft.code === baseline.code} onchange={() => {draft.code = baseline.code;}} /><WeatherIcon name={weatherIcon(baseline.code)} size={23}/><span>{label(weatherConditionKey(baseline.code) ?? 'conditionUnknown')} · {label('form_existingCondition')}</span></label>
       {/if}
     </div>
+    </div>
+    <div class="measurement-column">
     <div class="fields">
       {#each mainFields as key}
         <label>{label(key)} <span>({units[key]})</span><input type="text" inputmode="decimal" bind:value={draft.values[key]} aria-invalid={!!errors[key]} />{#if errors[key]}<small role="alert">{label(errorLabel(key))}</small>{/if}</label>
@@ -42,10 +50,17 @@
       {/each}
     </div></details>
     {#if errors.empty}<p role="alert">{label('form_requiredObservation')}</p>{/if}
-    <div class="actions"><button class="primary" type="submit">{label('form_save')}</button><button type="button" onclick={onCancel}>{label('form_cancel')}</button></div>
+    </div>
+    </div>
+    {#if !embedded}<div class="actions"><button class="primary" type="submit">{label('form_save')}</button><button type="button" onclick={onCancel}>{label('form_cancel')}</button></div>{/if}
   </fieldset>
-</form>
+{/snippet}
+{#if embedded}<div class="embedded-weather">{@render fields()}</div>
+{:else}<form onsubmit={save}>{@render fields()}</form>{/if}
 <style>
+ .two-column{display:grid;grid-template-columns:minmax(210px,.9fr) minmax(0,1.15fr);gap:24px;align-items:start}.condition-column,.measurement-column{min-width:0}.two-column .measurement-column>.fields:first-child{margin-top:0}h3{font:600 13px system-ui,sans-serif;margin:0 0 10px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+ @media(max-width:680px){.two-column{display:block}.two-column .measurement-column>.fields:first-child{margin-top:16px}}
+
  fieldset { border:0; margin:0; padding:0; min-width:0; } legend { margin-bottom:10px; font-weight:600; }
  .choices { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
  .choices label { min-width:0; display:flex; flex-direction:column; gap:4px; align-items:center; justify-content:center; text-align:center; border:1px solid #d9d8d1; border-radius:7px; padding:8px 3px; color:#435b47; font-size:10px; cursor:pointer; }

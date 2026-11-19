@@ -27,6 +27,120 @@ fn body(v: Value) -> (u16, Vec<u8>) {
     (200, serde_json::to_vec(&v).unwrap())
 }
 #[test]
+fn visit_daily_today_recent_and_history_never_request_current_conditions() {
+    for date in ["2026-10-30", "2026-10-29", "2020-06-01"] {
+        let (preview, today) = preview_daily(&request(date), now(), |url| {
+            let q: BTreeMap<_, _> = url.query_pairs().into_owned().collect();
+            assert!(!q.contains_key("current"));
+            assert_eq!(q["daily"], DAILY);
+            assert_eq!(q["start_date"], date);
+            assert_eq!(q["end_date"], date);
+            assert_eq!(q["latitude"], "59.3");
+            assert_eq!(q["longitude"], "18.1");
+            Ok(body(daily(date)))
+        })
+        .unwrap();
+        let f = serde_json::to_value(preview).unwrap()["fetched"].clone();
+        assert_eq!(today, date == "2026-10-30");
+        assert!(f["validAt"].is_null());
+        assert!(f["temperatureC"].is_null());
+        assert_eq!(f["period"]["date"], date);
+        assert_eq!(
+            f["source"]["product"],
+            if date == "2020-06-01" {
+                "historical-weather"
+            } else {
+                "forecast-daily"
+            }
+        );
+        assert_eq!(
+            f["source"]["dataKind"],
+            if date == "2020-06-01" {
+                "reanalysis"
+            } else {
+                "forecast"
+            }
+        );
+    }
+}
+#[test]
+fn visit_daily_uses_service_local_day_at_utc_midnight_boundaries() {
+    for (stamp, date, offset, zone) in [
+        (
+            "2026-10-30T00:15:00Z",
+            "2026-10-29",
+            -36000,
+            "Pacific/Honolulu",
+        ),
+        (
+            "2026-10-30T23:15:00Z",
+            "2026-10-31",
+            50400,
+            "Pacific/Kiritimati",
+        ),
+    ] {
+        let now = OffsetDateTime::parse(stamp, &Rfc3339).unwrap();
+        let (p, today) = preview_daily(&request(date), now, |_| {
+            let mut response = daily(date);
+            response["utc_offset_seconds"] = json!(offset);
+            response["timezone"] = json!(zone);
+            Ok(body(response))
+        })
+        .unwrap();
+        assert!(today);
+        assert_eq!(
+            serde_json::to_value(p).unwrap()["fetched"]["period"]["date"],
+            date
+        );
+    }
+    assert_eq!(
+        preview_daily(&request("2026-11-02"), now(), |_| panic!(
+            "unsupported date must not fetch"
+        ))
+        .err(),
+        Some(Error::DateUnavailable)
+    );
+}
+
+#[test]
+fn visit_daily_missing_values_units_and_transport_failures_are_not_current_fallbacks() {
+    for (status, expected) in [(503, Error::ServiceUnavailable), (429, Error::RateLimited)] {
+        assert_eq!(
+            preview_daily(&request("2026-10-30"), now(), |_| Ok((status, Vec::new()))).err(),
+            Some(expected)
+        );
+    }
+    assert_eq!(
+        preview_daily(&request("2026-10-30"), now(), |_| Err(Error::Network)).err(),
+        Some(Error::Network)
+    );
+    let mut missing = daily("2026-10-30");
+    for key in [
+        "temperature_2m_mean",
+        "temperature_2m_min",
+        "temperature_2m_max",
+        "precipitation_sum",
+        "wind_speed_10m_max",
+        "weather_code",
+    ] {
+        missing["daily"][key] = Value::Null;
+    }
+    assert_eq!(
+        preview_daily(&request("2026-10-30"), now(), |_| Ok(body(missing.clone()))).err(),
+        Some(Error::NoData)
+    );
+    let mut invalid = daily("2026-10-30");
+    invalid["daily_units"]["temperature_2m_mean"] = json!("°F");
+    assert_eq!(
+        preview_daily(&request("2026-10-30"), now(), |_| Ok(body(invalid.clone()))).err(),
+        Some(Error::InvalidResponse)
+    );
+    assert_eq!(
+        preview_daily(&request("2026-10-30"), now(), |_| Ok(body(response()))).err(),
+        Some(Error::InvalidResponse)
+    );
+}
+#[test]
 fn local_calendar_routing_includes_both_boundaries_and_rejects_future() {
     let utc = UtcOffset::UTC;
     for (day, expected) in [

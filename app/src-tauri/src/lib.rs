@@ -7,8 +7,10 @@ mod startup_error;
 mod backup;
 mod bird_app;
 mod bird_photos;
-#[allow(dead_code)] // Internal foundation: no visit-weather command or UI yet.
+#[allow(dead_code)] // Shared persistence and frozen archive contracts.
 mod bird_visit_weather;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod bird_weather_fetch;
 mod database;
 mod species_registry;
 // Internal schema-5 persistence; no command or UI registration.
@@ -97,6 +99,7 @@ pub fn run() {
         .manage(import_app::ImportState::default())
         .manage(database_state::DatabaseState::default())
         .manage(weather::historical::saving::PreviewState::default())
+        .manage(bird_weather_fetch::PreviewState::default())
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             macos_menu::install_guarded_quit(app)?;
@@ -175,6 +178,9 @@ pub fn run() {
             journal::load_journal_entry,
             journal::get_journal_entry,
             journal::read_journal_entries,
+            bird_weather_fetch::preview_bird_visit_weather,
+            bird_weather_fetch::review_bird_visit_weather,
+            bird_weather_fetch::cancel_bird_visit_weather,
             weather::view::read_journal_weather,
             weather::view::update_manual_weather,
             weather::historical::saving::preview_historical_weather,

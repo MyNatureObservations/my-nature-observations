@@ -9,6 +9,34 @@ use std::{
 const PLACE: &str = "11111111-1111-4111-8111-111111111111";
 
 #[test]
+fn date_only_change_preserves_november_18_weather_as_stale_after_november_19_restart() {
+    let mut f = fixture();
+    f.context.date = "2026-11-18".into();
+    let (id, original) = create(&f, true);
+    let saved = birds::reopen(&f.state, 1, &id).unwrap();
+    let mut changed = f.context.clone();
+    changed.date = "2026-11-19".into();
+    // The UI sends no weather change when only the visit date was edited.
+    update(&f, &saved, &changed, &[]).unwrap();
+    let db = crate::database::open_existing(&f.path).unwrap();
+    let stored = read_all(&db).unwrap();
+    for record in &stored {
+        assert!(record.stale);
+        let before = original.iter().find(|r| r.kind == record.kind).unwrap();
+        assert_eq!(record.context_json, before.context_json);
+        assert_eq!(record.payload_json, before.payload_json);
+    }
+    db.close().unwrap();
+    drop(f.state);
+    let state = DatabaseState::default();
+    state.initialize_startup(f.path.parent().unwrap()).unwrap();
+    let reopened = birds::reopen(&state, 1, &id).unwrap();
+    assert_eq!(reopened.visit_date, "2026-11-19");
+    assert_eq!(reopened.weather, stored);
+    assert_eq!(current(&reopened.weather).count(), 0);
+}
+
+#[test]
 fn weather_archives_verify_linked_unlinked_and_stale_records_without_touching_source() {
     let f = fixture();
     let linked = birds::reserve(&f.state, &SearchState::default(), 1).unwrap();

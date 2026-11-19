@@ -112,6 +112,35 @@ pub(crate) fn create_with_weather(
     request_id: Option<&str>,
     weather: &[crate::bird_visit_weather::Record],
 ) -> Result<String, String> {
+    create_with_weather_checked(
+        state,
+        search,
+        generation,
+        visit_date,
+        place_id,
+        rows,
+        first_journal_entry,
+        visit_start,
+        visit_end,
+        request_id,
+        weather,
+        |_| Ok(()),
+    )
+}
+pub(crate) fn create_with_weather_checked(
+    state: &DatabaseState,
+    search: &SearchState,
+    generation: u32,
+    visit_date: &str,
+    place_id: &str,
+    rows: &[SpeciesCount],
+    first_journal_entry: Option<&str>,
+    visit_start: Option<&str>,
+    visit_end: Option<&str>,
+    request_id: Option<&str>,
+    weather: &[crate::bird_visit_weather::Record],
+    preflight: impl FnOnce(&rusqlite::Connection) -> Result<(), String>,
+) -> Result<String, String> {
     search.with_write(|| {
         // Resolve the immutable startup-owned location before taking the long-lived
         // permit (ready_database_path itself takes a short permit).
@@ -163,6 +192,7 @@ pub(crate) fn create_with_weather(
             }
             request.to_owned()
         }else{uuid::Uuid::new_v4().to_string()};
+        preflight(&tx)?;
         if receipts {
          let hash=request_id.map(|_|request_weather_digest(visit_date,place_id,rows,first_journal_entry,visit_start,visit_end,weather));
          if request_id.is_some(){
@@ -201,7 +231,7 @@ pub(crate) fn reopen(state: &DatabaseState, generation: u32, id: &str) -> Result
     tx.commit().map_err(|e| e.to_string())?;
     Ok(list)
 }
-fn read_list(db: &rusqlite::Connection, id: &str) -> Result<List, String> {
+pub(crate) fn read_list(db: &rusqlite::Connection, id: &str) -> Result<List, String> {
     let receipts = receipt_schema(db).map_err(|e| e.to_string())?;
     let comments =
         receipts || database::bird_comments::validate_schema(db).map_err(|e| e.to_string())?;
@@ -347,11 +377,43 @@ pub(crate) fn update_with_weather(
     rows: &[SpeciesCount],
     weather: &[crate::bird_visit_weather::Change],
 ) -> Result<String, String> {
+    update_with_weather_checked(
+        state,
+        search,
+        generation,
+        id,
+        entry,
+        expected,
+        date,
+        place,
+        start,
+        end,
+        rows,
+        weather,
+        |_| Ok(()),
+    )
+}
+pub(crate) fn update_with_weather_checked(
+    state: &DatabaseState,
+    search: &SearchState,
+    generation: u32,
+    id: &str,
+    entry: Option<&str>,
+    expected: &str,
+    date: &str,
+    place: &str,
+    start: Option<&str>,
+    end: Option<&str>,
+    rows: &[SpeciesCount],
+    weather: &[crate::bird_visit_weather::Change],
+    preflight: impl FnOnce(&rusqlite::Connection) -> Result<(), String>,
+) -> Result<String, String> {
     search.with_write(|| {
   let path=state.ready_database_path()?;
   let _operation=state.operation(Some(generation))?;
   let mut db=database::open_existing(&path)?;
   let tx=db.transaction().map_err(|e|e.to_string())?;
+  preflight(&tx)?;
   if !(receipt_schema(&tx).map_err(|e|e.to_string())?||database::bird_comments::validate_schema(&tx).map_err(|e|e.to_string())?) {return Err("bird_schema_unsupported".into());}
   let previous=read_list(&tx,id)?;
   if entry.is_some_and(|entry|!previous.journal_entries.iter().any(|e|e==entry)) {return Err("bird_link_missing".into());}

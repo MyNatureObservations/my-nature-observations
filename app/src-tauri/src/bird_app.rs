@@ -5,6 +5,80 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
+// Manual values and opaque preview IDs cross this boundary. Fetched JSON stays internal.
+#[derive(Deserialize)]
+#[serde(
+    tag = "action",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub(crate) enum WeatherInput {
+    Set {
+        context: crate::bird_visit_weather::Context,
+        payload: serde_json::Value,
+        confirmed: bool,
+    },
+    Remove {
+        kind: String,
+    },
+    Fetched {
+        preview_id: String,
+    },
+}
+impl WeatherInput {
+    fn change(self, id: &str) -> Result<crate::bird_visit_weather::Change, String> {
+        use crate::bird_visit_weather::{Change, Record};
+        Ok(match self {
+            Self::Set {
+                context,
+                payload,
+                confirmed,
+            } => Change::Set {
+                record: Record::new(id, "manual", &context, &payload.to_string())?,
+                confirmed,
+            },
+            Self::Remove { kind } if matches!(kind.as_str(), "manual" | "fetched") => {
+                Change::Remove(kind)
+            }
+            _ => return Err("visit_weather_change_invalid".into()),
+        })
+    }
+}
+#[cfg(target_os = "macos")]
+fn resolve_weather(
+    input: WeatherInput,
+    previews: Option<&crate::bird_weather_fetch::PreviewState>,
+    receipts: &mut Vec<crate::bird_weather_fetch::Receipt>,
+    generation: u32,
+    id: &str,
+    expected: Option<&str>,
+    date: &str,
+    place: &str,
+    start: Option<&str>,
+    end: Option<&str>,
+) -> Result<crate::bird_visit_weather::Change, String> {
+    if let WeatherInput::Fetched { preview_id } = input {
+        let receipt = previews.ok_or("bird_weather_preview_expired")?.resolve(
+            &preview_id,
+            generation,
+            id,
+            expected,
+            date,
+            place,
+            start,
+            end,
+        )?;
+        let change = crate::bird_visit_weather::Change::Set {
+            record: receipt.record.clone(),
+            confirmed: false,
+        };
+        receipts.push(receipt);
+        Ok(change)
+    } else {
+        input.change(id)
+    }
+}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RowInput {
@@ -41,6 +115,7 @@ pub(crate) struct ListView {
     visit_end: Option<String>,
     place: crate::place_registry::Place,
     rows: Vec<RowView>,
+    weather: Vec<crate::bird_visit_weather::Record>,
 }
 #[tauri::command]
 pub(crate) fn bird_observations_available(state: State<'_, DatabaseState>) -> bool {
@@ -88,6 +163,7 @@ pub(crate) fn match_bird_paste_names(
 pub(crate) fn create_journal_bird_list(
     state: State<'_, DatabaseState>,
     search: State<'_, SearchState>,
+    previews: State<'_, crate::bird_weather_fetch::PreviewState>,
     generation: u32,
     request_id: String,
     entry_id: Option<String>,
@@ -96,12 +172,14 @@ pub(crate) fn create_journal_bird_list(
     rows: Vec<RowInput>,
     visit_start: Option<String>,
     visit_end: Option<String>,
+    weather: Option<Vec<WeatherInput>>,
 ) -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
-        create_in_session(
+        create_with_previews(
             &state,
             &search,
+            Some(&previews),
             CreateInput {
                 generation,
                 request_id,
@@ -111,6 +189,7 @@ pub(crate) fn create_journal_bird_list(
                 rows,
                 visit_start,
                 visit_end,
+                weather: weather.unwrap_or_default(),
             },
         )
     }
@@ -120,6 +199,7 @@ pub(crate) fn create_journal_bird_list(
         let _ = (
             state,
             search,
+            previews,
             generation,
             request_id,
             entry_id,
@@ -128,6 +208,7 @@ pub(crate) fn create_journal_bird_list(
             rows,
             visit_start,
             visit_end,
+            weather,
         );
         Err("bird_platform_unsupported".into())
     }
@@ -135,7 +216,7 @@ pub(crate) fn create_journal_bird_list(
 #[cfg(target_os = "macos")]
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct CreateInput {
+pub(crate) struct CreateInput {
     generation: u32,
     request_id: String,
     entry_id: Option<String>,
@@ -144,18 +225,52 @@ struct CreateInput {
     rows: Vec<RowInput>,
     visit_start: Option<String>,
     visit_end: Option<String>,
+    #[serde(default)]
+    weather: Vec<WeatherInput>,
 }
 #[cfg(target_os = "macos")]
+#[cfg(test)]
 fn create_in_session(
     state: &DatabaseState,
     search: &SearchState,
+    input: CreateInput,
+) -> Result<String, String> {
+    create_with_previews(state, search, None, input)
+}
+#[cfg(target_os = "macos")]
+pub(crate) fn create_with_previews(
+    state: &DatabaseState,
+    search: &SearchState,
+    previews: Option<&crate::bird_weather_fetch::PreviewState>,
     input: CreateInput,
 ) -> Result<String, String> {
     if !available(state) {
         return Err("bird_schema_unsupported".into());
     }
     let rows = validate_rows(input.rows)?;
-    crate::bird_observations::create_with_identity(
+    let mut receipts = Vec::new();
+    let weather = input
+        .weather
+        .into_iter()
+        .map(|w| {
+            match resolve_weather(
+                w,
+                previews,
+                &mut receipts,
+                input.generation,
+                &input.request_id,
+                None,
+                &input.visit_date,
+                &input.place_id,
+                input.visit_start.as_deref(),
+                input.visit_end.as_deref(),
+            )? {
+                crate::bird_visit_weather::Change::Set { record, .. } => Ok(record),
+                _ => Err("visit_weather_change_invalid".to_owned()),
+            }
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    crate::bird_observations::create_with_weather_checked(
         state,
         search,
         input.generation,
@@ -166,6 +281,13 @@ fn create_in_session(
         input.visit_start.as_deref(),
         input.visit_end.as_deref(),
         Some(&input.request_id),
+        &weather,
+        |db| {
+            for receipt in receipts {
+                receipt.check(db)?;
+            }
+            Ok(())
+        },
     )
 }
 #[cfg(target_os = "macos")]
@@ -222,6 +344,134 @@ mod tests {
     const CREATE_WIRE: &str = include_str!("../../tests/fixtures/bird-create-command.json");
     fn input() -> CreateInput {
         serde_json::from_str(CREATE_WIRE).unwrap()
+    }
+    #[test]
+    fn manual_weather_command_contract_is_atomic_independent_and_requires_stale_confirmation() {
+        let root = tempfile::TempDir::new().unwrap();
+        let directory = root.path().join("journal");
+        let state = DatabaseState::default();
+        let path = state.initialize_startup(&directory).unwrap();
+        let search = SearchState::default();
+        let mut wire: serde_json::Value = serde_json::from_str(CREATE_WIRE).unwrap();
+        let db = crate::database::open_existing(&path).unwrap();
+        db.execute("INSERT INTO journal_entries VALUES (?1,'2026-11-12','Synthetic','{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\"}]}',2,'c','u')",[input().entry_id]).unwrap();
+        db.execute(
+            "INSERT INTO places VALUES (?1,'Lake',59.0,18.0,1)",
+            [input().place_id],
+        )
+        .unwrap();
+        let journal_weather = r#"{"period":{"kind":"day","date":"2026-11-12"},"temperatureC":42}"#;
+        db.execute(
+            "INSERT INTO journal_weather VALUES (?1,1,?2,NULL,1)",
+            rusqlite::params![input().entry_id, journal_weather],
+        )
+        .unwrap();
+        db.close().map_err(|(_, e)| e).unwrap();
+        let context = serde_json::json!({"date":"2026-11-12","place_id":wire["placeId"],"place_name":"Lake","latitude":59,"longitude":18,"start":"11:17","end":"11:20"});
+        let manual = serde_json::json!({"action":"set","context":context,"payload":{"period":{"kind":"day","date":"2026-11-12"},"temperatureC":7,"windSpeedMs":0},"confirmed":false});
+        wire["weather"] = serde_json::json!([manual]);
+        crate::bird_observations::reserve_id(&state, &search, 1, &input().request_id).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let mut invalid = wire.clone();
+        invalid["weather"][0]["payload"]["temperatureC"] = (-500).into();
+        assert!(
+            create_in_session(&state, &search, serde_json::from_value(invalid).unwrap()).is_err()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        let id = create_in_session(
+            &state,
+            &search,
+            serde_json::from_value(wire.clone()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            create_in_session(
+                &state,
+                &search,
+                serde_json::from_value(wire.clone()).unwrap()
+            )
+            .unwrap(),
+            id
+        );
+        let view = read_view(&state, 1, None, &id).unwrap();
+        assert!(!view.weather[0].stale);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&view.weather[0].payload_json).unwrap()["temperatureC"],
+            7
+        );
+        let mut edit = wire.clone();
+        edit.as_object_mut().unwrap().remove("requestId");
+        edit["id"] = id.clone().into();
+        edit["expectedToken"] = view.edit_token.into();
+        edit["weather"] = serde_json::json!([]);
+        edit["visitDate"] = "2026-11-13".into();
+        let token = update_in_session(
+            &state,
+            &search,
+            serde_json::from_value(edit.clone()).unwrap(),
+        )
+        .unwrap();
+        let stale = read_view(&state, 1, None, &id).unwrap();
+        assert!(stale.weather[0].stale);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&stale.weather[0].context_json).unwrap()["date"],
+            "2026-11-12"
+        );
+        edit["expectedToken"] = token.into();
+        edit["weather"] = wire["weather"].clone();
+        edit["weather"][0]["context"]["date"] = "2026-11-13".into();
+        edit["weather"][0]["payload"]["period"]["date"] = "2026-11-13".into();
+        let before = std::fs::read(&path).unwrap();
+        assert_eq!(
+            update_in_session(
+                &state,
+                &search,
+                serde_json::from_value(edit.clone()).unwrap()
+            )
+            .unwrap_err(),
+            "visit_weather_confirmation_required"
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        edit["weather"][0]["confirmed"] = true.into();
+        let token = update_in_session(
+            &state,
+            &search,
+            serde_json::from_value(edit.clone()).unwrap(),
+        )
+        .unwrap();
+        assert!(!read_view(&state, 1, None, &id).unwrap().weather[0].stale);
+        drop(state);
+        let state = DatabaseState::default();
+        state.initialize_startup(&directory).unwrap();
+        let view = read_view(&state, 1, None, &id).unwrap();
+        assert_eq!(view.edit_token, token);
+        assert!(!view.weather[0].stale);
+        edit["expectedToken"] = token.into();
+        edit["weather"] = serde_json::json!([{"action":"remove","kind":"manual"}]);
+        let mut failed = edit.clone();
+        failed["rows"][0]["count"] = "0".into();
+        let before = std::fs::read(&path).unwrap();
+        assert!(
+            update_in_session(&state, &search, serde_json::from_value(failed).unwrap()).is_err()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        let mut late = edit.clone();
+        late["generation"] = 2.into();
+        assert_eq!(
+            update_in_session(&state, &search, serde_json::from_value(late).unwrap()).unwrap_err(),
+            crate::database_state::GENERATION_CONFLICT
+        );
+        update_in_session(&state, &search, serde_json::from_value(edit).unwrap()).unwrap();
+        assert!(read_view(&state, 1, None, &id).unwrap().weather.is_empty());
+        let db = crate::database::open_existing(&path).unwrap();
+        let preserved: String = db
+            .query_row(
+                "SELECT manual_json FROM journal_weather WHERE entry_id=?1",
+                [input().entry_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(preserved, journal_weather);
     }
     fn journal_inventory(
         path: &std::path::Path,
@@ -602,6 +852,7 @@ fn read_view(
         visit_end: list.visit_end,
         place,
         rows,
+        weather: list.weather,
     })
 }
 
@@ -609,6 +860,7 @@ fn read_view(
 pub(crate) fn update_journal_bird_list(
     state: State<'_, DatabaseState>,
     search: State<'_, SearchState>,
+    previews: State<'_, crate::bird_weather_fetch::PreviewState>,
     generation: u32,
     id: String,
     entry_id: Option<String>,
@@ -618,12 +870,14 @@ pub(crate) fn update_journal_bird_list(
     rows: Vec<RowInput>,
     visit_start: Option<String>,
     visit_end: Option<String>,
+    weather: Option<Vec<WeatherInput>>,
 ) -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
-        update_in_session(
+        update_with_previews(
             &state,
             &search,
+            Some(&previews),
             EditInput {
                 generation,
                 id,
@@ -634,6 +888,7 @@ pub(crate) fn update_journal_bird_list(
                 rows,
                 visit_start,
                 visit_end,
+                weather: weather.unwrap_or_default(),
             },
         )
     }
@@ -642,6 +897,7 @@ pub(crate) fn update_journal_bird_list(
         let _ = (
             state,
             search,
+            previews,
             generation,
             id,
             entry_id,
@@ -651,6 +907,7 @@ pub(crate) fn update_journal_bird_list(
             rows,
             visit_start,
             visit_end,
+            weather,
         );
         Err("bird_platform_unsupported".into())
     }
@@ -659,7 +916,7 @@ pub(crate) fn update_journal_bird_list(
 #[cfg(target_os = "macos")]
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct EditInput {
+pub(crate) struct EditInput {
     generation: u32,
     id: String,
     entry_id: Option<String>,
@@ -669,11 +926,23 @@ struct EditInput {
     rows: Vec<RowInput>,
     visit_start: Option<String>,
     visit_end: Option<String>,
+    #[serde(default)]
+    weather: Vec<WeatherInput>,
 }
 #[cfg(target_os = "macos")]
+#[cfg(test)]
 fn update_in_session(
     state: &DatabaseState,
     search: &SearchState,
+    input: EditInput,
+) -> Result<String, String> {
+    update_with_previews(state, search, None, input)
+}
+#[cfg(target_os = "macos")]
+pub(crate) fn update_with_previews(
+    state: &DatabaseState,
+    search: &SearchState,
+    previews: Option<&crate::bird_weather_fetch::PreviewState>,
     input: EditInput,
 ) -> Result<String, String> {
     if !available(state) {
@@ -689,6 +958,7 @@ fn update_in_session(
         rows,
         visit_start,
         visit_end,
+        weather,
     } = input;
     let rows = rows
         .into_iter()
@@ -707,7 +977,25 @@ fn update_in_session(
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    crate::bird_observations::update_in_context(
+    let mut receipts = Vec::new();
+    let weather = weather
+        .into_iter()
+        .map(|w| {
+            resolve_weather(
+                w,
+                previews,
+                &mut receipts,
+                generation,
+                &id,
+                Some(&expected_token),
+                &visit_date,
+                &place_id,
+                visit_start.as_deref(),
+                visit_end.as_deref(),
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    crate::bird_observations::update_with_weather_checked(
         state,
         search,
         generation,
@@ -719,6 +1007,13 @@ fn update_in_session(
         visit_start.as_deref(),
         visit_end.as_deref(),
         &rows,
+        &weather,
+        |db| {
+            for receipt in receipts {
+                receipt.check(db)?;
+            }
+            Ok(())
+        },
     )
 }
 
