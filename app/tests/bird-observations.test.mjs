@@ -3,7 +3,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
 import {render} from 'svelte/server';
-import {birds,source,previewUrl,creationUrl,names,detailUrl,overviewUrl,visitPreviewUrl,journalLinksUrl} from './bird-test-modules.mjs';
+import {birdWeather,birds,source,previewUrl,creationUrl,names,detailUrl,overviewUrl,visitPreviewUrl,journalLinksUrl} from './bird-test-modules.mjs';
 const place={id:'place',name:'Lake',latitude:59,longitude:18,revision:'1'};
 const species={id:'avibase-DF1E2A1D',english:'Ruddy Duck',scientific:'Oxyura jamaicensis',swedish:null};
 test('missing Swedish name keeps English/scientific fallback and registration identity',()=>{
@@ -26,13 +26,13 @@ test('one preview per list is below journal text, shows first three rows and pre
 function formHarness({entryId="origin",editId=null,editList=null,reject=false,rejectNavigation=false,rejectConfirmation=false,saveImplementation=null,journalPlace=place,entry=async()=>({generation:7,data:{id:"origin",entryDate:"2026-11-12"}}),failAt=null,enabled=true}={}){
  const calls=[],navigation=[],effects=[],mounts=[],initialization=[],focus=[],diagnostics=[],confirmations=[];let before;
  const check=stage=>{initialization.push(stage);if(failAt===stage)throw Error("injected "+stage);};
- const context=vm.createContext({$props:()=>({editId}),$state:v=>v,$derived:v=>v,$effect:fn=>effects.push(fn),page:{params:{id:entryId??undefined}},getContext:()=>({open:()=>()=>{}}),PLACE_MAP:'map',onMount:fn=>mounts.push(fn),invoke:async command=>{check(command);if(command==="bird_observations_available")return enabled;if(command==="new_journal_session")return {generation:7};if(command==="list_places")return {generation:7,data:[place]};throw Error("unexpected command "+command);},createJournalReader:()=>async(command)=>{check(command);if(command==="read_journal_bird_list")return {generation:7,data:editList};return entry();},readJournalPlace:async()=>{check("read_journal_place");return {place:journalPlace};},getCurrentWindow:()=>({onCloseRequested:async()=>()=>{}}),tick:()=>Promise.resolve(),beforeNavigate:fn=>before=fn,goto:async href=>{navigation.push(href);if(rejectNavigation)throw Error("navigation failed");},localVisitDate:birds.localVisitDate,entryHref:birds.entryHref,birdHref:birds.birdHref,speciesLabel:birds.speciesLabel,capitalizeCommonName:names.capitalizeCommonName,validDate:birds.validDate,validTime:birds.validTime,validBirdCount:birds.validBirdCount,validBirdComment:birds.validBirdComment,DEFAULT_BIRD_NAMES:names.DEFAULT_BIRD_NAMES,loadBirdNamePreferences:()=>({...names.DEFAULT_BIRD_NAMES}),canSaveBirdList:birds.canSaveBirdList,
- reserveBirdRequest:async()=>"33333333-3333-4333-8333-333333333333",crypto:{randomUUID:()=>"33333333-3333-4333-8333-333333333333"},confirmSavedBirdList:async(...args)=>{confirmations.push(args);if(rejectConfirmation)throw Error("confirmation failed");},updateBirdList:async(...args)=>{calls.push(args);if(reject)throw Error("bird_edit_stale");return "b".repeat(64);},saveBirdList:async(...args)=>{calls.push(args);if(saveImplementation)return saveImplementation(...args);if(reject)throw typeof reject==='string'?reject:Error('lost response');return 'saved-list';},window:{dispatchEvent:()=>{},addEventListener:()=>{},removeEventListener:()=>{}},Event,JSON,Error,console:{error:(...args)=>diagnostics.push(args)},
+ const context=vm.createContext({visitContext:birdWeather.visitContext,$props:()=>({editId}),$state:v=>v,$derived:v=>v,$effect:fn=>effects.push(fn),page:{params:{id:entryId??undefined}},getContext:()=>({open:()=>()=>{}}),PLACE_MAP:'map',onMount:fn=>mounts.push(fn),invoke:async command=>{check(command);if(command==="bird_observations_available")return enabled;if(command==="new_journal_session")return {generation:7};if(command==="list_places")return {generation:7,data:[place]};throw Error("unexpected command "+command);},createJournalReader:()=>async(command)=>{check(command);if(command==="read_journal_bird_list")return {generation:7,data:editList};return entry();},readJournalPlace:async()=>{check("read_journal_place");return {place:journalPlace};},getCurrentWindow:()=>({onCloseRequested:async()=>()=>{}}),tick:()=>Promise.resolve(),beforeNavigate:fn=>before=fn,goto:async href=>{navigation.push(href);if(rejectNavigation)throw Error("navigation failed");},localVisitDate:birds.localVisitDate,entryHref:birds.entryHref,birdHref:birds.birdHref,speciesLabel:birds.speciesLabel,capitalizeCommonName:names.capitalizeCommonName,validDate:birds.validDate,validTime:birds.validTime,validBirdCount:birds.validBirdCount,validBirdComment:birds.validBirdComment,DEFAULT_BIRD_NAMES:names.DEFAULT_BIRD_NAMES,loadBirdNamePreferences:()=>({...names.DEFAULT_BIRD_NAMES}),canSaveBirdList:birds.canSaveBirdList,
+ reserveBirdRequest:async()=>"33333333-3333-4333-8333-333333333333",crypto:{randomUUID:()=>"33333333-3333-4333-8333-333333333333"},confirmSavedBirdList:async(...args)=>{confirmations.push(args);if(rejectConfirmation)throw Error("confirmation failed");},updateBirdList:async(...args)=>{calls.push(args);if(reject)throw Error("bird_edit_stale");return "b".repeat(64);},saveBirdList:async(...args)=>{calls.push(args);if(saveImplementation)return saveImplementation(...args);if(reject)throw typeof reject==='string'?reject:Error('lost response');return 'saved-list';},window:{dispatchEvent:()=>{},addEventListener:()=>{},removeEventListener:()=>{}},Event,URL,JSON,Error,console:{error:(...args)=>diagnostics.push(args)},
  searchControl:{focus:()=>focus.push('search')},
  document:{getElementById:id=>{const i=Number(id.replace(/^bird-(?:count|comment)-/,''));return i>=0&&i<vm.runInContext('rows.length',context)?{focus:()=>focus.push(id),select:()=>{}}:null;},querySelector:()=>({focus:()=>focus.push('result-0')}),querySelectorAll:()=>[0,1,2].map(i=>({focus:()=>focus.push(`result-${i}`)}))}});
  const script=source('../src/lib/components/BirdListForm.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'').replace('const valid=$derived','let valid=$derived');
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
- const run=s=>vm.runInContext(s,context);return{run,calls,navigation,initialization,focus,diagnostics,confirmations,mount:()=>mounts[0](),before:()=>before};
+ const run=s=>vm.runInContext(s,context);return{run,calls,navigation,initialization,focus,diagnostics,confirmations,mount:()=>mounts[0](),before:()=>before,reviewEffect:()=>effects[0]()};
 }
 test('cancellation creates neither list nor link and dirty navigation waits for confirmation',async()=>{
  const h=formHarness();h.run('dirty=true;cancel()');await Promise.resolve();assert.equal(h.run('leave'),true);assert.equal(h.calls.length,0);assert.equal(h.navigation.length,0);await h.run('discard()');assert.deepEqual(h.navigation,['/journal/entries/origin']);assert.equal(h.calls.length,0);
@@ -621,5 +621,288 @@ test('pending photo work blocks normal save and cancelling an attachment edit ne
  for(const editId of [null,'existing']){
   const h=formHarness({editId});ready(h);h.run('photoPending=1');await h.run('save()');assert.equal(h.calls.length,0);h.run('photoPending=0');
   h.run('rows[0].rowId="stored-row";rows[0].photo={asset_id:"stored-photo",preview:"AQID",caption:"Stored caption"};const storedPhoto=JSON.stringify(rows[0].photo);rows[0].photo=null;dirty=true;cancel()');assert.equal(h.run('leave'),true);assert.equal(h.calls.length,0);await h.run('discard()');assert.equal(h.calls.length,0);
+ }
+});
+
+test('manual visit weather is staged only for normal Save, blocks invalid drafts and retains failed input',async()=>{
+ const change={action:'set',context:birdWeather.visitContext('2026-11-13',place,'08:15','09:30'),payload:{period:{kind:'day',date:'2026-11-13'},temperatureC:7},confirmed:false};
+ for(const editId of [null,'existing']){
+  const h=formHarness({editId});ready(h);h.run(`weatherEditor={getChanges:()=>${JSON.stringify([change])}}`);
+  h.run('cancel()');assert.equal(h.calls.length,0);assert.equal(h.run('leave'),true);
+  await h.run('save()');assert.equal(h.calls.length,1);assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0].at(-1))),[change]);
+  const invalid=formHarness({editId});ready(invalid);invalid.run('weatherEditor={getChanges:()=>null}');await invalid.run('save()');assert.equal(invalid.calls.length,0);assert.equal(invalid.run('dirty'),true);
+  const failure=formHarness({editId,reject:true});ready(failure);failure.run(`weatherEditor={getChanges:()=>${JSON.stringify([change])}}`);await failure.run('save()');assert.equal(failure.run('dirty'),true);assert.equal(failure.navigation.length,0);assert.equal(failure.run('weatherEditor.getChanges()[0].payload.temperatureC'),7);
+ }
+});
+test('real create/edit invoke passes manual weather actions with the observation transaction',async()=>{
+ const expected=JSON.parse(source('./fixtures/bird-create-command.json'));
+ const catalog=JSON.parse(source('../src-tauri/catalog/avilist-v2026.json'));
+ const rows=expected.rows.map(r=>({...catalog.find(s=>s.id===r.speciesId),taxonomyVersion:r.taxonomyVersion,count:r.count,comment:r.comment??''}));
+ const selectedPlace={...place,id:expected.placeId};
+ const change=birdWeather.manualWeatherChange({period:{kind:'day',date:expected.visitDate},temperatureC:7},birdWeather.visitContext(expected.visitDate,selectedPlace,expected.visitStart,expected.visitEnd),false);
+ const calls=[],previous=globalThis.window;
+ globalThis.window={__TAURI_INTERNALS__:{invoke:async(command,args)=>{calls.push({command,args});return command==='create_journal_bird_list'?expected.requestId:'b'.repeat(64);}}};
+ try{
+  await birds.saveBirdList(expected.generation,expected.entryId,expected.visitDate,selectedPlace,rows,expected.visitStart,expected.visitEnd,expected.requestId,[change]);
+  assert.deepEqual(calls[0],{command:'create_journal_bird_list',args:{...expected,weather:[change]}});
+  await birds.updateBirdList(1,expected.entryId,'list','a'.repeat(64),expected.visitDate,selectedPlace,rows,expected.visitStart,expected.visitEnd,[{action:'remove',kind:'manual'}]);
+  assert.deepEqual(calls[1].args.weather,[{action:'remove',kind:'manual'}]);assert.equal(calls[1].args.expectedToken,'a'.repeat(64));
+ }finally{if(previous===undefined)delete globalThis.window;else globalThis.window=previous;}
+});
+
+function weatherEditorHarness({records=[],context=birdWeather.visitContext('2026-11-13',place,'08:15','09:30'),part={period:{kind:'day',date:context.date},temperatureC:7}}={}){
+ const effects=[];let dirties=0;
+ const props={records,context,locale:'sv',disabled:false,onDirty:()=>dirties++};
+ const script=source('../src/lib/components/BirdWeatherEditor.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1]
+  .replace(/^\s*import .*;\n/gm,'').replace(/export (?=(?:async )?function)/g,'')
+  .replace(/const (\w+)=\$derived\((.*)\);/g,(_,name,expr)=>`Object.defineProperty(globalThis,'${name}',{get:()=>(${expr})});`);
+ const ctx=vm.createContext({$props:()=>props,$state:v=>v,$effect:fn=>effects.push(fn),untrack:fn=>fn(),tick:()=>Promise.resolve(),visitWeatherSummary:birdWeather.visitWeatherSummary,sameVisit:birdWeather.sameVisit,weatherStale:birdWeather.weatherStale,manualWeatherChange:birdWeather.manualWeatherChange,cancelVisitWeather:async()=>{},formatBirdDate:names.formatBirdDate,JSON});
+ vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,ctx);
+ const run=s=>vm.runInContext(s,ctx);run(`fields={getPart:()=>(${JSON.stringify(part)}),draftSnapshot:()=>fields.getPart(),restoreDraft:part=>{fields.getPart=()=>part;}}`);
+ return{run,flush:()=>effects.forEach(fn=>fn()),inject:(name,value)=>{ctx[name]=value;},dirties:()=>dirties};
+}
+const originalVisit=birdWeather.visitContext('2026-11-13',place,'08:15','09:30');
+const storedManual={list_id:'list',kind:'manual',context_json:JSON.stringify(originalVisit),payload_json:JSON.stringify({period:{kind:'day',date:originalVisit.date},temperatureC:7,description:'My visit'}),stale:false};
+test('weather editor adds/removes locally and requires explicit reuse after sticky context changes',()=>{
+ const h=weatherEditorHarness();assert.equal(h.run('getChanges().length'),0);h.run('add()');assert.equal(h.run('getChanges()[0].payload.temperatureC'),7);assert.equal(h.dirties(),1);
+ h.run('context={...context,date:"2026-11-14"}');h.flush();assert.equal(h.run('getChanges()'),null);assert.equal(h.run('error'),'confirm');
+ h.run('confirmedContext={...context}');assert.equal(h.run('getChanges()[0].payload.period.date'),'2026-11-14');assert.equal(h.run('getChanges()[0].confirmed'),true);
+ h.run('context={...context,start:"09:00"}');h.flush();assert.equal(h.run('getChanges()'),null);
+ h.run('context={...context,start:"08:15"}');h.flush();assert.equal(h.run('getChanges()'),null);
+ h.run('remove("manual")');assert.equal(h.run('getChanges().length'),0);h.run('add()');assert.equal(h.run('getChanges()[0].action'),'set');
+ const saved=weatherEditorHarness({records:[storedManual]});assert.equal(saved.run('getChanges().length'),0);
+ saved.run('context={...context,latitude:60}');saved.flush();assert.equal(saved.run('shown[0].stale'),true);assert.equal(saved.run('getChanges().length'),0);
+ saved.run('context={...context,latitude:59}');saved.flush();assert.equal(saved.run('shown[0].stale'),true);assert.equal(saved.run('stale'),true);
+ saved.run('changed=true');assert.equal(saved.run('getChanges()'),null);saved.run('confirmedContext={...context}');assert.equal(saved.run('getChanges()[0].confirmed'),true);
+ saved.run('remove("manual")');assert.deepEqual(JSON.parse(JSON.stringify(saved.run('getChanges()'))),[{action:'remove',kind:'manual'}]);
+ const invalid=weatherEditorHarness({part:null});invalid.run('add()');assert.equal(invalid.run('getChanges()'),null);assert.equal(invalid.run('error'),'fields');
+});
+test('summary excludes stale values and original context is independent from journal weather',()=>{
+ const records=[{...storedManual,stale:true}];
+ assert.equal(birdWeather.visitWeatherSummary(records,originalVisit).manual,null);
+ assert.equal(birdWeather.visitWeatherSummary([storedManual],{...originalVisit,longitude:19}).manual,null);
+ assert.equal(birdWeather.visitWeatherSummary([storedManual],originalVisit).manual.temperatureC,7);
+ const next=birdWeather.manualWeatherChange(JSON.parse(storedManual.payload_json),{...originalVisit,date:'2026-11-14'},true);
+ assert.equal(next.payload.period.date,'2026-11-14');assert.equal(JSON.parse(storedManual.payload_json).period.date,'2026-11-13');
+});
+test('rendered visit weather has compact manual summary, stale context and no nested form or fetch action',async()=>{
+ const {visitWeatherUrl,weatherEditorUrl}=await import('./bird-test-modules.mjs');
+ const {default:Summary}=await import(visitWeatherUrl);const {default:Editor}=await import(weatherEditorUrl);
+ for(const locale of ['sv','en']){
+  const props={records:[storedManual],context:originalVisit,locale};
+  const current=render(Summary,{props}).body;assert.match(current,/compact-summary/);assert.match(current,/7 °C/);assert.match(current,locale==='sv'?/Manuellt angivet väder/:/Manually entered weather/);
+  const stale=render(Summary,{props:{...props,records:[{...storedManual,stale:true}]}}).body;assert.doesNotMatch(stale,/current-summary|compact-summary/);assert.match(stale,/Lake/);assert.match(stale,/08:15/);assert.match(stale,/59, 18/);assert.match(stale,locale==='sv'?/Ursprungligt besök/:/Original visit/);
+  const editor=render(Editor,{props:{...props,records:[{...storedManual,stale:true}],onDirty(){}}}).body;
+  assert.doesNotMatch(editor,/<form|type="submit"/);assert.match(editor,/aria-haspopup="dialog"/);assert.match(editor,locale==='sv'?/Ja, använd vädret/:/Yes, use this weather/);assert.match(editor,/m\/s/);
+  const empty=render(Editor,{props:{...props,records:[],onDirty(){}}}).body;assert.doesNotMatch(empty,/<dialog[^>]*\bopen\b/);assert.match(empty,locale==='sv'?/>Väder</:/>Weather</);
+ }
+});
+
+test('weather panel Cancel/Escape restores the prior draft, Done stages it and focus returns to the trigger',async()=>{
+ const parent=formHarness();ready(parent);parent.run('weatherEditor={isOpen:()=>true,getChanges:()=>{throw Error("must not submit while panel is open")}}');await parent.run('save()');assert.equal(parent.calls.length,0);
+ const h=weatherEditorHarness({records:[storedManual]});
+ h.run('focusLog=[];panel={open:false,showModal(){this.open=true},close(){this.open=false},querySelector:()=>({focus:()=>focusLog.push("cancel")})};trigger={focus:()=>focusLog.push("trigger")}');
+ await h.run('openPanel()');assert.equal(h.run('opened'),true);assert.equal(h.run('focusLog.at(-1)'),'cancel');
+ h.run('fields.getPart=()=>({period:{kind:"day",date:context.date},temperatureC:9});changed=true');
+ await h.run('cancelPanel()');assert.equal(h.run('opened'),false);assert.equal(h.run('getChanges().length'),0);assert.equal(h.run('fields.getPart().temperatureC'),7);assert.equal(h.run('focusLog.at(-1)'),'trigger');
+ await h.run('openPanel()');h.run('fields.getPart=()=>({period:{kind:"day",date:context.date},temperatureC:9});changed=true;applyPanel()');
+ assert.equal(h.run('opened'),false);assert.equal(h.run('getChanges()[0].payload.temperatureC'),9);assert.equal(h.run('summary.manual.temperatureC'),9);
+ await h.run('openPanel()');h.run('remove("manual")');await h.run('cancelPanel()');assert.equal(h.run('getChanges()[0].payload.temperatureC'),9);
+ const sourceText=source('../src/lib/components/BirdWeatherEditor.svelte');assert.match(sourceText,/<dialog[^>]*aria-label=/);assert.match(sourceText,/oncancel=\{event=>\{event.preventDefault\(\);void cancelPanel\(\)/);assert.match(sourceText,/panel.showModal\(\)/);
+});
+test('explicit Use for visit stages confirmation; later context changes invalidate it and summaries',()=>{
+ const h=weatherEditorHarness({records:[{...storedManual,stale:true}]});
+ h.run('reuse();applyPanel()');assert.equal(h.run('getChanges()[0].confirmed'),true);assert.equal(h.run('summary.manual.temperatureC'),7);
+ h.run('context={...context,start:"09:00"}');h.flush();assert.equal(h.run('summary.manual'),null);assert.equal(h.run('getChanges()'),null);
+ h.run('context={...context,start:"08:15"}');h.flush();assert.equal(h.run('summary.manual'),null);assert.equal(h.run('confirmed'),false);
+});
+test('shared overview/journal previews show only current observation weather and metadata owns the controls',async()=>{
+ const {default:Preview}=await import(visitPreviewUrl);
+ const list={id:'visit',place,visitDate:originalVisit.date,visitStart:originalVisit.start,visitEnd:originalVisit.end,rows:[{...species,count:'4'}]};
+ for(const locale of ['sv','en']){
+  const props={list:{...list,weather:[storedManual]},locale,href:'/observations/visit'};
+  const current=render(Preview,{props}).body;assert.match(current,/7 °C/);assert.match(current,/data-weather-icon/);assert.doesNotMatch(current,/<button|<dialog|42 °C/);
+  for(const weather of [[],[{...storedManual,stale:true}]]){const html=render(Preview,{props:{...props,list:{...list,weather}}}).body;assert.doesNotMatch(html,/compact-summary|visit-weather|7 °C/);}
+ }
+ const form=source('../src/lib/components/BirdListForm.svelte');assert.ok(form.indexOf('<BirdWeatherEditor')>form.indexOf('<div class="visit-metadata">'));assert.ok(form.indexOf('<BirdWeatherEditor')<form.indexOf('<fieldset class="species"'));
+ const detail=source('../src/lib/components/BirdListDetail.svelte');assert.ok(detail.indexOf('<BirdVisitWeather')>detail.indexOf('<div class="metadata">'));assert.ok(detail.indexOf('<BirdVisitWeather')<detail.indexOf('<p class="visit-context">'));
+});
+
+test('November 18 to 19 date-only edit saves stale weather and visibly marks editing and reopened detail',async()=>{
+ const {visitWeatherUrl,weatherEditorUrl}=await import('./bird-test-modules.mjs');
+ const {default:DetailWeather}=await import(visitWeatherUrl);const {default:Editor}=await import(weatherEditorUrl);
+ const before={...originalVisit,date:'2026-11-18'},after={...before,date:'2026-11-19'};
+ const record={...storedManual,context_json:JSON.stringify(before),payload_json:JSON.stringify({period:{kind:'day',date:before.date},temperatureC:7})};
+ const editor=weatherEditorHarness({records:[record],context:before});
+ editor.run('context={...context,date:"2026-11-19"}');editor.flush();
+ assert.equal(editor.run('opened'),false);assert.equal(editor.run('getChanges().length'),0);assert.equal(editor.run('shown[0].stale'),true);
+ assert.equal(JSON.parse(editor.run('shown[0].context_json')).date,'2026-11-18');assert.equal(editor.run('summary.manual'),null);
+ for(const locale of ['sv','en']){
+  const expected=locale==='sv'?/Väder behöver ses över/:/Weather needs review/;
+  const draft=render(Editor,{props:{records:[record],context:after,locale,onDirty(){}}}).body;
+  assert.match(draft.split('<dialog')[0],expected);assert.doesNotMatch(draft,/<dialog[^>]*\bopen\b/);
+  const saved=render(DetailWeather,{props:{records:[{...record,stale:true}],context:after,locale}}).body;
+  assert.match(saved.split('<dialog')[0],expected);assert.doesNotMatch(saved,/compact-summary/);
+  assert.match(saved,/18 november 2026|18 November 2026/);
+ }
+});
+
+test('stale review actions and validation stay together before the wide weather fields',async()=>{
+ const {weatherEditorUrl,visitWeatherUrl}=await import('./bird-test-modules.mjs');
+ const {default:Editor}=await import(weatherEditorUrl),{default:Detail}=await import(visitWeatherUrl);
+ for(const locale of ['sv','en']){
+  const props={records:[{...storedManual,stale:true}],context:originalVisit,locale};
+  const html=render(Editor,{props:{...props,onDirty(){}}}).body;
+  const review=html.indexOf('class="weather-review');const form=html.indexOf('class="embedded-weather');assert.ok(review>0&&review<form);
+  assert.match(html.slice(review,form),locale==='sv'?/Ja, använd vädret/:/Yes, use this weather/);assert.match(html.slice(review,form),locale==='sv'?/Ta bort väder/:/Remove weather/);
+  const text=source('../src/lib/components/BirdWeatherEditor.svelte');assert.ok(text.indexOf("error==='confirm'")<text.indexOf('<WeatherForm bind:this'));assert.match(text,/\.review-actions button\{min-height:44px/);assert.match(text,/width:min\(780px,calc\(100vw - 32px\)\)/);
+  const readonly=render(Detail,{props:{...props,editHref:'/observations/list/edit'}}).body;assert.match(readonly,/href="\/observations\/list\/edit\?weatherReview=use"/);assert.match(readonly,/weatherReview=remove/);
+ }
+ const fields=source('../src/lib/components/WeatherForm.svelte');assert.match(fields,/class:two-column=\{wide\}/);assert.match(fields,/grid-template-columns:minmax\(210px/);assert.match(fields,/@media\(max-width:680px\)\{\.two-column\{display:block/);
+ const preview=source('../src/lib/components/BirdVisitPreview.svelte');assert.match(preview,/\.visit-line\{display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:8px 16px/);assert.doesNotMatch(preview,/justify-content:space-between|flex:1 1 auto/);
+});
+test('saved-detail review navigation only opens/focuses a choice; date changes never reopen or confirm it',async()=>{
+ for(const action of ['use','remove']){
+  const h=formHarness({editId:'existing'});ready(h);h.run(`initialized=true;page.url=new URL('http://mno/observations/existing/edit?weatherReview=${action}');reviews=[];weatherEditor={openForReview:action=>reviews.push(action)}`);h.reviewEffect();
+  assert.equal(h.run('reviews.length'),1);assert.equal(h.run('reviews[0]'),action);assert.equal(h.calls.length,0);
+  h.run('date="2026-11-19"');h.reviewEffect();assert.equal(h.run('reviews.length'),1);assert.equal(h.calls.length,0);
+  const editor=weatherEditorHarness({records:[{...storedManual,stale:true}]});
+  editor.run('focusLog=[];panel={open:false,showModal(){this.open=true},querySelector:selector=>({focus:()=>focusLog.push(selector)})}');
+  await editor.run(`openForReview('${action}')`);assert.equal(editor.run('confirmed'),false);assert.equal(editor.run('removed.length'),0);assert.equal(editor.run('focusLog.at(-1)'),action==='use'?'.reuse':'.remove-weather');
+ }
+});
+
+test('overview and journal previews put weather after visit time or location before any extra date',async()=>{
+ const {default:Preview}=await import(visitPreviewUrl);
+ for(const locale of ['sv','en'])for(const timed of [true,false])for(const journal of [true,false]){
+  const context={...originalVisit,start:timed?'08:15':null,end:timed?'09:30':null};
+  const record={...storedManual,context_json:JSON.stringify(context)};
+  const list={id:'visit',place,visitDate:context.date,visitStart:context.start,visitEnd:context.end,rows:[{...species,count:'4'}],weather:[record]};
+  const html=render(Preview,{props:{list,locale,journalDate:journal?'2026-11-12':context.date,href:journal?'/journal/entries/origin/birds/visit':'/observations/visit'}}).body;
+  const weather=html.indexOf('7 °C');assert.ok(weather>html.indexOf('Lake'));
+  if(timed)assert.ok(weather>html.indexOf('08:15–09:30'));else assert.doesNotMatch(html,/08:15|09:30/);
+  if(journal)assert.ok(html.indexOf(names.formatBirdDate(context.date,locale))>weather);else assert.doesNotMatch(html,/visit-date/);
+ }
+});
+
+const dailyRecord=(request)=>({list_id:request.ownerId,kind:'fetched',context_json:JSON.stringify(request.context),payload_json:JSON.stringify({period:{kind:'day',date:request.context.date},timezone:'Europe/Stockholm',retrievedAt:'2026-11-19T12:00:00Z',temperatureMeanC:8,source:{provider:'open-meteo',product:'forecast-daily',dataKind:'forecast',model:'ECMWF IFS',attribution:'Open-Meteo; ECMWF',license:'CC BY 4.0'}}),stale:false});
+function fetchHarness({transport=null,review=null,onApply=null,onBusy=null,onReview=null}={}){
+ const effects=[],calls=[],cancelled=[],applied=[],busy=[];let destroy;
+ const requestContext={...originalVisit,date:'2026-11-19'};
+ const props={context:requestContext,generation:7,locale:'sv',getOwner:async()=>({ownerId:'visit',expectedToken:'token'}),onApply:p=>{onApply?.(p);applied.push(p);},onBusy:b=>{busy.push(b);onBusy?.(b);},onReview:value=>onReview?.(value)};
+ const ctx=vm.createContext({$props:()=>props,$state:v=>v,$effect:fn=>effects.push(fn),onDestroy:fn=>destroy=fn,sameVisit:birdWeather.sameVisit,fetchVisitWeather:async(...args)=>{calls.push(['fetch',...args]);return transport?transport(...args):{previewId:args[1],record:dailyRecord(args[2]),todayForecast:true};},reviewVisitWeather:async(...args)=>{calls.push(['review',...args]);return review?review(...args):{previewId:args[1],record:dailyRecord(args[2]),todayForecast:true};},cancelVisitWeather:async id=>cancelled.push(id),crypto:{randomUUID:()=> '44444444-4444-4444-8444-444444444444'},historicalError:cause=>String(cause)==='network'?'network':'fetchFailed',weatherLabels:{},m:{bird_weather_fetch_conflict:()=> 'conflict',weather_history_fetchFailed:()=> 'failed'},JSON});
+ let script=source('../src/lib/components/BirdWeatherFetch.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'').replace(/export (?=(?:async )?function)/g,'').replace(/const (\w+)=\$derived\((.*)\);/g,(_,name,expr)=>`Object.defineProperty(globalThis,'${name}',{get:()=>(${expr})});`);
+ vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,ctx);
+ return{run:s=>vm.runInContext(s,ctx),flush:()=>effects.forEach(fn=>fn()),calls,cancelled,applied,busy,destroy:()=>destroy()};
+}
+test('daily fetch reviews server-bound data before staging; cancel/failure never applies or saves',async()=>{
+ const h=fetchHarness();await h.run('fetchDaily()');assert.equal(h.calls.length,1);assert.equal(h.applied.length,0);assert.equal(h.run('result.todayForecast'),true);
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0][3].context)),{...originalVisit,date:'2026-11-19'});
+ await h.run('apply()');assert.equal(h.calls[1][0],'review');assert.equal(h.applied.length,1);assert.equal(h.run('result'),null);h.destroy();assert.equal(h.cancelled.length,0);
+ const cancel=fetchHarness();await cancel.run('fetchDaily()');cancel.run('discard()');assert.equal(cancel.applied.length,0);assert.equal(cancel.cancelled.length,1);
+ const failed=fetchHarness({transport:async()=>{throw 'network'}});await failed.run('fetchDaily()');assert.equal(failed.run('error'),'network');assert.equal(failed.applied.length,0);assert.equal(failed.run('busy'),false);
+ const expired=fetchHarness({review:async()=>{throw 'bird_weather_preview_expired'}});await expired.run('fetchDaily()');await expired.run('apply()');assert.equal(expired.run('error'),'conflict');assert.equal(expired.applied.length,0);
+});
+test('context/generation changes or cancellation during fetch and review reject late responses',async()=>{
+ for(const change of ['context={...context,date:"2026-11-18"}','context={...context,latitude:60}','generation=8','discard()']){
+  let release;const waiting=new Promise(resolve=>release=resolve);
+  const h=fetchHarness({transport:async(g,id,request)=>{await waiting;return{previewId:id,record:dailyRecord(request),todayForecast:true}}});
+  const pending=h.run('fetchDaily()');await settle();h.run(change);h.flush();release();await pending;assert.equal(h.applied.length,0);assert.equal(h.run('result'),null);assert.ok(h.cancelled.length>0);
+ }
+ let release;const wait=new Promise(resolve=>release=resolve);const h=fetchHarness({review:async(g,id,request)=>{await wait;return{previewId:id,record:dailyRecord(request),todayForecast:true}}});await h.run('fetchDaily()');const pending=h.run('apply()');h.run('context={...context,end:"19:00"}');h.flush();release();await pending;assert.equal(h.applied.length,0);
+});
+test('fetched draft stays separate from manual values and panel Cancel restores the prior draft',async()=>{
+ const h=weatherEditorHarness({records:[storedManual]});const result={previewId:'preview',record:dailyRecord({ownerId:'list',context:originalVisit}),todayForecast:true};
+ h.run('panel={open:false,showModal(){this.open=true},close(){this.open=false},querySelector:()=>({focus(){}})};trigger={focus(){}}');
+ await h.run('openPanel()');h.run(`fetchedApplied(${JSON.stringify(result)})`);assert.equal(h.run('getChanges()[0].action'),'fetched');assert.equal(h.run('summary.manual.temperatureC'),7);assert.equal(h.run('summary.fetched.temperatureMeanC'),8);
+ assert.equal(h.run('opened'),false);await h.run('openPanel()');await h.run('cancelPanel()');assert.equal(h.run('fetchedDraft.previewId'),'preview');assert.equal(h.run('getChanges()[0].action'),'fetched');assert.equal(h.run('summary.manual.temperatureC'),7);
+ h.run(`fetchedApplied(${JSON.stringify(result)})`);h.run('context={...context,date:"2026-11-14"}');h.flush();assert.equal(h.run('getChanges()'),null);assert.equal(h.run('summary.fetched'),null);h.run('reuse()');assert.equal(h.run('getChanges()'),null);h.run('remove("fetched")');assert.equal(h.run('fetchedDraft.previewId'),'preview');
+});
+test('visit preview wire checks generation/context and today means the local date at retrieval',async()=>{
+ const {visitFetchHelpers}=await import('./bird-test-modules.mjs');const request={ownerId:'visit',expectedToken:null,context:{...originalVisit,date:'2026-11-19'}};const id='preview';
+ const previous=globalThis.window;let mismatch=false;const calls=[];
+ globalThis.window={__TAURI_INTERNALS__:{invoke:async(command,args)=>{calls.push({command,args});return{generation:mismatch?8:7,data:{previewId:id,record:dailyRecord(request),todayForecast:true}};}}};
+ try{await visitFetchHelpers.fetchVisitWeather(7,id,request);assert.deepEqual(calls[0],{command:'preview_bird_visit_weather',args:{generation:7,previewId:id,request}});mismatch=true;await assert.rejects(visitFetchHelpers.reviewVisitWeather(7,id,request),cause=>cause==='bird_weather_context_conflict');}finally{if(previous===undefined)delete globalThis.window;else globalThis.window=previous;}
+ const part=JSON.parse(dailyRecord(request).payload_json);assert.equal(visitFetchHelpers.forecastOnRetrievalDay(part),true);assert.equal(visitFetchHelpers.forecastOnRetrievalDay({...part,period:{kind:'day',date:'2026-11-18'}}),false);
+ assert.equal(visitFetchHelpers.forecastOnRetrievalDay({...part,period:{kind:'day',date:'2026-11-20'},timezone:'Pacific/Kiritimati',retrievedAt:'2026-11-19T23:30:00Z'}),true);
+});
+test('daily preview labels stay daily/forecast and have no independent Save action',async()=>{
+ const {fetchComponentUrl}=await import('./bird-test-modules.mjs');const {default:Fetch}=await import(fetchComponentUrl);
+ const {visitWeatherUrl}=await import('./bird-test-modules.mjs');const {default:Detail}=await import(visitWeatherUrl);
+ const context={...originalVisit,date:'2026-11-19'},record=dailyRecord({ownerId:'visit',context});
+ for(const locale of ['sv','en']){
+  const html=render(Fetch,{props:{context,generation:7,getOwner:async()=>({ownerId:'visit',expectedToken:null}),locale,onApply(){},onBusy(){}}}).body;assert.match(html,locale==='sv'?/Hämta dygnsväder/:/Fetch daily weather/);assert.doesNotMatch(html,/<form|type="submit"/);
+  const detail=render(Detail,{props:{records:[record],context,locale}}).body;assert.match(detail,locale==='sv'?/återstoden av dagen/:/remainder of the day/);assert.match(detail,locale==='sv'?/inte exakta besöksförhållanden/:/not exact visit-time conditions/);assert.match(detail,/Open-Meteo|Open‐Meteo/);assert.doesNotMatch(detail,/Avslutat modelldygn|Completed model day/);
+ }
+});
+test('preview rejection allows refetch without losing entered manual data; request reservation is single-flight',async()=>{
+ const h=formHarness();ready(h);h.run('reserveCalls=0;finishReservation=null;reserveBirdRequest=()=>{reserveCalls++;return new Promise(resolve=>finishReservation=resolve)}');const a=h.run('weatherOwner()'),b=h.run('weatherOwner()');assert.equal(h.run('reserveCalls'),1);h.run('finishReservation("33333333-3333-4333-8333-333333333333")');assert.equal((await a).ownerId,(await b).ownerId);
+ const rejected=formHarness({reject:'bird_weather_preview_expired'});ready(rejected);rejected.run('fetchRejected=false;weatherEditor={getChanges:()=>[],fetchFailure:()=>fetchRejected=true}');await rejected.run('save()');assert.equal(rejected.run('saveUncertain'),false);assert.equal(rejected.run('fetchRejected'),true);assert.equal(rejected.run('rows[0].count'),'6');assert.equal(rejected.run('dirty'),true);
+});
+
+test('expired preview after an earlier uncertain creation cannot unlock a changed or duplicate request',async()=>{
+ let attempt=0;const h=formHarness({saveImplementation:async()=>{if(++attempt===1)throw Error('lost response');throw 'bird_weather_preview_expired';}});ready(h);
+ await h.run('save()');assert.equal(h.run('saveUncertain'),true);const id=h.run('requestId');
+ await h.run('save()');assert.equal(h.run('saveUncertain'),true);assert.equal(h.run('requestId'),id);assert.equal(h.run('rows[0].count'),'6');assert.equal(h.navigation.length,0);
+});
+
+test('Use weather reviews, applies and closes once without Done or modifying saved manual records',async()=>{
+ const context={...originalVisit,date:'2026-11-19'};
+ const manual={...storedManual,context_json:JSON.stringify(context),payload_json:JSON.stringify({period:{kind:'day',date:context.date},temperatureC:7,description:'My own values'})};
+ const editor=weatherEditorHarness({records:[manual],context});
+ editor.run('closeCount=0;focusLog=[];panel={open:false,showModal(){this.open=true},close(){this.open=false;closeCount++},querySelector:()=>({focus(){}})};trigger={focus:()=>focusLog.push("trigger")}');
+ await editor.run('openPanel()');
+ const fetcher=fetchHarness({onApply:value=>editor.run(`fetchedApplied(${JSON.stringify(value)})`),onBusy:busy=>editor.run(`fetchBusy=${busy}`),onReview:value=>editor.run(`fetchReview=${value}`)});
+ await fetcher.run('fetchDaily()');fetcher.flush();assert.equal(editor.run('fetchReview'),true);assert.equal(editor.run('opened'),true);
+ await fetcher.run('apply()');fetcher.flush();assert.equal(editor.run('opened'),false);assert.equal(editor.run('closeCount'),1);assert.equal(editor.run('focusLog.at(-1)'),'trigger');
+ assert.deepEqual(JSON.parse(JSON.stringify(editor.run('getChanges()'))),[{action:'fetched',previewId:'44444444-4444-4444-8444-444444444444'}]);
+ assert.equal(editor.run('records[0].payload_json'),manual.payload_json);assert.equal(editor.run('summary.manual.temperatureC'),7);assert.equal(editor.run('summary.fetched.temperatureMeanC'),8);assert.equal(fetcher.cancelled.length,0);
+ assert.equal(fetcher.calls.filter(c=>c[0]==='review').length,1);assert.match(source('../src/lib/components/BirdWeatherEditor.svelte'),/\{#if !fetchReview\}<button[^>]*onclick=\{applyPanel\}/);
+ // A late second close must not revoke the accepted receipt.
+ await editor.run('cancelPanel()');assert.equal(editor.run('fetchedDraft.previewId'),'44444444-4444-4444-8444-444444444444');
+});
+test('application failure/expiry keeps the weather dialog and preview open; Cancel discards only pending work',async()=>{
+ for(const mode of ['expired','invalid-manual','cancel']){
+  const context={...originalVisit,date:'2026-11-19'};const manual={...storedManual,context_json:JSON.stringify(context),payload_json:JSON.stringify({period:{kind:'day',date:context.date},temperatureC:7})};
+  const editor=weatherEditorHarness({records:[manual],context});editor.run('panel={open:false,showModal(){this.open=true},close(){this.open=false},querySelector:()=>({focus(){}})};trigger={focus(){}}');await editor.run('openPanel()');
+  const fetcher=fetchHarness({review:mode==='expired'?async()=>{throw 'bird_weather_preview_expired'}:null,onApply:value=>editor.run(`fetchedApplied(${JSON.stringify(value)})`),onBusy:busy=>editor.run(`fetchBusy=${busy}`)});
+  editor.inject('fetcherStub',{discard:()=>fetcher.run('discard()')});editor.run('fetchControl=fetcherStub');
+  await fetcher.run('fetchDaily()');
+  if(mode==='invalid-manual')editor.run('changed=true;fields.getPart=()=>null');
+  if(mode==='cancel')await editor.run('cancelPanel()');
+  else{await fetcher.run('apply()');assert.equal(editor.run('opened'),true);assert.notEqual(fetcher.run('result'),null);assert.equal(fetcher.run('error'),mode==='expired'?'conflict':'manual');await editor.run('cancelPanel()');}
+  assert.equal(editor.run('fetchedDraft'),null);assert.equal(editor.run('records[0].payload_json'),manual.payload_json);assert.equal(fetcher.applied.length,0);assert.ok(fetcher.cancelled.length>0);
+ }
+});
+test('visit weather exposes useful values before Source and details and keeps attribution visible',async()=>{
+ const {visitWeatherUrl}=await import('./bird-test-modules.mjs');const {default:View}=await import(visitWeatherUrl);
+ const context={...originalVisit,date:'2026-11-19'},record=dailyRecord({ownerId:'visit',context});const p=JSON.parse(record.payload_json);
+ Object.assign(p,{weatherCode:2,temperatureMinC:2,temperatureMaxC:12,windSpeedMaxMs:4,precipitationSumMm:3});record.payload_json=JSON.stringify(p);
+ for(const locale of ['sv','en']){
+  const html=render(View,{props:{records:[record],context,locale,inline:true}}).body;
+  const split=html.indexOf('<details');assert.ok(split>0);const primary=html.slice(0,split),metadata=html.slice(split);
+  for(const value of ['8 °C','2 °C','12 °C','4 m/s','3 mm'])assert.ok(primary.includes(value),`${locale}: missing ${value}`);
+  assert.match(primary,locale==='sv'?/Delvis molnigt/:/Partly cloudy/);assert.match(primary,/Open-Meteo/);assert.match(primary,/CC BY 4.0/);
+  assert.doesNotMatch(primary,/ECMWF IFS|2026-11-19T12:00:00Z|current-summary|draft|utkast|Avslutat modelldygn|Completed model day/);
+  assert.match(metadata,/ECMWF IFS/);assert.match(metadata,/2026-11-19T12:00:00Z/);assert.match(metadata,locale==='sv'?/Källa och detaljer/:/Source and details/);
+  const day=names.formatBirdDate(context.date,locale);assert.equal(primary.split(day).length-1,1);assert.equal(primary.split(locale==='sv'?'återstoden av dagen':'remainder of the day').length-1,1);
+  const paired=render(View,{props:{records:[storedManual,record],context,locale,inline:true}}).body;assert.match(paired,/paired/);assert.match(paired,locale==='sv'?/Manuellt angivet väder/:/Manually entered weather/);assert.match(paired,locale==='sv'?/Hämtat väder/:/Fetched weather/);
+ }
+});
+
+test('rendered fetched review uses Use weather and hides the extra Done confirmation',async()=>{
+ const {fetchComponentModule,weatherEditorModule}=await import('./bird-test-modules.mjs');
+ const context={...originalVisit,date:'2026-11-19'},result={previewId:'preview',record:dailyRecord({ownerId:'visit',context}),todayForecast:true};
+ const seeded=source('../src/lib/components/BirdWeatherFetch.svelte').replace('result=$state<VisitPreview|null>(null)',`result=$state<VisitPreview|null>(${JSON.stringify(result)})`);
+ const {default:Fetch}=await import(fetchComponentModule(seeded));
+ const reviewing=source('../src/lib/components/BirdWeatherEditor.svelte').replace('fetchReview=$state(false)','fetchReview=$state(true)');
+ const {default:Editor}=await import(weatherEditorModule(reviewing));
+ for(const locale of ['sv','en']){
+  const html=render(Fetch,{props:{context,generation:7,getOwner:async()=>({ownerId:'visit',expectedToken:null}),locale,onApply(){},onBusy(){}}}).body;
+  assert.match(html,locale==='sv'?/>Använd vädret</:/>Use weather</);assert.doesNotMatch(html,/utkast|\bdraft\b|type="submit"|<form/);
+  assert.equal(html.split(locale==='sv'?'återstoden av dagen':'remainder of the day').length-1,1);
+  const editor=render(Editor,{props:{records:[],context,locale,onDirty(){}}}).body;
+  const footer=editor.slice(editor.lastIndexOf('<footer'),editor.lastIndexOf('</footer>'));
+  assert.match(footer,locale==='sv'?/Avbryt/:/Cancel/);assert.doesNotMatch(footer,/primary|>Klart<|>Done</);
  }
 });

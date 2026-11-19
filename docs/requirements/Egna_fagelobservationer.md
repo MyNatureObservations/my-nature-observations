@@ -31,6 +31,19 @@
 - Journaltexten skrivs av användaren. Automatiska sammanfattningar och statistik skjuts upp.
 - Registrering kräver inget externt konto och inget exportsteg. Tjänsteintegrationer och exportfunktioner hör till separat prioritering.
 
+## Besökets väder — beslut 19 november 2026
+
+- Hämtat besöksväder använder inledningsvis dygnsdata och ska tydligt anges som dygnsväder, inte som exakta förhållanden under besökstiden.
+- Dagens dygnsdata anges som prognos. Källa, modell, upplösning och ursprungligt sammanhang bevaras.
+- Manuellt väder kan beskriva användarens egna iakttagelser under besöket och hålls separat från hämtat väder och journalens väder.
+- Ändring av plats, datum eller tider bevarar tidigare väder men markerar det som inaktuellt. Ändring av den refererade platsens koordinater omfattas också.
+- Inaktuellt väder ingår inte i besökets aktuella sammanfattning. Att ändra tillbaka sammanhanget får inte tyst återaktivera det.
+- Manuellt väder får återanvändas först efter uttrycklig bekräftelse.
+
+Acceptans: spara manuellt och hämtat väder oberoende, kontrollera inaktualitet efter samtliga sammanhangsändringar och koordinatändringar, bekräftad/avbruten återanvändning och oförändrat journalväder. Kontrollera omstart samt Backup/Restore och Export/Open Import för länkade och olänkade listor, inklusive ursprungligt sammanhang och inaktuell status.
+
+Besluten kommer från projektägarens arbetsorder för lagrings- och arkivgrunden. Besöksvädergränssnitt och nätverkshämtning aktiveras inte i grundsteget.
+
 ## Överenskommen utgångspunkt för gränssnittet
 
 Skissen journal → observationslista är överenskommen utgångspunkt för gränssnittet. Från journalanteckningen skapar användaren en lista eller länkar en befintlig. En ny lista får redigerbara förslag från journalens datum och plats och länkas efter lyckat sparande. Den öppnade listan har egna frivilliga besökstider och eget väder. Journalen visar listans kompakta förhandsvisning under texten. Den fristående ingången kompletterar detta flöde. Detaljerad utformning och tekniska val återstår.

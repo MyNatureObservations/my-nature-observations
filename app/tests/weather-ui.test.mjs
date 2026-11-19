@@ -14,6 +14,21 @@ const currentPart={period:{kind:'day',date:'2026-10-30'},temperatureC:16,windSpe
 const show = (status,locale='sv',editing=false) => render(Tile,{props:{status,locale,editing}}).body;
 const empty = {kind:'ready',data:{manual:null,fetched:null,revision:'0'}};
 const clean = html => html.replace(/<!--[\s\S]*?-->/g,'').trim();
+test('shared weather fields restore a cancelled panel draft without saving or losing metadata',async()=>{
+ const {formHelpersUrl}=await import('./weather-test-modules.mjs');const helpers=await import(formHelpersUrl);
+ const text=readFileSync(new URL('../src/lib/components/WeatherForm.svelte',import.meta.url),'utf8');
+ const script=text.match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\s*$/gm,'').replace(/export function /g,'function ');
+ for(const locale of ['sv','en']){
+  let saves=0;
+  const manual={...part,timezone:'UTC',location:{name:'Lake',coordinates:{latitude:59,longitude:18}}};
+  const ctx=vm.createContext({...helpers,$props:()=>({manual,date:'2026-10-25',locale,busy:false,embedded:true,onDirty(){},onSave(){saves++;}}),$state:v=>v,$effect:()=>{},untrack:fn=>fn(),weatherLabels:{},JSON});
+  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,ctx);
+  vm.runInContext('previous=draftSnapshot();draft.values.temperatureC="not a number"',ctx);
+  assert.equal(vm.runInContext('getPart()',ctx),null);
+  vm.runInContext('restoreDraft(previous)',ctx);
+  assert.equal(vm.runInContext('getPart().temperatureC',ctx),0);assert.equal(vm.runInContext('getPart().timezone',ctx),'UTC');assert.equal(vm.runInContext('Object.keys(errors).length',ctx),0);assert.equal(saves,0);
+ }
+});
 test('current snapshots retain valid time, interval and model meaning without daily mean or sum labels',()=>{
  for(const locale of ['sv','en']){
   const html=render(Details,{props:{part:currentPart,locale}}).body;

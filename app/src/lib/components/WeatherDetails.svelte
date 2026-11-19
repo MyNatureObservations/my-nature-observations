@@ -1,8 +1,9 @@
 <script lang="ts">
+  import type {Snippet} from 'svelte';
   import WeatherIcon from "$lib/components/WeatherIcon.svelte";
   import { weatherSections, weatherConditionKey, weatherIcon, weatherFieldIcon, weatherClock, weatherNumber, weatherIsCurrent, type WeatherPart } from "$lib/weather";
   import { weatherLabels } from "$lib/weather-labels";
-  let { part, locale, manual = false }: { part: WeatherPart; locale: "sv" | "en"; manual?: boolean } = $props();
+  let { part, locale, manual = false, dailyForecastLabel=null, compact=false, detailsLabel=null, contextDetails }: { part: WeatherPart; locale: "sv" | "en"; manual?: boolean; dailyForecastLabel?:string|null; compact?:boolean; detailsLabel?:string|null; contextDetails?:Snippet } = $props();
   const rows = $derived(weatherSections(part, locale));
   const label = (key: string) => weatherLabels[key as keyof typeof weatherLabels]?.({}, { locale }) ?? key;
   const temperature = $derived(rows.primary.find(([key]) => key === 'temperatureC') ?? rows.primary.find(([key]) => key === 'temperatureMeanC'));
@@ -12,16 +13,17 @@
   const current=$derived(!manual && weatherIsCurrent(part));
 </script>
 
-{#if current}
+<div class:compact>
+{#if !compact&&current}
   <p class="snapshot-kind">{label('currentHeading')} · {label('modelWeather')}</p>
   <p>{label('validAt')}: <time datetime={part.validAt!}>{part.validAt!.slice(0,10)} · {weatherClock(part.validAt!)}</time></p>
-{:else if !manual && part.source?.product==='forecast-daily'}<p class="snapshot-kind">{label('modelDay')} · {label('modelWeather')}</p>
-{:else if !manual && part.source?.product==='historical-weather' && part.source?.model==='ERA5'}<p class="snapshot-kind">{label('historicalDay')} · {label('modelWeather')}</p>{/if}
+{:else if !compact && !manual && part.source?.product==='forecast-daily'}<p class="snapshot-kind">{dailyForecastLabel??label('modelDay')} · {label('modelWeather')}</p>
+{:else if !compact && !manual && part.source?.product==='historical-weather' && part.source?.model==='ERA5'}<p class="snapshot-kind">{label('historicalDay')} · {label('modelWeather')}</p>{/if}
 <div class="hero">
-  <WeatherIcon name={weatherIcon(part.weatherCode)} size={48} />
+  <WeatherIcon name={weatherIcon(part.weatherCode)} size={compact?32:48} />
   <div>
     {#if temperature}<div class="temperature"><span class="sr-only">{label(temperature[0])}: </span>{temperature[1]}</div>{/if}
-    <div class="condition">{condition ? label(condition) : part.weatherCode != null ? `WMO ${part.weatherCode}` : label('conditionUnknown')}</div>
+    {#if !compact||part.weatherCode!=null}<div class="condition">{condition ? label(condition) : part.weatherCode != null ? `WMO ${part.weatherCode}` : label('conditionUnknown')}</div>{/if}
   </div>
 </div>
 {#if part.description != null}
@@ -38,7 +40,7 @@
     </div>
   {/each}
 </dl>
-{#if sunTimes.length}
+{#if sunTimes.length&&!compact}
   <dl class="sun-times">
     {#each sunTimes as [key, value]}
       <div class="field">
@@ -49,16 +51,20 @@
   </dl>
 {/if}
 {#if !manual && part.source?.provider === 'open-meteo'}
-  <p class="attribution">{label('history_source')}: <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>{#if part.source.model} · {part.source.model}{/if} · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">{part.source.license}</a></p>
+  <p class="attribution">{label('history_source')}: <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>{#if !compact&&part.source.model} · {part.source.model}{/if} · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">{part.source.license}</a></p>
 {/if}
-{#if rows.details.length}
+{#if rows.details.length||contextDetails}
   <details>
-    <summary>{label('details')}</summary>
+    <summary>{detailsLabel??label('details')}</summary>
+    {@render contextDetails?.()}
     <dl class="metadata">{#each rows.details as [key, value]}<dt>{label(key)}</dt><dd>{value}</dd>{/each}</dl>
   </details>
 {/if}
+</div>
 
 <style>
+  .compact .hero{gap:12px;min-height:44px}.compact .temperature{font-size:24px;letter-spacing:-.4px}.compact .primary{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px}.compact .primary:not(:empty){margin-top:14px}.compact dd{font-size:14px}.compact .metadata dd{font-size:12px}.compact details{margin-top:12px}.compact .attribution{margin-top:12px}.compact .condition{font-size:12px}
+  @media(max-width:680px){.compact .primary{grid-template-columns:repeat(2,minmax(0,1fr))}}
   dl { margin: 0; }
   .snapshot-kind {font-size:12px;color:var(--text-muted,#686d63);margin:0 0 8px;}
   .attribution { margin:16px 0 0; font-size:11px; color:var(--text-muted,#686d63); overflow-wrap:anywhere; } .attribution a { color:inherit; }

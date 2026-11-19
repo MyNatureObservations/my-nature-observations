@@ -10,6 +10,10 @@
  import {PLACE_MAP,type PlaceMapController} from "$lib/place-map.svelte";
  import {entryHref,birdHref,localVisitDate,speciesLabel,validDate,validTime,validBirdCount,validBirdComment,canSaveBirdList,saveBirdList,reserveBirdRequest,confirmSavedBirdList,updateBirdList,type BirdList,type Species,type BirdRow} from "$lib/birds";
  import {DEFAULT_BIRD_NAMES,loadBirdNamePreferences,capitalizeCommonName,type BirdNamePreferences} from "$lib/bird-names";
+ import BirdWeatherEditor from "$lib/components/BirdWeatherEditor.svelte";
+ import {visitContext,type VisitWeather} from "$lib/bird-weather";
+ let weatherEditor:BirdWeatherEditor|undefined=$state();
+ let weather=$state<VisitWeather[]>([]);
  import BirdRowPhoto from "$lib/components/BirdRowPhoto.svelte";
  import BirdPasteReview from "$lib/components/BirdPasteReview.svelte";
  import BirdSpeciesName from "$lib/components/BirdSpeciesName.svelte";
@@ -29,8 +33,10 @@
  let searching=$state(false);
  let saveUncertain=$state(false);
  let requestId=$state<string|null>(null);
+ let requestReservation:Promise<string>|null=null;
  let generation=$state<number|null>(null),available=$state<boolean|null>(null),date=$state(""),place=$state<Place|null>(null),start=$state(""),end=$state(""),rows=$state<BirdRow[]>([]),query=$state(""),results=$state<Species[]>([]),busy=$state(false),dirty=$state(false),saved=$state(false),error=$state(""),searchError=$state(false),leave=$state(false),leaveUrl=$state<string|null>(null),pendingClose=false;
  let stayButton=$state<HTMLButtonElement|undefined>(undefined);let cancelMap:(()=>void)|undefined;let disposed=false;let baseline=$state("");let savedListId=$state<string|null>(null);
+ const weatherContext=$derived(visitContext(date,place,start,end));
  const valid=$derived(canSaveBirdList(date,place,rows,start,end));
  onMount(()=>{
   namePreferences=loadBirdNamePreferences();
@@ -41,7 +47,7 @@
     const session=await invoke<{generation:number}>("new_journal_session");
     const response=await createJournalReader()<BirdList>("read_journal_bird_list",{entryId:null,id:editId,generation:session.generation});if(disposed)return;
     generation=response.generation;const list=response.data;expectedToken=list.editToken;
-    date=list.visitDate;place=list.place;start=list.visitStart??"";end=list.visitEnd??"";
+    weather=list.weather??[];date=list.visitDate;place=list.place;start=list.visitStart??"";end=list.visitEnd??"";
     rows=list.rows.map(row=>({id:row.speciesId,rowId:row.rowId??undefined,photo:row.photo??null,taxonomyVersion:row.taxonomyVersion,english:row.english,swedish:row.swedish,scientific:row.scientific,count:row.count,comment:row.comment??"",commentOpen:!!row.comment}));
     baseline=JSON.stringify([date,place?.id,start,end,rows]);initialized=true;return;
    }
@@ -62,6 +68,12 @@
   const unload=(event:BeforeUnloadEvent)=>{if((dirty||busy||pasteOpen||photoPending>0)&&!saved){event.preventDefault();event.returnValue="";}};window.addEventListener("beforeunload",unload);
   return()=>{disposed=true;cancelMap?.();unlisten?.();window.removeEventListener("beforeunload",unload);};
  });
+ let reviewOpened=false;
+ $effect(()=>{
+  if(!initialized||!editId||!weatherEditor||reviewOpened)return;
+  const action=page.url.searchParams.get('weatherReview');
+  if(action==='use'||action==='remove'||action==='fetch'){reviewOpened=true;void weatherEditor.openForReview(action);}
+ });
  $effect(()=>{
   const q=query;let stopped=false;
   searching=!!q.trim();
@@ -80,6 +92,17 @@
  async function askLeave(url:string|null){leaveUrl=url;leave=true;await tick();stayButton?.focus();}
  function cancel(){if(busy)return;if(dirty||photoPending>0)void askLeave(origin);else {saved=true;void goto(origin);}}
  async function discard(){saved=true;leave=false;if(pendingClose){await invoke("close_journal_window");}else await goto(leaveUrl??origin);}
+ async function creationRequest(){
+  if(generation===null)throw Error('journal_generation_conflict');
+  const g=generation;if(requestId)return requestId;
+  try{requestReservation??=reserveBirdRequest(g);const id=await requestReservation;if(g!==generation)throw Error('journal_generation_conflict');requestId??=id;return requestId;}
+  catch(cause){requestReservation=null;throw cause;}
+ }
+ async function weatherOwner(){
+  if(generation===null)throw Error('journal_generation_conflict');
+  if(editId)return {ownerId:editId,expectedToken};
+  return {ownerId:await creationRequest(),expectedToken:null};
+ }
  function choosePlace(){if(busy||generation===null)return;cancelMap=map.open({mode:"observation",generation,center:place?.latitude!==null&&place?.longitude!==null&&place?{latitude:place.latitude!,longitude:place.longitude!}:null,selectedId:place?.id,select:async p=>{if(p.latitude===null||p.longitude===null)return false;place=p;dirty=true;return true;}});}
  function openPaste(){if(initialized&&available===true&&generation!==null&&!busy&&photoPending===0&&!saveUncertain&&savedListId===null)pasteOpen=true;}
  function applyPaste(next:BirdRow[],previous:string):boolean{
@@ -122,17 +145,20 @@
   if(event.key==="Enter"){event.preventDefault();if(validBirdCount(count))focusSearch();}
  }
  async function save(){
+  // Enter inside the weather dialog must not implicitly submit the outer form.
+  if(weatherEditor?.isOpen?.())return;
   if(photoPending>0||pasteOpen||(editId&&saveUncertain)||available!==true||savedListId!==null||(error==="request"||error==="retired"||error==="legacy")||!valid||generation===null||!place||busy)return;
+  const weatherChanges=weatherEditor?weatherEditor.getChanges():[];if(weatherChanges===null)return;
   busy=true;error="";
   try{
    if(editId){
-    const token=await updateBirdList(generation,null,editId,expectedToken,date,place,rows,start,end);
+    const token=await updateBirdList(generation,null,editId,expectedToken,date,place,rows,start,end,weatherChanges);
     expectedToken=token;savedListId=editId;saved=true;saveUncertain=false;
     try {await confirmSavedBirdList(generation,null,editId);dirty=false;window.dispatchEvent(new Event("mno:journal-changed"));await goto(origin);}catch(cause){console.error("bird-list: edit saved, reopening failed",cause);error="saved";}
     return;
    }
-   requestId??=await reserveBirdRequest(generation);
-   const id=await saveBirdList(generation,entryId,date,place,rows,start,end,requestId);
+   requestId=await creationRequest();
+   const id=await saveBirdList(generation,entryId,date,place,rows,start,end,requestId,weatherChanges);
    savedListId=id;saved=true;saveUncertain=false;
    let stage="confirmation";
    try{
@@ -142,6 +168,9 @@
    }catch(cause){console.error(`bird-list: saved, ${stage} failed`,cause);error="saved";}
   }catch(cause){
    console.error("bird-list: save failed",cause);
+   if(!saveUncertain&&(cause==='bird_weather_preview_expired'||cause==='bird_weather_context_conflict')){
+    saveUncertain=false;error='weather';weatherEditor?.fetchFailure();return;
+   }
    saveUncertain=true;error=editId?"edit":cause==="bird_request_retired"?"retired":cause==="bird_request_legacy"||cause==="bird_request_unreserved"?"legacy":cause==="bird_request_conflict"?"request":"save";
   }finally{busy=false;}
  }
@@ -175,6 +204,7 @@
      </button>
      {#if !place}<small id="bird-place-help">{m.bird_place_required({}, {locale:language.current})}</small>{/if}
     </div>
+  <BirdWeatherEditor {generation} getOwner={weatherOwner} bind:this={weatherEditor} records={weather} context={weatherContext} locale={language.current} disabled={busy||saveUncertain||generation===null||savedListId!==null} onDirty={()=>dirty=true}/>
    </div>
    <div class="times">
     <span class="optional-label">{m.bird_visit_times({}, {locale:language.current})}</span>
@@ -222,7 +252,7 @@
    </div>
   </fieldset>
   {#if savedListId}<p><a href={birdHref(entryId,savedListId)}>{m.bird_open_saved({}, {locale:language.current})}</a></p>{/if}
-  {#if error}<p class="error" role="alert">{error==="edit"?m.bird_edit_failed({}, {locale:language.current}):error==="retired"?m.bird_request_retired({}, {locale:language.current}):error==="legacy"?m.bird_request_legacy({}, {locale:language.current}):error==="request"?m.bird_request_conflict({}, {locale:language.current}):error==="saved"?m.bird_saved_open_failed({}, {locale:language.current}):m.bird_save_failed({}, {locale:language.current})}</p>{/if}
+  {#if error}<p class="error" role="alert">{error==="weather"?m.bird_weather_fetch_conflict({}, {locale:language.current}):error==="edit"?m.bird_edit_failed({}, {locale:language.current}):error==="retired"?m.bird_request_retired({}, {locale:language.current}):error==="legacy"?m.bird_request_legacy({}, {locale:language.current}):error==="request"?m.bird_request_conflict({}, {locale:language.current}):error==="saved"?m.bird_saved_open_failed({}, {locale:language.current}):m.bird_save_failed({}, {locale:language.current})}</p>{/if}
   <footer class="actions"><button type="button" onclick={cancel} disabled={busy}>{m.bird_cancel({}, {locale:language.current})}</button><button class="primary" type="submit" disabled={photoPending>0||(!!editId&&saveUncertain)||!valid||busy||(error==="request"||error==="retired"||error==="legacy")||generation===null||savedListId!==null}>{busy?m.bird_saving({}, {locale:language.current}):editId?m.bird_save_changes({}, {locale:language.current}):saveUncertain?m.bird_retry_save({}, {locale:language.current}):m.bird_save({}, {locale:language.current})}</button></footer>
  </form><BirdAttribution locale={language.current}/>
  {/if}

@@ -207,7 +207,7 @@ fn photo_archive_candidates_and_protected_activation_preserve_linked_unlinked_an
         let mut db =
             Connection::open_with_flags(&f.path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
                 .unwrap();
-        let proof = crate::storage_content::verify_v12(&mut db, &flag).unwrap();
+        let proof = crate::storage_content::verify_v13(&mut db, &flag).unwrap();
         let backup = f.temp.path().join("photos.mno-backup");
         crate::backup::create_backup(&db, &backup, crate::backup::BackupKind::Manual).unwrap();
         let export = f.temp.path().join("photos.mno-export");
@@ -217,12 +217,12 @@ fn photo_archive_candidates_and_protected_activation_preserve_linked_unlinked_an
             crate::backup::restore::prepare_candidate(&backup, Arc::new(AtomicBool::new(false)))
                 .unwrap();
         assert_eq!(
-            crate::storage_content::verified_snapshot_v12(candidate.source().unwrap(), &flag)
+            crate::storage_content::verified_snapshot_v13(candidate.source().unwrap(), &flag)
                 .unwrap(),
             proof
         );
         drop(candidate);
-        let candidate = crate::open_import::build_v12(
+        let candidate = crate::open_import::build_v13(
             &mut fs::File::open(&export).unwrap(),
             f.temp.path(),
             &flag,
@@ -234,13 +234,13 @@ fn photo_archive_candidates_and_protected_activation_preserve_linked_unlinked_an
         let maintenance = f.state.maintenance().unwrap();
         if import {
             drop(
-                crate::backup::restore_context::activation::importing::activate_schema11(
+                crate::backup::restore_context::activation::importing::activate_schema12(
                     &maintenance,
                     &mut fs::File::open(&export).unwrap(),
                     &old,
                     &old,
                     Arc::new(AtomicBool::new(false)),
-                    12,
+                    13,
                 )
                 .unwrap(),
             );
@@ -282,7 +282,7 @@ fn photo_archive_candidates_and_protected_activation_preserve_linked_unlinked_an
         )
         .unwrap();
         assert_eq!(
-            crate::storage_content::verified_snapshot_v12(protected.source().unwrap(), &flag)
+            crate::storage_content::verified_snapshot_v13(protected.source().unwrap(), &flag)
                 .unwrap(),
             proof
         );

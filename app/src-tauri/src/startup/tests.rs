@@ -32,10 +32,10 @@ fn normal_first_startup_initializes_and_holds_lock_until_state_drops() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        if cfg!(target_os = "macos") { 11 } else { 4 }
+        if cfg!(target_os = "macos") { 12 } else { 4 }
     );
     #[cfg(target_os = "macos")]
-    crate::storage_content::verify_v12(&mut db, &std::sync::atomic::AtomicBool::new(false))
+    crate::storage_content::verify_v13(&mut db, &std::sync::atomic::AtomicBool::new(false))
         .unwrap();
     #[cfg(not(target_os = "macos"))]
     crate::storage_content::verify_v5(&mut db, &std::sync::atomic::AtomicBool::new(false)).unwrap();

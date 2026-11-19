@@ -717,6 +717,24 @@ impl DatabaseState {
         crate::startup::migration_probe::with_initializer(schema7, || self.initialize_startup(root))
     }
     #[cfg(target_os = "macos")]
+    pub(crate) fn initialize_schema11_startup(
+        &self,
+        root: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        if crate::startup::migration_probe::has_initializer() {
+            return self.initialize_startup(root);
+        }
+        fn schema11(path: &std::path::Path, new: bool) -> Result<(), String> {
+            if new {
+                crate::database::create_current_database(path)?;
+            }
+            crate::backup::restore_context::bird_upgrade::initialize_schema11(path)
+        }
+        crate::startup::migration_probe::with_initializer(schema11, || {
+            self.initialize_startup(root)
+        })
+    }
+    #[cfg(target_os = "macos")]
     pub(crate) fn initialize_schema10_startup(
         &self,
         root: &std::path::Path,

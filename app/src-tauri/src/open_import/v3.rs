@@ -73,6 +73,22 @@ const NAMES_V11: [&str; 13] = [
     "bird_creation_requests.jsonl",
     "bird_row_photos.jsonl",
 ];
+const NAMES_V13: [&str; 14] = [
+    "manifest.json",
+    "journal.jsonl",
+    "journal.md",
+    "README.md",
+    "places.jsonl",
+    "journal_places.jsonl",
+    "weather_default_place.jsonl",
+    "images.jsonl",
+    "bird_lists.jsonl",
+    "bird_rows.jsonl",
+    "journal_bird_lists.jsonl",
+    "bird_creation_requests.jsonl",
+    "bird_row_photos.jsonl",
+    "bird_visit_weather.jsonl",
+];
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CreationReceipt {
@@ -200,7 +216,8 @@ fn unique_files_v3<'de, D: serde::Deserializer<'de>>(
         ) -> std::result::Result<Self::Value, A::Error> {
             let mut files = BTreeMap::new();
             while let Some((name, record)) = map.next_entry::<String, FileV3>()? {
-                if !NAMES_V11[1..].contains(&name.as_str()) || files.insert(name, record).is_some()
+                // The version-specific exact inventory is checked after parsing.
+                if !NAMES_V13[1..].contains(&name.as_str()) || files.insert(name, record).is_some()
                 {
                     return Err(serde::de::Error::custom("unexpected or duplicate payload"));
                 }
@@ -339,7 +356,7 @@ fn build_version(
         || m.format_version != version
         || m.database_schema_version != version - 1
         || m.document_version
-            != if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
+            != if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13) {
                 2
             } else {
                 1
@@ -424,7 +441,7 @@ fn build_version(
         let tx = db.get().transaction()?;
         crate::database::weather_default_schema::create_in_transaction(&tx)
             .map_err(|_| Error::Verification)?;
-        if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
+        if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13) {
             crate::photographs::create_schema(&tx).map_err(|_| Error::Verification)?;
         }
         tx.commit()?;
@@ -438,17 +455,20 @@ fn build_version(
     if version >= 8 {
         crate::database::bird_visit_identity::upgrade(db.get()).map_err(|_| Error::Verification)?;
     }
-    if matches!(version, 9 | 10 | 11 | 12) {
+    if matches!(version, 9 | 10 | 11 | 12 | 13) {
         crate::database::bird_comments::upgrade(db.get()).map_err(|_| Error::Verification)?;
     }
-    if matches!(version, 10 | 11 | 12) {
+    if matches!(version, 10 | 11 | 12 | 13) {
         crate::database::bird_requests::upgrade(db.get()).map_err(|_| Error::Verification)?;
     }
-    if matches!(version, 11 | 12) {
+    if matches!(version, 11 | 12 | 13) {
         crate::database::bird_photos::upgrade(db.get()).map_err(|_| Error::Verification)?;
     }
-    if version == 12 {
+    if matches!(version, 12 | 13) {
         crate::database::bird_captions::upgrade(db.get()).map_err(|_| Error::Verification)?;
+    }
+    if version == 13 {
+        crate::database::bird_visit_weather::upgrade(db.get()).map_err(|_| Error::Verification)?;
     }
     let tx = db.get().transaction()?;
     let mut count = 0u64;
@@ -538,7 +558,7 @@ fn build_version(
             return Err(Error::Manifest);
         }
     }
-    if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
+    if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13) {
         let mut previous: Option<String> = None;
         let count = for_each_line::<crate::photographs::Asset>(
             directory.path().join("images.jsonl"),
@@ -594,7 +614,7 @@ fn build_version(
             return Err(Error::Manifest);
         }
         let mut previous = None;
-        let n = if matches!(version, 9 | 10 | 11 | 12) {
+        let n = if matches!(version, 9 | 10 | 11 | 12 | 13) {
             for_each_line::<CommentRow>(
                 directory.path().join("bird_rows.jsonl"),
                 PLACE_LINE_LIMIT,
@@ -655,7 +675,7 @@ fn build_version(
             return Err(Error::Manifest);
         }
     }
-    if matches!(version, 10 | 11 | 12) {
+    if matches!(version, 10 | 11 | 12 | 13) {
         let mut previous: Option<String> = None;
         let n = for_each_line::<CreationReceipt>(
             directory.path().join("bird_creation_requests.jsonl"),
@@ -677,7 +697,7 @@ fn build_version(
             return Err(Error::Manifest);
         }
     }
-    if version == 12 {
+    if matches!(version, 12 | 13) {
         let mut previous = None;
         let count = for_each_line::<crate::bird_photos::CaptionedPhoto>(
             directory.path().join("bird_row_photos.jsonl"),
@@ -718,6 +738,25 @@ fn build_version(
             },
         )?;
         if m.files["bird_row_photos.jsonl"].row_count != Some(count) {
+            return Err(Error::Manifest);
+        }
+    }
+    if version == 13 {
+        let mut previous = None;
+        let n = for_each_line::<crate::bird_visit_weather::Record>(
+            directory.path().join("bird_visit_weather.jsonl"),
+            256 * 1024,
+            flag,
+            |record| {
+                let key = (record.list_id.clone(), record.kind.clone());
+                if previous.as_ref().is_some_and(|old| old >= &key) {
+                    return Err(Error::Record);
+                }
+                previous = Some(key);
+                record.insert(&tx).map_err(|_| Error::Record)
+            },
+        )?;
+        if m.files["bird_visit_weather.jsonl"].row_count != Some(n) {
             return Err(Error::Manifest);
         }
     }
@@ -800,4 +839,11 @@ pub(crate) fn is_v12(a: &mut File) -> Result<bool> {
 }
 pub(crate) fn build_v12(a: &mut File, p: &Path, f: &AtomicBool) -> Result<Candidate> {
     build_version(a, p, f, 12, &NAMES_V11)
+}
+
+pub(crate) fn is_v13(a: &mut File) -> Result<bool> {
+    is_version(a, 13, &NAMES_V13)
+}
+pub(crate) fn build_v13(a: &mut File, p: &Path, f: &AtomicBool) -> Result<Candidate> {
+    build_version(a, p, f, 13, &NAMES_V13)
 }

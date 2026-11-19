@@ -99,10 +99,12 @@ fn require_schema3(db: &Connection) -> Result<(), String> {
     let version: i64 = db
         .pragma_query_value(Some("main"), "user_version", |r| r.get(0))
         .map_err(|_| "place_schema_unavailable")?;
-    if !matches!(version, 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11) {
+    if !matches!(version, 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
         return Err("place_schema_unavailable".into());
     }
-    if !(if version == 11 {
+    if !(if version == 12 {
+        crate::database::bird_visit_weather::validate_schema(db)
+    } else if version == 11 {
         crate::database::bird_captions::validate_schema(db)
     } else if version == 10 {
         crate::database::bird_photos::validate_schema(db)
@@ -372,7 +374,7 @@ pub(crate) fn update_with(
         let version: u32 = tx
             .pragma_query_value(Some("main"), "user_version", |row| row.get(0))
             .map_err(|_| "place_read_failed")?;
-        if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11) {
+        if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
             let used_by_birds: bool = tx
                 .query_row(
                     "SELECT EXISTS(SELECT 1 FROM main.bird_lists WHERE place_id=?1)",
@@ -394,6 +396,18 @@ pub(crate) fn update_with(
         .map_err(|_| "place_write_failed")?;
     if changed != 1 {
         return Err("place_revision_conflict".into());
+    }
+    if crate::database::bird_visit_weather::validate_schema(&tx).map_err(|e| e.to_string())? {
+        let ids = tx
+            .prepare("SELECT id FROM bird_lists WHERE place_id=?1")
+            .map_err(|e| e.to_string())?
+            .query_map([id], |r| r.get::<_, String>(0))
+            .map_err(|e| e.to_string())?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())?;
+        for list in ids {
+            crate::bird_visit_weather::invalidate(&tx, &list)?;
+        }
     }
     let saved = read_place(&tx, id)?;
     tx.commit().map_err(|_| "place_write_failed")?;

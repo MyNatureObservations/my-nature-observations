@@ -1,3 +1,4 @@
+import type {VisitWeather,WeatherChange} from "$lib/bird-weather";
 import { invoke } from "@tauri-apps/api/core";
 import { createJournalReader } from "$lib/journal-data";
 import type { Place } from "$lib/places";
@@ -6,7 +7,7 @@ export type Species = { id: string; english: string; swedish: string | null; sci
 export type BirdPhoto={caption?:string|null;row_id:string;asset_id:string;original_path:string;mime:string;width:number;height:number;preview:string};
 export type BirdRow = Species & { count: string; rowId?:string;photo?:BirdPhoto|null;taxonomyVersion?:string; comment?:string; commentOpen?:boolean };
 export type ListRow = Omit<Species, "id"> & { speciesId: string;rowId?:string|null;photo?:BirdPhoto|null; taxonomyVersion: string; count: string; comment:string|null };
-export type BirdList = { id: string; editToken:string; visitDate: string; visitStart: string | null; visitEnd: string | null; place: Place; rows: ListRow[] };
+export type BirdList = { id: string; editToken:string; visitDate: string; visitStart: string | null; visitEnd: string | null; place: Place; rows: ListRow[]; weather?:VisitWeather[] };
 export function speciesLabel(s: Pick<Species,"english"|"swedish"|"scientific">, locale: "sv"|"en"): string {
   return locale === "sv" ? s.swedish ?? `${s.english} · ${s.scientific}` : s.english;
 }
@@ -20,8 +21,8 @@ export function canSaveBirdList(date:string,place:Place|null,rows:BirdRow[],star
 }
 export function entryHref(id:string):string{return `/journal/entries/${encodeURIComponent(id)}`;}
 export function birdHref(entry:string|null,id:string):string{return entry?`${entryHref(entry)}/birds/${encodeURIComponent(id)}`:`/observations/${encodeURIComponent(id)}`;}
-export async function saveBirdList(generation:number,entryId:string|null,date:string,place:Place,rows:BirdRow[],start:string,end:string,requestId:string):Promise<string>{
- const id=await invoke<string>("create_journal_bird_list",{generation,requestId,entryId,visitDate:date,placeId:place.id,rows:rows.map(r=>({speciesId:r.id,taxonomyVersion:BIRD_CATALOG_VERSION,count:r.count,comment:r.comment||null,...(r.rowId?{rowId:r.rowId}:{}),...(r.photo?{photo:r.photo}:{})})),visitStart:start||null,visitEnd:end||null});
+export async function saveBirdList(generation:number,entryId:string|null,date:string,place:Place,rows:BirdRow[],start:string,end:string,requestId:string,weather:WeatherChange[]=[]):Promise<string>{
+ const id=await invoke<string>("create_journal_bird_list",{generation,requestId,entryId,visitDate:date,placeId:place.id,rows:rows.map(r=>({speciesId:r.id,taxonomyVersion:BIRD_CATALOG_VERSION,count:r.count,comment:r.comment||null,...(r.rowId?{rowId:r.rowId}:{}),...(r.photo?{photo:r.photo}:{})})),visitStart:start||null,visitEnd:end||null,...(weather.length?{weather}:{})});
  if(id!==requestId)throw Error("bird_save_response_invalid");
  return id;
 }
@@ -33,8 +34,8 @@ export async function confirmSavedBirdList(generation:number,entryId:string|null
  return response.data;
 }
 
-export async function updateBirdList(generation:number,entryId:string|null,id:string,expectedToken:string,date:string,place:Place,rows:BirdRow[],start:string,end:string):Promise<string>{
- const token=await invoke<string>("update_journal_bird_list",{generation,entryId,id,expectedToken,visitDate:date,placeId:place.id,rows:rows.map(r=>({speciesId:r.id,taxonomyVersion:r.taxonomyVersion??BIRD_CATALOG_VERSION,count:r.count,comment:r.comment||null,...(r.rowId?{rowId:r.rowId}:{}),...(r.photo?{photo:r.photo}:{})})),visitStart:start||null,visitEnd:end||null});
+export async function updateBirdList(generation:number,entryId:string|null,id:string,expectedToken:string,date:string,place:Place,rows:BirdRow[],start:string,end:string,weather:WeatherChange[]=[]):Promise<string>{
+ const token=await invoke<string>("update_journal_bird_list",{generation,entryId,id,expectedToken,visitDate:date,placeId:place.id,rows:rows.map(r=>({speciesId:r.id,taxonomyVersion:r.taxonomyVersion??BIRD_CATALOG_VERSION,count:r.count,comment:r.comment||null,...(r.rowId?{rowId:r.rowId}:{}),...(r.photo?{photo:r.photo}:{})})),visitStart:start||null,visitEnd:end||null,...(weather.length?{weather}:{})});
  if(typeof token!=="string"||!/^[a-f0-9]{64}$/.test(token))throw Error("bird_edit_response_invalid");
  return token;
 }

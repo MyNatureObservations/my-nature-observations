@@ -16,6 +16,31 @@ const ENDPOINT: &str = "https://archive-api.open-meteo.com/v1/archive";
 const DAILY: &str = "temperature_2m_mean,temperature_2m_min,temperature_2m_max,precipitation_sum,wind_speed_10m_max,weather_code,sunrise,sunset";
 const BODY_LIMIT: usize = 64 * 1024;
 
+pub(crate) fn daily_visit_with(
+    context: &crate::bird_visit_weather::Context,
+    now: OffsetDateTime,
+    transport: impl FnMut(reqwest::Url) -> Result<(u16, Vec<u8>), Error>,
+) -> Result<(String, bool), Error> {
+    let (preview, today) = recent::preview_daily(
+        &PreviewRequest {
+            date: context.date.clone(),
+            place_name: context.place_name.clone(),
+            latitude: context.latitude,
+            longitude: context.longitude,
+        },
+        now,
+        transport,
+    )?;
+    Ok((
+        serde_json::to_string(&preview.fetched).map_err(|_| Error::InvalidResponse)?,
+        today,
+    ))
+}
+
+pub(crate) fn visit_transport(url: reqwest::Url) -> Result<(u16, Vec<u8>), Error> {
+    get(&client(Duration::from_secs(15))?, url)
+}
+
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Error {

@@ -271,3 +271,46 @@ pub(super) fn preview(
 
 #[cfg(test)]
 mod tests;
+
+/// Visit weather is always daily, including the requested local "today".
+/// Unlike the journal path, no current-conditions request is issued.
+pub(super) fn preview_daily(
+    request: &PreviewRequest,
+    now: OffsetDateTime,
+    mut transport: impl FnMut(reqwest::Url) -> Result<(u16, Vec<u8>), Error>,
+) -> Result<(Preview, bool), Error> {
+    Coordinates {
+        latitude: request.latitude,
+        longitude: request.longitude,
+    }
+    .validate()
+    .map_err(|_| Error::InvalidCoordinates)?;
+    if request.place_name.trim().is_empty() || request.place_name.len() > 512 {
+        return Err(Error::InvalidPlace);
+    }
+    let format = format_description::parse_borrowed::<2>("[year]-[month]-[day]").unwrap();
+    let date = Date::parse(&request.date, &format).map_err(|_| Error::InvalidDate)?;
+    if request.date.len() != 10 || date.to_string() != request.date {
+        return Err(Error::InvalidDate);
+    }
+    if request.date.as_str() < "1940-01-01" || date > now.date() + time::Duration::days(1) {
+        return Err(Error::DateUnavailable);
+    }
+    if date <= now.to_offset(UtcOffset::UTC).date() - time::Duration::days(8) {
+        return preview_with(request, now, transport).map(|p| (p, false));
+    }
+    let (status, body) = transport(forecast_url(request, false)?)?;
+    let meta = metadata(status, &body)?;
+    let offset = UtcOffset::from_whole_seconds(meta.utc_offset_seconds)
+        .map_err(|_| Error::InvalidResponse)?;
+    match route(date, now, offset)? {
+        Route::Era5 => preview_with(request, now, transport).map(|p| (p, false)),
+        Route::Current | Route::Daily => {
+            let mut result = decode(request, status, &body, now)?;
+            let sampled = result.fetched.source.sampled_coordinates.take();
+            result.fetched.source = source(&meta, "forecast-daily");
+            result.fetched.source.sampled_coordinates = sampled;
+            Ok((result, date == now.to_offset(offset).date()))
+        }
+    }
+}

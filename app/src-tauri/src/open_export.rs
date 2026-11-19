@@ -294,13 +294,15 @@ fn export_snapshot(
     // Establish one main snapshot before checking schema and streaming both views.
     let _: i64 = tx.query_row("SELECT count(*) FROM main.sqlite_schema", [], |r| r.get(0))?;
     let schema_version: u32 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if !(if schema_version == 11 {
+    if !(if schema_version == 12 {
+        crate::database::bird_visit_weather::validate_schema(&tx)?
+    } else if schema_version == 11 {
         crate::database::bird_captions::validate_schema(&tx)?
     } else if schema_version == 10 {
         crate::database::bird_photos::validate_schema(&tx)?
     } else if schema_version == 9 {
         crate::database::bird_requests::validate_schema(&tx)?
-    } else if matches!(schema_version, 8 | 9 | 10 | 11) {
+    } else if matches!(schema_version, 8 | 9 | 10 | 11 | 12) {
         crate::database::bird_comments::validate_schema(&tx)?
     } else if schema_version == 7 {
         crate::database::bird_visit_identity::validate_schema(&tx)?
@@ -329,6 +331,9 @@ fn export_snapshot(
         crate::storage_content::snapshot_v3(&tx, flag).map_err(|_| Error::InvalidDatabase)?;
     } else if schema_version == 3 {
         crate::storage_content::snapshot_v4(&tx, flag).map_err(|_| Error::InvalidDatabase)?;
+    }
+    if schema_version == 12 {
+        crate::storage_content::snapshot_v13(&tx, flag).map_err(|_| Error::InvalidDatabase)?;
     }
     if schema_version == 11 {
         crate::storage_content::snapshot_v12(&tx, flag).map_err(|_| Error::InvalidDatabase)?;
@@ -366,7 +371,7 @@ fn export_snapshot(
             let version = match row.get_ref(4)? {
                 ValueRef::Integer(v)
                     if v == 1
-                        || (matches!(schema_version, 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11)
+                        || (matches!(schema_version, 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12)
                             && v == 2) =>
                 {
                     v
@@ -467,7 +472,7 @@ fn export_snapshot(
     }
     let mut images_file = tempfile_in(parent)?;
     let mut image_count = 0u64;
-    if matches!(schema_version, 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11) {
+    if matches!(schema_version, 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
         let mut q = tx.prepare("SELECT asset_id,entry_id,original_path,mime,width,height,preview FROM journal_image_assets ORDER BY asset_id COLLATE BINARY")?;
         let mut rows = q.query([])?;
         while let Some(row) = rows.next()? {
@@ -481,16 +486,16 @@ fn export_snapshot(
     }
     let mut bird_files = Vec::new();
     let mut bird_counts = BTreeMap::new();
-    if matches!(schema_version, 5 | 6 | 7 | 8 | 9 | 10 | 11) {
+    if matches!(schema_version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
         for (name, sql, fields) in [
             (
                 "bird_lists.jsonl",
-                if matches!(schema_version, 6 | 7 | 8 | 9 | 10 | 11) {
+                if matches!(schema_version, 6 | 7 | 8 | 9 | 10 | 11 | 12) {
                     "SELECT id,visit_date,place_id,visit_start,visit_end FROM bird_lists ORDER BY id COLLATE BINARY"
                 } else {
                     "SELECT id,visit_date,place_id FROM bird_lists ORDER BY id COLLATE BINARY"
                 },
-                if matches!(schema_version, 6 | 7 | 8 | 9 | 10 | 11) {
+                if matches!(schema_version, 6 | 7 | 8 | 9 | 10 | 11 | 12) {
                     &["id", "visit_date", "place_id", "visit_start", "visit_end"][..]
                 } else {
                     &["id", "visit_date", "place_id"][..]
@@ -498,12 +503,12 @@ fn export_snapshot(
             ),
             (
                 "bird_rows.jsonl",
-                if matches!(schema_version, 8 | 9 | 10 | 11) {
+                if matches!(schema_version, 8 | 9 | 10 | 11 | 12) {
                     "SELECT id,list_id,position,avibase_id,taxonomy_version,count,comment FROM bird_rows ORDER BY id COLLATE BINARY"
                 } else {
                     "SELECT id,list_id,position,avibase_id,taxonomy_version,count FROM bird_rows ORDER BY id COLLATE BINARY"
                 },
-                if matches!(schema_version, 8 | 9 | 10 | 11) {
+                if matches!(schema_version, 8 | 9 | 10 | 11 | 12) {
                     &[
                         "id",
                         "list_id",
@@ -555,7 +560,7 @@ fn export_snapshot(
             bird_files.push((name, file));
         }
     }
-    if matches!(schema_version, 9 | 10 | 11) {
+    if matches!(schema_version, 9 | 10 | 11 | 12) {
         let mut file = tempfile_in(parent)?;
         let mut count = 0;
         let mut q=tx.prepare("SELECT request_id,payload_sha256,completed FROM bird_creation_requests ORDER BY request_id COLLATE BINARY")?;
@@ -573,17 +578,17 @@ fn export_snapshot(
         bird_counts.insert("bird_creation_requests.jsonl", count);
         bird_files.push(("bird_creation_requests.jsonl", file));
     }
-    if matches!(schema_version, 10 | 11) {
+    if matches!(schema_version, 10 | 11 | 12) {
         let mut file = tempfile_in(parent)?;
         let mut count = 0;
-        let mut q=tx.prepare(if schema_version==11 {"SELECT row_id,asset_id,original_path,mime,width,height,preview,caption FROM bird_row_photos ORDER BY row_id COLLATE BINARY"}else{"SELECT row_id,asset_id,original_path,mime,width,height,preview FROM bird_row_photos ORDER BY row_id COLLATE BINARY"})?;
+        let mut q=tx.prepare(if schema_version>=11 {"SELECT row_id,asset_id,original_path,mime,width,height,preview,caption FROM bird_row_photos ORDER BY row_id COLLATE BINARY"}else{"SELECT row_id,asset_id,original_path,mime,width,height,preview FROM bird_row_photos ORDER BY row_id COLLATE BINARY"})?;
         let mut rows = q.query([])?;
         while let Some(row) = rows.next()? {
             cancelled(flag)?;
             let photo = crate::bird_photos::row(row)?;
             serde_json::to_writer(
                 &mut file,
-                &if schema_version == 11 {
+                &if schema_version >= 11 {
                     let mut value =
                         serde_json::to_value(&photo).map_err(|e| Error::Io(io::Error::other(e)))?;
                     value["caption"] = serde_json::to_value(&photo.caption)
@@ -602,11 +607,30 @@ fn export_snapshot(
         bird_counts.insert("bird_row_photos.jsonl", count);
         bird_files.push(("bird_row_photos.jsonl", file));
     }
+    if schema_version == 12 {
+        let mut file = tempfile_in(parent)?;
+        let mut count = 0;
+        for record in
+            crate::bird_visit_weather::read_all(&tx).map_err(|_| Error::InvalidDatabase)?
+        {
+            cancelled(flag)?;
+            serde_json::to_writer(&mut file, &record)
+                .map_err(|e| Error::Io(io::Error::other(e)))?;
+            file.write_all(b"\n")?;
+            count += 1;
+        }
+        file.flush()?;
+        file.sync_all()?;
+        bird_counts.insert("bird_visit_weather.jsonl", count);
+        bird_files.push(("bird_visit_weather.jsonl", file));
+    }
     cancelled(flag)?;
     tx.commit()?; // Never publish before successful snapshot completion.
     let mut readme = tempfile_in(parent)?;
     if schema_version == 0 {
         readme.write_all(README.as_bytes())?;
+    } else if schema_version == 12 {
+        readme.write_all(b"# MNO open export v13\n\nList-owned manual/fetched weather, original context and stale status are preserved alongside all prior data. Original photo files are not included.\n")?;
     } else if schema_version == 11 {
         readme.write_all(b"# MNO open export v12\n\nPreserves nullable bird-photo captions separately from row comments, plus all prior content and receipts. Original files are not included or modified.\n")?;
     } else if schema_version == 10 {
@@ -642,7 +666,7 @@ fn export_snapshot(
     if schema_version >= 3 {
         payloads.push(("weather_default_place.jsonl", weather_default_file));
     }
-    if matches!(schema_version, 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11) {
+    if matches!(schema_version, 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
         payloads.push(("images.jsonl", images_file));
     }
     payloads.extend(bird_files);
@@ -678,7 +702,7 @@ fn export_snapshot(
         format: "mno-export",
         format_version: schema_version + 1,
         database_schema_version: schema_version,
-        document_version: if matches!(schema_version, 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11) {
+        document_version: if matches!(schema_version, 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
             2
         } else {
             1

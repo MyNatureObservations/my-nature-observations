@@ -1,3 +1,4 @@
+import {iconUrl,formUrl,detailsUrl,overviewUrl as weatherOverviewUrl} from "./weather-test-modules.mjs";
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { compile } from 'svelte/compiler';
@@ -6,6 +7,8 @@ export const url=s=>`data:text/javascript;base64,${Buffer.from(s).toString('base
 export const transpile=s=>ts.transpileModule(s,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
 const resolve=(s,local)=>s.replace(/from (["'])([^"']+)\1/g,(_,q,n)=>`from ${q}${local[n]??import.meta.resolve(n)}${q}`);
 const reader=url('export function createJournalReader(){return async()=>{throw Error("SSR read");};}');
+export const birdWeatherUrl=url(transpile(source("../src/lib/bird-weather.ts")));
+export const birdWeather=await import(birdWeatherUrl);
 export const birdsUrl=url(resolve(transpile(source('../src/lib/birds.ts')),{'$lib/journal-data':reader}));
 export const birds=await import(birdsUrl);
 export const namesUrl=url(resolve(transpile(source('../src/lib/bird-names.ts')),{}));
@@ -25,9 +28,18 @@ export const scopeUrl=componentModule(source('../src/lib/components/PhotoScope.s
 export const thumbnailUrl=componentModule(source('../src/lib/components/PhotoThumbnail.svelte'),{'$lib/photo-gallery':galleryUrl,'$lib/components/PhotoViewer.svelte':viewerUrl,'$lib/paraglide/messages.js':messages});
 export const journalGalleryUrl=url('export async function loadJournalGallery(){throw Error("SSR must not load galleries");}');
 export const journalScopeUrl=componentModule(source('../src/lib/components/JournalPhotoScope.svelte'),{'$lib/components/PhotoScope.svelte':scopeUrl,'$lib/journal-photo-gallery':journalGalleryUrl});
+export const visitFetchHelpersUrl=url(resolve(transpile(source('../src/lib/bird-weather-fetch.ts')),{'$lib/bird-weather':birdWeatherUrl}));
+export const visitFetchHelpers=await import(visitFetchHelpersUrl);
+export const historicalHelpersUrl=url(resolve(transpile(source('../src/lib/weather-history.ts')),{}));
+export const weatherLabelsUrl=url(resolve(transpile(source('../src/lib/weather-labels.ts')),{'$lib/paraglide/messages.js':messages}));
+export const visitWeatherUrl=componentModule(source('../src/lib/components/BirdVisitWeather.svelte'),{'$lib/bird-weather-fetch':visitFetchHelpersUrl,'$lib/components/WeatherIcon.svelte':iconUrl,'$lib/components/WeatherOverview.svelte':weatherOverviewUrl,'$lib/bird-weather':birdWeatherUrl,'$lib/bird-names':namesUrl,'$lib/components/WeatherDetails.svelte':detailsUrl,'$lib/paraglide/messages.js':messages});
+export function fetchComponentModule(text=source('../src/lib/components/BirdWeatherFetch.svelte')){return componentModule(text,{'$lib/bird-weather':birdWeatherUrl,'$lib/bird-weather-fetch':visitFetchHelpersUrl,'$lib/weather-history':historicalHelpersUrl,'$lib/weather-labels':weatherLabelsUrl,'$lib/components/BirdVisitWeather.svelte':visitWeatherUrl,'$lib/paraglide/messages.js':messages});}
+export const fetchComponentUrl=fetchComponentModule();
+export function weatherEditorModule(text=source('../src/lib/components/BirdWeatherEditor.svelte')){return componentModule(text,{'$lib/components/BirdWeatherFetch.svelte':fetchComponentUrl,'$lib/bird-weather-fetch':visitFetchHelpersUrl,'$lib/bird-names':namesUrl,'$lib/components/WeatherIcon.svelte':iconUrl,'$lib/components/WeatherOverview.svelte':weatherOverviewUrl,'$lib/bird-weather':birdWeatherUrl,'$lib/components/WeatherForm.svelte':formUrl,'$lib/components/BirdVisitWeather.svelte':visitWeatherUrl,'$lib/paraglide/messages.js':messages});}
+export const weatherEditorUrl=weatherEditorModule();
 export const photoViewUrl=componentModule(source('../src/lib/components/BirdPhotoView.svelte'),{'$lib/bird-photo':photoUrl,'$lib/components/PhotoThumbnail.svelte':thumbnailUrl,'$lib/components/PhotoAbout.svelte':aboutUrl,'$lib/paraglide/messages.js':messages});
 export const rowPhotoUrl=componentModule(source('../src/lib/components/BirdRowPhoto.svelte'),{'$lib/birds':birdsUrl,'$lib/bird-photo':photoUrl,'$lib/components/BirdPhotoView.svelte':photoViewUrl,'$lib/components/PhotoAbout.svelte':aboutUrl,'$lib/paraglide/messages.js':messages});
-export const visitPreviewUrl=componentModule(source('../src/lib/components/BirdVisitPreview.svelte'),{'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/paraglide/messages.js':messages});
+export const visitPreviewUrl=componentModule(source('../src/lib/components/BirdVisitPreview.svelte'),{'$lib/components/WeatherOverview.svelte':weatherOverviewUrl,'$lib/bird-weather':birdWeatherUrl,'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/paraglide/messages.js':messages});
 export const linkPickerUrl=componentModule(source('../src/lib/components/BirdLinkPicker.svelte'),{'$lib/birds':birdsUrl,'$lib/components/BirdVisitPreview.svelte':visitPreviewUrl,'$lib/paraglide/messages.js':messages});
 export function previewUrl(seeded){const compiled=compile(seeded??source('../src/lib/components/BirdJournalLists.svelte'),{generate:'server',filename:'BirdJournalLists.svelte'});if(compiled.warnings.length)throw Error(JSON.stringify(compiled.warnings));return url(resolve(compiled.js.code,{'$lib/photo-gallery':galleryUrl,'$lib/components/PhotoThumbnail.svelte':thumbnailUrl,'$lib/birds':birdsUrl,'$lib/bird-names':namesUrl,'$lib/components/BirdVisitPreview.svelte':visitPreviewUrl,'$lib/components/BirdLinkPicker.svelte':linkPickerUrl,'$lib/components/DeleteEntryDialog.svelte':componentModule(source('../src/lib/components/DeleteEntryDialog.svelte'),{'$lib/paraglide/messages.js':messages}),'$lib/paraglide/messages.js':messages}));}
 export const birdPreviewUrl=previewUrl();
@@ -45,12 +57,12 @@ export function creationUrl(text, locale='sv',entryId='origin') {
   '$lib/place-map.svelte':url('export const PLACE_MAP="map";'),
   '$app/state':url(`export const page={params:{id:${JSON.stringify(entryId)}}};`),
   '$app/navigation':url('export function beforeNavigate(){};export async function goto(){}'),
-  '$lib/components/BirdRowPhoto.svelte':rowPhotoUrl,'$lib/components/BirdPasteReview.svelte':pasteReviewUrl(),'$lib/components/VisitTimePicker.svelte':timePickerUrl,'$lib/components/DatePicker.svelte':picker,'$lib/components/BirdAttribution.svelte':attribution
+  '$lib/bird-weather':birdWeatherUrl,'$lib/components/BirdWeatherEditor.svelte':weatherEditorUrl,'$lib/components/BirdRowPhoto.svelte':rowPhotoUrl,'$lib/components/BirdPasteReview.svelte':pasteReviewUrl(),'$lib/components/VisitTimePicker.svelte':timePickerUrl,'$lib/components/DatePicker.svelte':picker,'$lib/components/BirdAttribution.svelte':attribution
  });
 }
 
 export const speciesNameUrl=url(resolve(compile(source('../src/lib/components/BirdSpeciesName.svelte'),{generate:'server'}).js.code,{'$lib/bird-names':namesUrl,'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href}));
-export function detailUrl(){return url(resolve(compile(source('../src/lib/components/BirdListDetail.svelte'),{generate:'server'}).js.code,{'$lib/photo-gallery':galleryUrl,'$lib/components/PhotoScope.svelte':scopeUrl,'$lib/bird-names':namesUrl,'$lib/components/EntryOptions.svelte':url(resolve(compile(source('../src/lib/components/EntryOptions.svelte'),{generate:'server'}).js.code,{'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href})),'$lib/components/BirdSpeciesName.svelte':speciesNameUrl,'$lib/components/BirdPhotoView.svelte':photoViewUrl,'$lib/components/BirdAttribution.svelte':url(resolve(compile(source('../src/lib/components/BirdAttribution.svelte'),{generate:'server'}).js.code,{'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href})),'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href}));}
+export function detailUrl(){return url(resolve(compile(source('../src/lib/components/BirdListDetail.svelte'),{generate:'server'}).js.code,{'$lib/components/WeatherIcon.svelte':iconUrl,'$lib/components/WeatherOverview.svelte':weatherOverviewUrl,'$lib/bird-weather':birdWeatherUrl,'$lib/components/BirdVisitWeather.svelte':visitWeatherUrl,'$lib/photo-gallery':galleryUrl,'$lib/components/PhotoScope.svelte':scopeUrl,'$lib/bird-names':namesUrl,'$lib/components/EntryOptions.svelte':url(resolve(compile(source('../src/lib/components/EntryOptions.svelte'),{generate:'server'}).js.code,{'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href})),'$lib/components/BirdSpeciesName.svelte':speciesNameUrl,'$lib/components/BirdPhotoView.svelte':photoViewUrl,'$lib/components/BirdAttribution.svelte':url(resolve(compile(source('../src/lib/components/BirdAttribution.svelte'),{generate:'server'}).js.code,{'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href})),'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href}));}
 
 export const deleteDialogUrl=url(resolve(compile(source('../src/lib/components/DeleteEntryDialog.svelte'),{generate:'server'}).js.code,{'$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href}));
 
