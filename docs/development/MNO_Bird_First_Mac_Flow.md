@@ -1231,3 +1231,43 @@ separate accepted non-blocking follow-up and was not investigated.
 The local checkpoint includes only this feature's code, tests and documentation.
 All test profiles, archives and unrelated files are preserved. No push, PR, CI,
 merge, installer build or publication is part of this review.
+
+
+## Journal-weather compatibility correction — 19 November 2026
+
+Follow-up review of public main `79db66f1be3f21d5e21521aa4e93a338f94468d6`
+found that [the journal-weather reader](../../app/src-tauri/src/weather/storage.rs)
+recognized schemas through 9, but omitted the supported macOS schemas 10 and 11.
+This prevented weather reads, manual saves and fetched previews with
+`database_schema_incompatible`; it did not establish loss of stored weather.
+This specific gap was missed by the earlier combined photo review above.
+
+The focused correction adds macOS-only match arms calling the exact existing
+schema-10 and schema-11 validators. It does not accept arbitrary future versions,
+change storage or archive formats, modify frozen archive contracts, or enable
+bird-visit weather. Windows/Linux behavior is unchanged. Review found no remaining
+blocker or unintended changes in this correction.
+
+### Owner-accepted macOS DEV check
+
+The owner confirmed that existing journal weather was available, manual weather
+changes persisted after restart, and weather fetching worked. This is manual DEV
+acceptance, separate from automated fixture coverage, not packaged acceptance.
+No test profile, archive or production journal was accessed during submission.
+
+### Recorded automated checks, reused for submission
+
+[The startup regressions](../../app/src-tauri/src/weather/historical/saving/tests/current_schema.rs)
+prepare stored manual/fetched weather in schema 4, then exercise ordinary schema-11
+startup, preserved source-copy bytes, read-only weather views, manual saving and
+reopening, and server-bound fetched preview/storage with deterministic transport.
+Schema 10 has its own exact-validator check. Unknown versions and altered schema
+10/11 layouts remain rejected without writes.
+
+Before correction: **3 failed, 1 passed**, reproducing the compatibility failure.
+After correction with CI-pinned Rust **1.99.1**: affected weather suite **72 passed,
+0 failed, 1 existing ignored**; final four startup/schema regressions **4 passed**
+after strengthening malformed-schema coverage for both versions. All-targets
+compilation and pinned formatting passed. No frontend changes required Svelte
+checks. Submission reuses those results without repeating tests; documentation
+links and `git diff --check` are checked again.

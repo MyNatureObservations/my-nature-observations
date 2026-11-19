@@ -499,3 +499,6 @@ fn current_snapshot_saves_without_changing_manual_and_survives_archives_and_date
     .unwrap();
     assert_eq!(storage::read(&db, "one").unwrap(), saved);
 }
+
+#[cfg(target_os = "macos")]
+mod current_schema;
