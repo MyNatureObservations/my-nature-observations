@@ -30,6 +30,29 @@ fn readable(fd: &OwnedFd) {
 
 #[test]
 fn owner_drop_releases_lease_while_child_still_holds_inherited_descriptor() {
+    const ISOLATED: &str = "MNO_C2_LEASE_LIFECYCLE_ISOLATED";
+    if std::env::var_os(ISOLATED).is_none() {
+        // The negative control deliberately relies on final-close flock release.
+        // Concurrent spawn in this libtest process can transiently inherit that
+        // plain File, even with CLOEXEC, beyond our controlled child's waitpid.
+        // Create every control/lease descriptor only after exec in an isolated
+        // process. Keep the actual inherited-fd assertions unchanged below.
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "lease_lifecycle::owner_drop_releases_lease_while_child_still_holds_inherited_descriptor",
+                "--test-threads=1",
+                "--nocapture",
+            ])
+            .env(ISOLATED, "1")
+            .status()
+            .unwrap();
+        assert!(
+            status.success(),
+            "isolated lease lifecycle test failed: {status}"
+        );
+        return;
+    }
     let root = fixture();
     let control_root = fixture();
     let control = OpenOptions::new()
