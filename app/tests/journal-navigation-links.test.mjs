@@ -31,6 +31,7 @@ async function panelHtml(entries, { loading = false, error = false } = {}) {
   const compiled = compile(seeded, { filename: "CalendarDayPanel.svelte", generate: "server" });
   assert.equal(compiled.warnings.length, 0);
   const component = await import(url(resolveImports(compiled.js.code, {
+    "$lib/components/CalendarObservations.svelte":url("export default function(){}"),
     "$lib/journal-reading": readingUrl,
     "$lib/journal-data": url('export function createJournalReader() { return () => { throw new Error("SSR must not read"); }; }'),
     "$lib/language.svelte": languageUrl,

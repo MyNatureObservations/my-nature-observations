@@ -19,7 +19,7 @@ const readerScript = ts.transpileModule(readerSource, { compilerOptions: { targe
 
 function harness() {
   const calls = [];
-  const context = vm.createContext({
+  const context = vm.createContext({createObservationCalendarReader:()=>async()=>null,
     PLACE_MAP: 'mno:place-map', getContext: () => ({ close() {} }),
     $state: value => value,
     $derived: value => value,

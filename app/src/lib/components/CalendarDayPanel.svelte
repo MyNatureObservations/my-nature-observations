@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CalendarObservations from "$lib/components/CalendarObservations.svelte";
   import { createJournalReader } from "$lib/journal-data";
   import { visibleJournalEntries, type ReadingEntry } from "$lib/journal-reading";
   import { language } from "$lib/language.svelte";
@@ -116,6 +117,8 @@
         {/each}
       </ul>
     {/if}
+
+    <CalendarObservations {date} />
 
     <a href={`/journal/new?date=${date}`} class="new-entry-link">
       <span aria-hidden="true">＋</span>

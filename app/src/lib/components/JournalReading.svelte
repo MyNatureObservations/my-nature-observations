@@ -1,4 +1,6 @@
 <script lang="ts">
+  import BirdVisitPreview from "$lib/components/BirdVisitPreview.svelte";
+  import {birdHref,type BirdList} from "$lib/birds";
   import JournalPhotoScope from "$lib/components/JournalPhotoScope.svelte";
   import BirdJournalLists from "$lib/components/BirdJournalLists.svelte";
   import { tick } from "svelte";
@@ -9,15 +11,15 @@
   import WeatherTile from "$lib/components/WeatherTile.svelte";
   import { createWeatherReader, type WeatherView } from "$lib/weather";
   import JournalContent from "$lib/components/JournalContent.svelte";
-  import { groupJournalEntries, visibleJournalEntries, journalEntryAnchor, journalDateAnchor, formatJournalDate, type ReadingEntry } from "$lib/journal-reading";
+  import { groupDiaryEntries, visibleJournalEntries, journalEntryAnchor, journalDateAnchor, formatJournalDate, type ReadingEntry } from "$lib/journal-reading";
   import * as m from "$lib/paraglide/messages.js";
 
-  let { entries, isLoading, errorMessage, locale, generation = null, onEntryDeleted }: {
-    entries: ReadingEntry[]; isLoading: boolean; errorMessage: string; locale: "sv" | "en"; generation?: number | null;
+  let { entries, isLoading, errorMessage, locale, generation = null, onEntryDeleted, observations = [] }: {
+    observations?: BirdList[]; entries: ReadingEntry[]; isLoading: boolean; errorMessage: string; locale: "sv" | "en"; generation?: number | null;
     onEntryDeleted: (id: string) => void;
   } = $props();
   const visibleEntries = $derived(visibleJournalEntries(entries));
-  const groups = $derived(groupJournalEntries(visibleEntries));
+  const groups = $derived(groupDiaryEntries(visibleEntries,observations));
   const readWeather = createWeatherReader();
   let weather = $state<Record<string, WeatherView>>(Object.create(null));
   let weatherError = $state(false);
@@ -93,7 +95,7 @@
   <p class="message" role="status">{m.journal_list_loading({}, { locale })}</p>
 {:else if errorMessage}
   <p class="message error" role="alert">{errorMessage}</p>
-{:else if visibleEntries.length === 0}
+{:else if groups.length === 0}
   <p class="message">{m.journal_empty({}, { locale })}</p>
 {:else}
   {#each groups as group (group.date)}
@@ -130,8 +132,14 @@
           {/if}
           <JournalPhotoScope entryId={entry.id} {generation} contentJson={entry.contentJson} {locale}>
           <JournalContent contentJson={entry.contentJson} entryId={entry.id} documentVersion={entry.documentVersion ?? 1} {generation} {locale} editable={entry.editable === true} />
-          <BirdJournalLists entryId={entry.id} {generation} {locale} journalDate={entry.entryDate}/>
+          <BirdJournalLists entryId={entry.id} {generation} {locale} journalDate={entry.entryDate} compactReferences/>
           </JournalPhotoScope>
+        </article>
+      {/each}
+      {#each group.visits as visit (visit.id)}
+        <article id={`observation-${visit.id}`} class="diary-observation" aria-label={m.observation_visit_label({}, {locale})}>
+          <span class="observation-type">{m.observation_visit_label({}, {locale})}</span>
+          <BirdVisitPreview list={visit} {locale} journalDate={group.date} href={birdHref(null,visit.id)}/>
         </article>
       {/each}
     </section>
@@ -139,6 +147,7 @@
 {/if}
 
 <style>
+  .observation-type{font:500 13px/1.5 system-ui,sans-serif;color:#345f80;letter-spacing:.25px}.diary-observation{margin-top:28px;}
   .journal-day { scroll-margin-top: 64px; }
   .journal-day + .journal-day { margin-top: 72px; }
   .entry-date {
