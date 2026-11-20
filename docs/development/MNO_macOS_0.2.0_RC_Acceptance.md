@@ -1,9 +1,9 @@
 # macOS 0.2.0 RC1 — build and packaged acceptance
 
 Base: public main `0a0339e24d67659a494b9f3d1a9e41664afa4868`.
-Branch: `codex/macos-v0.2.0-rc1`. The exact clean source checkpoint, finished DMG
-path and checksum are reported after the build; this document does not claim a
-candidate has passed manual acceptance. [Draft bilingual release notes](MNO_macOS_0.2.0_Release_Notes.md).
+Branch: `codex/macos-v0.2.0-rc1`. Packaged acceptance passed as reported by the
+project owner. The tested build remains the exact source checkpoint below; later
+documentation commits do not identify a rebuilt artifact. [Draft bilingual release notes](MNO_macOS_0.2.0_Release_Notes.md).
 
 ## Build identity
 
@@ -22,7 +22,42 @@ candidate has passed manual acceptance. [Draft bilingual release notes](MNO_macO
 No Windows/Linux package is delivered and their bird-feature gates are unchanged.
 Do not rebuild this artifact after acceptance without treating it as a new candidate.
 
-## Isolated production-app manual procedure — pending
+## Accepted candidate and packaged results
+
+- Tested source commit: `1685de6bc16c3ee1c50b1727cfaccdc16df17e7f`.
+- Retained DMG: `My-Nature-Observations-0.2.0-macos-arm64-rc1-1685de6.dmg`.
+- SHA-256: `8592c81a052a72298ea516ff581cb152b13734c12812bb952e38bde62c510108`.
+- The checksum was reverified when recording acceptance. The accepted DMG was
+  neither modified nor rebuilt. Subsequent acceptance-documentation commits are
+  separate from the tested build commit.
+- Finished-DMG inspection confirmed version 0.2.0, arm64, macOS 13.0 minimum,
+  production identifier, valid ad hoc app signature, embedded MIT license and
+  matching target-specific notices. The DMG integrity check passed. The app is
+  not notarized; the DMG itself is unsigned.
+
+**User-reported packaged macOS acceptance: PASS.** This is installed production-app
+acceptance using synthetic data and separate accounts, distinct from prior DEV
+acceptance and automated tests:
+
+- Upgrade from public v0.1.1 preserved journal text, photo and caption.
+- A new edit persisted after restart.
+- Standalone and linked bird observations, comments, photos/captions, weather,
+  navigation and the shared viewer worked.
+- Backup → Restore in a separate account preserved content after restart.
+- Export → Open Import in another separate account preserved content after
+  restart, including linked and unlinked observations.
+
+This records the reported scope, not every optional subcheck in the procedure
+below. It does not establish Windows/Linux bird support or a public-download
+acceptance result for this candidate. UX-005, native-dialog system localization
+and deferred catalog/region work remain follow-ups.
+
+Automated release-preparation evidence remains unchanged: 25 focused frontend
+checks, 15 historical-weather tests, Svelte with zero errors/warnings, CI-pinned
+Rust all-targets compilation/formatting, documentation links and diff checks
+passed. No application tests were repeated for this documentation-only record.
+
+## Isolated production-app manual procedure — retained for reference
 
 Use three **separate disposable standard macOS accounts**, for example
 `MNO-020-Source`, `MNO-020-Restore` and `MNO-020-Import`. Do not use the owner's
@@ -107,6 +142,7 @@ clean target, use a new account; do not delete an existing journal to reset it.
    quit/reopen again and verify persistence. Leave source and Restore target intact.
 
 Record the exact source commit/DMG hash, macOS version, account isolation, outcomes
-and any security/picker warnings. These instructions are not an acceptance result.
+and any security/picker warnings. The procedure itself is not additional evidence
+beyond the accepted results recorded above.
 UX-005 and system-owned native-dialog language limitations remain documented;
 catalog/region work is not part of this candidate.

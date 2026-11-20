@@ -42,7 +42,11 @@ general BirdLife names, regional search/maps and statistics are not included.
 Missing Swedish names use the recorded fallback. In macOS DEV, clicking blank
 space to the right of a species result may require two clicks (UX-005); clicking
 the species name works directly. Native file-picker buttons may use the system
-language independently of MNO. Packaged acceptance is pending for this candidate.
+language independently of MNO. Packaged macOS acceptance passed for the exact candidate: upgrade from public
+v0.1.1 preserved text, photo and caption, and a new edit persisted after restart.
+Bird observations and separate-account Backup/Restore and Export/Open Import
+also passed, including linked and unlinked observations. See the
+[acceptance record](MNO_macOS_0.2.0_RC_Acceptance.md) for artifact identity and scope.
 
 ## Svenska
 
@@ -85,5 +89,10 @@ plattformsgates behålls. AviList är en fast medföljande v2026-katalog; uppdat
 allmänt BirdLife-namnstöd, regional sökning/karta och statistik ingår inte. Saknade
 svenska namn använder beslutad reservvisning. I macOS DEV kan blankytan till höger
 om en artträff kräva två klick (UX-005); klick på artnamnet fungerar direkt.
-Filväljarens systemknappar kan följa ett annat språk än MNO. Paketerad acceptans
-återstår för denna kandidat.
+Filväljarens systemknappar kan följa ett annat språk än MNO. Paketerad macOS-
+acceptans är godkänd för den exakta kandidaten: uppgradering från publicerad
+v0.1.1 bevarade text, foto och bildtext, och en ny redigering fanns kvar efter
+omstart. Fågelobservationer samt Backup/Restore och Export/Open Import i separata
+konton godkändes också, inklusive länkade och olänkade observationer. Se
+[acceptansprotokollet](MNO_macOS_0.2.0_RC_Acceptance.md) för kandidatens identitet
+och testets omfattning.
