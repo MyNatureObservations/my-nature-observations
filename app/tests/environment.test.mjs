@@ -36,3 +36,13 @@ test("packaged webviews identify MNO to the public tile service", () => {
   for (const window of production.app.windows) assert.equal(window.userAgent, expected);
   assert.equal(development.app, undefined, "DEV inherits the identifying webview configuration");
 });
+
+
+test("release version is consistent across metadata, locks and HTTP identification",()=>{
+ const version=production.version;
+ const pkg=JSON.parse(read("../package.json")),lock=JSON.parse(read("../package-lock.json"));
+ assert.equal(pkg.version,version);assert.equal(lock.version,version);assert.equal(lock.packages[''].version,version);
+ assert.equal(read("../src-tauri/Cargo.toml").match(/^version = "([^"]+)"/m)[1],version);
+ assert.equal(read("../src-tauri/Cargo.lock").match(/name = "app"\nversion = "([^"]+)"/)[1],version);
+ assert.match(read("../src-tauri/src/weather/historical.rs"),/user_agent\(concat!\("MyNatureObservations\/", env!\("CARGO_PKG_VERSION"\)\)\)/);
+});

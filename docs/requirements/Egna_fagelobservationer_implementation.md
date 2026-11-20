@@ -1,6 +1,133 @@
 # Egna fågelobservationer — genomförandeplan för granskning
 
-**Status — godkänt produktunderlag med lokalt pågående implementation av steg 1.** Ursprunglig plan från 11 november 2026; kompletterad med produktbesluten den 12 november 2026. Se de [överenskomna kraven](Egna_fagelobservationer.md). Kataloguppdateringar och regionväljare är planerade senare funktioner, inte implementerade i detta dokumentationssteg.
+**Aktuell status — avstämd mot mergad kod och befintlig evidens 20 november 2026.**
+Granskad publik main: `0a0339e24d67659a494b9f3d1a9e41664afa4868`.
+Se [produktkraven](Egna_fagelobservationer.md). Följande status ersätter äldre
+formuleringar om lokalt pågående steg; den ursprungliga planen och alla daterade
+utvecklings-/testprotokoll nedan bevaras. Ingen ny testning eller acceptans har utförts.
+
+Den pausade avstämningen mot `4ad78bc` har behållits och kontrollerats mot den nya
+main-committen ovan. Mellanskillnaden är endast den mergade lease-testisoleringen
+och dess testprotokoll, inte fågelfunktioner, produktionslåsning, schema eller
+arkivformat. Befintlig funktions-/acceptansevidens är därför fortsatt relevant;
+CI-fixen räknas inte som ny manuell eller paketerad fågelacceptans.
+
+## Aktuell leveransstatus — 20 november 2026
+
+DEV-acceptans gäller endast de rapporterade fallen, inte varje automatiserad
+felinjektion. En funktion kan vara DEV-godkänd **och samtidigt** vänta på
+paketerad acceptans. Roadmapområdet ”Egna fågelobservationer” lämnas öppet.
+
+### Implementerat med accepterad macOS DEV-evidens
+
+- [x] Skapa från journal eller fristående; spara, återöppna, redigera/Avbryt och
+  radera besök. Datum, koordinatstödd namngiven plats, frivilliga tider, flera
+  självständiga besök på samma plats/datum, arter/antal, kommentarer och ihågkomna
+  namnvisningsval. Offline AviList v2026, svensk/engelsk/vetenskaplig sökning,
+  namnluckors reservvisning och det riktade kråkkomplementet finns i kod.
+  [Första flödets rapporterade acceptans](../development/MNO_Bird_First_Mac_Flow.md#final-acceptance-and-complete-branch-review-2026-11-13).
+- [x] Datumgrupperad översikt, befintlig lista från journalen, länkning från detalj,
+  flera journallänkar, riktad avlänkning och återgång/omstart.
+  [Fristående flödets DEV-resultat](../development/MNO_Bird_First_Mac_Flow.md#standalone-flow-checkpoint-review--2026-11-16).
+  Journalradering bevarar listägaren; transaktioner, sena skrivningar och beständiga
+  begärankvitton har automatiserad säkerhetstäckning, inte generell manuell felacceptans.
+- [x] Inklistring med uttrycklig granskning/rättning, val vid dubbletter och slutlig
+  valideringscopy; Avbryt bevarar formuläret och Apply sparar inte databasen.
+  [Inklistringens DEV-acceptans](../development/MNO_Bird_First_Mac_Flow.md#paste-review-checkpoint-review--2026-11-17).
+- [x] Ett foto och separat bildtext per artrad, tillägg/byte/borttagning/Avbryt,
+  gemensam bildvisare och bevarade original. Backup → Restore och Export → Open
+  Import till separata mål med ytterligare omstarter, inklusive länkade/olänkade
+  listor, bilder, bildtexter, kommentarer och länkar.
+  [Foto-/arkivacceptans](../development/MNO_Bird_First_Mac_Flow.md#bird-photos-and-shared-viewer--final-local-review-and-accepted-macos-dev-checks).
+- [x] Eget manuellt och hämtat dygnsväder, dagens prognosmärkning, explicit manuell
+  återanvändning, inaktuellt väder och omstart. Separata arkivmål bevarade värden,
+  käll-/datum-/prognosmetadata och ursprungligt inaktuellt sammanhang, tillsammans
+  med journalväder, foton och länkar.
+  [Vädrets DEV-/arkivacceptans](../development/MNO_Bird_Visit_Weather_Persistence.md#final-owner-reported-macos-dev-acceptance--19-november-2026).
+- [x] Navigationens och kalenderns **visuella** DEV-acceptans: två huvudkort och
+  mindre registreringsfack, diskret dold sidopanel, etiketter och gröna/blå
+  typmarkörer. Sista justeringen behåller enbart semantisk aktuell destination,
+  hover och tangentbordsfokus.
+  [Visuell acceptans](../development/MNO_Observation_Navigation_Calendar.md#owner-visual-acceptance-and-final-quiet-link-adjustment--20-november-2026).
+  Gemensam dagboksordning, observationsdagar, unikhet, uppdatering och lämnaskydd
+  har [automatiserad slutverifiering](../development/MNO_Observation_Navigation_Calendar.md#final-combined-review-and-local-checkpoint--20-november-2026);
+  ingen separat full manuell funktionsmatris för den senaste kombinationen påstås.
+
+Kodspårning: [listkommandon](../../app/src-tauri/src/bird_app.rs),
+[listägarskap och skrivskydd](../../app/src-tauri/src/bird_observations.rs),
+[formulär](../../app/src/lib/components/BirdListForm.svelte),
+[artregister](../../app/src-tauri/src/species_registry.rs),
+[katalog/proveniens](../../app/src-tauri/catalog/README.md),
+[listväder](../../app/src-tauri/src/bird_visit_weather.rs) och
+[gemensam läsvy](../../app/src/lib/components/JournalReading.svelte).
+Mergad lagringsnivå är **schema 12 / arkivformat 13** med skyddade uppgraderingar,
+äldre stödda läsare och ersatt journal i skydd. Dessa bevarandeskydd har framför
+allt automatiserad evidens. Den tidiga manuella uppgraderingen gällde
+[schema 4 → 5](../development/testing.md#bird-observations-macos-schema-upgrade-dev-acceptance),
+inte ett paketerat direktsteg från publicerad app till dagens schema 12.
+
+### Implementerat, men paketerad acceptans återstår
+
+- [ ] Välj nästa macOS-kandidatversion/källcommit separat och bygg/inspektera en
+  faktisk produktionskandidat: arm64, appidentitet, licens/notiser inklusive
+  katalogattribution, signatur och SHA-256. Ingen sådan ny fågelkandidat godkänns här.
+- [ ] Öppna en syntetisk journal från den publicerade macOS-appen i kandidaten;
+  verifiera uppgradering till schema 12, skyddad källkopia, text, bilder, platser,
+  journalväder och ännu en omstart. DEV-uppgraderingar eller CI är inte detta test.
+- [ ] Kort samlat pakettest av listlivscykel/inklistrning, gemensam dagbok med en
+  observationsdag utan anteckning, länkar/återgång, foton/bildvisare och eget väder.
+  Kontrollera Backup/Restore och Export/Open Import i separata syntetiska mål.
+- [ ] Observera den paketerade filväljarens språk. Appens egna texter är
+  lokaliserade; systemknappar styrs inte separat av det befintliga dialog-API:t.
+
+### Överenskommet men inte implementerat
+
+Ingen ytterligare saknad **kodfunktion i den ursprungliga macOS-listomfattningen**
+identifierades i denna avstämning. Detta innebär inte att hela roadmapkortet är klart.
+Följande är senare produktbeslut och återstår uttryckligen:
+
+- [ ] Kataloguppdatering som data/användarimport med validering före aktivering,
+  versions-/källmetadata och bibehållen aktiv katalog vid fel. Historiska namn måste
+  kunna slås upp efter byte; nu bevaras taxon-ID/version men registret är fast
+  inbäddad AviList v2026. Ingen tyst omklassificering vid splits/merges får införas.
+- [ ] Allmänt stöd för BirdLife Sveriges svenska namn. Det källbelagda **Kråka**-
+  komplementet och gråkråke-hänvisningen är inte full BirdLife-integration.
+- [ ] Regional prioritering av likvärdiga sökträffar, ihågkommen region och bevarat
+  försteg för exakta namn utan att låsa arter utanför regionen. Regional status får
+  inte beskrivas som lokal abundans.
+- [ ] Offline regionkarta och kompakt regionval med korrekt källgeografi,
+  beskrivning/källa/version. VP12:s identifierarmappning och dokumenterade
+  gränsoklarhet behöver klarläggas före den integrationen; nu finns ingen regionväljare.
+
+### Kända icke blockerande begränsningar och uppskjutet designarbete
+
+- UX-005: blank högeryta i artträff kan kräva två klick i macOS Tauri DEV;
+  artnamnet väljer direkt. [Publik UX-backlog #4](https://github.com/MyNatureObservations/my-nature-observations/issues/4).
+  Detta är inte fixat eller visuellt accepterat som korrekt interaktion.
+- [Systemägda filväljartexter](../development/MNO_Bird_First_Mac_Flow.md#native-picker-investigation)
+  kan inte språkstyras separat genom det pinnade dialog-API:t; appstyrd text följer MNO.
+- Källexportens 28 svenska namnluckor och taxonomiska kombinationsnamn kräver fortsatt
+  korrekt reservvisning/koncepttolkning. Ett separat kråkkomplement finns; original-
+  exporten ändras inte. Full namnlikvärdighet över taxonomier påstås inte verifierad.
+- Automatisk journalprosa/sammanfattningar, statistik och bredare analys är
+  ursprungligen uppskjutna, inte ofärdiga delar av den första leveransen.
+- Windows/Linux-fågelaktivering, importleverantörer och nya observationstyper ingår
+  inte i denna macOS-leverans. Befintliga plattformsgates ska behållas.
+
+**Minsta nästa steg:** en avgränsad macOS RC-/paketacceptansarbetsorder med vald
+ny versionsidentitet, därefter ett syntetiskt uppgraderings- och kärnflödestest av
+exakt samma artefakt. Använd den kombinerade dagbokens nya flöde och separata mål
+för arkivkontrollerna. Inga katalog-/regionfunktioner behöver läggas till för detta
+steg. Nuvarande evidens visar inget ytterligare kodblocker; paket-/uppgraderings-
+acceptansen är den konkreta återstående verifieringsgränsen före releasebeslut.
+
+---
+
+## Ursprunglig plan och daterade genomförandenoteringar
+
+Texten nedan bevaras som historik. Exempelvis ”lokalt”, äldre schema-/arkivnummer,
+väntande foto-/väder-UI eller ännu öppen huvudnavigation anger dåvarande etapp,
+inte dagens leveransstatus. Använd checklistan ovan för aktuellt läge.
 
 ## Små modulgränser i befintlig modulär monolit
 

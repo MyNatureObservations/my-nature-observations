@@ -149,7 +149,7 @@ fn client(timeout: Duration) -> Result<reqwest::blocking::Client, Error> {
         .connect_timeout(Duration::from_secs(5))
         .redirect(reqwest::redirect::Policy::none())
         .https_only(true)
-        .user_agent("MyNatureObservations/0.1")
+        .user_agent(concat!("MyNatureObservations/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|_| Error::Network)
 }

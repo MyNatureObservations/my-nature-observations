@@ -1,6 +1,15 @@
 # Egna fågelobservationer
 
-**Status — godkända produktkrav, kompletterade den 12 november 2026.** Första macOS-flödet implementeras lokalt. Teknisk design för senare funktioner, däribland kataloguppdatering och regionval, återstår; denna uppdatering aktiverar inga nya funktioner.
+**Aktuell status — avstämd 20 november 2026 mot publik main
+`0a0339e24d67659a494b9f3d1a9e41664afa4868`.** Den ursprungliga macOS-omfattningen
+är implementerad och mergad, med DEV-evidens inom de dokumenterade fallen.
+Paketerad acceptans återstår. Kataloguppdateringar, allmänt BirdLife-namnstöd,
+regional sökning och regionkarta är senare överenskomna tillägg, inte levererade
+funktioner. Roadmapkortet är **inte** färdigmarkerat.
+
+Se [aktuell leverans- och kvarstårchecklista](Egna_fagelobservationer_implementation.md#aktuell-leveransstatus--20-november-2026).
+Nedanstående daterade etappbeslut och acceptansöversikt bevaras som historik;
+formuleringar om dåvarande lokalt arbete eller senare steg är inte aktuell status.
 
 ## Överenskommen omfattning
 
