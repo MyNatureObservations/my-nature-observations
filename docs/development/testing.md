@@ -769,3 +769,56 @@ C5b.1's unelevated directory-operation evidence remains distinct from C6 observa
 C6 is closed as a stage, not as a claim of complete Windows platform support.
 [C7 architecture review and proposed stages](MNO_C7_Generation_Recovery_Review.md)
 are documentation only; no C7 production behavior has been implemented.
+
+## Post-merge macOS lease-test isolation — 20 November 2026
+
+Reviewed main `4ad78bc622fe6772e0e6a6eb59e58191eaf4d980`. The reported run ID
+`4470905118` returned 404; the matching failed main push was
+[44709905118](https://github.com/MyNatureObservations/my-nature-observations/actions/runs/44709905118).
+The green PR run was
+[44703652818](https://github.com/MyNatureObservations/my-nature-observations/actions/runs/44703652818).
+Its tested merge commit `314d2bbce732acab7234b6489db8475f48f3fc97` and main have
+identical Git tree `4c992347b0155f7745b5d2edbb461a9497a459a6`. Both macOS test jobs
+used macOS 15.8.2 / 24H232, image `20261104.0514.1` and Rust 1.99.1. No source,
+workflow or toolchain change explains the different result.
+
+The failure at `generation_activation_prototype/lease_lifecycle.rs:124` was the
+**plain-File negative-control cleanup**, not the preceding immediate reacquisition
+following `Lease::drop` while the controlled fork child remained alive. The latter
+assertions passed. The macOS library suite also passed: 1,031 tests, 2 existing
+ignored; the affected integration target reported 26 passed, 1 failed.
+
+The test incorrectly assumed that reaping its controlled child guaranteed the
+last reference to the plain control File had closed. Other tests in the same
+parallel libtest process start subprocesses. A concurrent spawn can inherit the
+open file description until exec, even when the descriptor has CLOEXEC. Production
+`DirectoryLease::drop` already explicitly unlocks; no production lock change was
+needed or made.
+
+Targeted local evidence, using CI-pinned Rust 1.99.1 on Darwin 27.2 arm64:
+
+- Unmodified regression: 100 isolated executions and 30 complete parallel-target
+  executions passed. This alone did not reproduce the CI failure.
+- Disposable OS probe of the same plain-control lifecycle: **3/3,000** final-close
+  acquisitions returned WouldBlock/35 with concurrent process creation, versus
+  **0/3,000** without it.
+- Deterministic disposable probe held an unrelated child before exec: after the
+  controlled child was reaped, the contender got WouldBlock/35; releasing the
+  unrelated exec closed its inherited CLOEXEC reference and the same contender
+  immediately acquired. No sleeps or lock retries were used for that proof.
+- The specific extra process at the instant of the CI failure was not logged.
+  The isolation assumption and failure mechanism are reproduced, not its exact
+  scheduler history.
+
+The focused test-only correction runs the existing lifecycle regression after
+exec in a dedicated `--exact`/single-test process. All control and lease descriptors
+are created there, so parallel parent tests cannot inherit them. Every original
+assertion remains, including exclusion while owned and immediate reacquisition
+before the child exits. There is no ignored test, assertion relaxation, sleep,
+production serialization or production locking change.
+
+After correction: affected integration target **27 passed, 0 failed, 0 ignored**;
+**100/100** isolated and **30/30** parallel-target repetitions passed. CI-pinned
+formatting and `git diff --check` passed. Existing requirements/status edits were
+preserved unchanged, and no journal profile or archive was accessed. These are
+local results; no CI rerun, push or publication was performed.
