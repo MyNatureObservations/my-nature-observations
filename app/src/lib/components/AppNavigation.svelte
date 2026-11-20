@@ -6,6 +6,8 @@
   import AboutMno from "$lib/components/AboutMno.svelte";
   import WeatherDefaultPlace from "$lib/components/WeatherDefaultPlace.svelte";
   import { createJournalReader } from "$lib/journal-data";
+  import {createObservationCalendarReader, observationDates} from "$lib/observation-calendar";
+  const readObservations = createObservationCalendarReader();
   import CalendarGrid from "$lib/components/CalendarGrid.svelte";
   import CalendarDayPanel from "$lib/components/CalendarDayPanel.svelte";
   import * as m from "$lib/paraglide/messages.js";
@@ -123,6 +125,16 @@
   let isCalendarMonthPickerOpen = $state(false);
   let markedCalendarDates = $state<string[]>([]);
   let calendarRequestId = 0;
+  let markedObservationDates=$state<string[]>([]);
+  let calendarObservationsAvailable=$state(false);
+  let observationCalendarError=$state(false);
+  let observationRequestId=0;
+  let calendarDisposed=false;
+  async function loadObservationDates(year:number,month:number){
+    const request=++observationRequestId;markedObservationDates=[];observationCalendarError=false;
+    try{const result=await readObservations();if(calendarDisposed||request!==observationRequestId)return;calendarObservationsAvailable=result!==null;markedObservationDates=result?observationDates(result.data,year,month):[];}
+    catch{if(!calendarDisposed&&request===observationRequestId)observationCalendarError=true;}
+  }
 
   function togglePanel(panel: Panel) {
     if (placeMap.busy) return;
@@ -204,11 +216,11 @@
         month,
       });
 
-      if (requestId === calendarRequestId) {
+      if (!calendarDisposed && requestId === calendarRequestId) {
         markedCalendarDates = dates.data;
       }
     } catch (error) {
-      if (requestId === calendarRequestId) {
+      if (!calendarDisposed && requestId === calendarRequestId) {
         console.error("Failed to load calendar dates:", error);
       }
     }
@@ -219,11 +231,13 @@
 
   $effect(() => {
     void loadCalendarDates(calendarYear, calendarMonthNumber);
+    void loadObservationDates(calendarYear, calendarMonthNumber);
   });
 
   function handleJournalChanged() {
     if (activePanel === "left") void refreshHistoryVisibility();
     void loadCalendarDates(calendarYear, calendarMonthNumber);
+    void loadObservationDates(calendarYear, calendarMonthNumber);
   }
 
   $effect(() => {
@@ -254,6 +268,7 @@
     return () => { historyVisibilityRequest++; };
   });
   $effect(() => () => { historyDisposed = true; historyVisibilityRequest++; });
+  $effect(()=>()=>{calendarDisposed=true;observationRequestId++;calendarRequestId++;});
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -361,7 +376,6 @@
         />
       </div>
     </div>
-    {#if birdsAvailable}<div class="panel-section"><a class="backup-button" href="/observations" onclick={() => (activePanel = null)}>{m.bird_overview({}, {locale:language.current})}</a></div>{/if}
     <div class="panel-section calendar-section">
       {#if isCalendarMonthPickerOpen}
         <button
@@ -385,6 +399,8 @@
         bind:displayedMonth={calendarMonth}
         bind:isMonthPickerOpen={isCalendarMonthPickerOpen}
         markedDates={markedCalendarDates}
+        observationDates={markedObservationDates}
+        observationsAvailable={calendarObservationsAvailable}
         selectedDate={selectedCalendarDate}
         onSelectDate={(date) => {
           selectedCalendarDate = date;
@@ -393,6 +409,11 @@
           selectedCalendarDate = null;
         }}
       />
+      {#if observationCalendarError}<p role="status">{m.observation_calendar_error({}, {locale:language.current})}</p>{/if}
+    </div>
+    <div class="panel-section destination-navigation">
+      <a class="destination-link" href="/journal?latest=true" aria-current={page.url.pathname==="/journal"||page.url.pathname.startsWith("/journal/")?"location":undefined} onclick={() => (activePanel = null)}>{m.observation_diary({}, {locale:language.current})}</a>
+      {#if birdsAvailable}<a class="destination-link" href="/observations" aria-current={page.url.pathname==="/observations"||page.url.pathname.startsWith("/observations/")?"location":undefined} onclick={() => (activePanel = null)}>{m.bird_overview({}, {locale:language.current})}</a>{/if}
     </div>
     {#if historyVisible}
       <a class="panel-section-heading history-link" href="/history">{m.history_title({}, { locale: language.current })}</a>
@@ -900,4 +921,8 @@
     justify-content: center;
     padding: 4px;
   }
+  .destination-navigation{display:grid;gap:4px}
+  .destination-link{display:flex;align-items:center;min-height:40px;padding:8px 12px;border-left:2px solid transparent;color:var(--accent,#435b47);text-decoration:none;font:13px/1.5 system-ui,sans-serif}
+  .destination-link:hover{background:#eef1eb}
+  .destination-link:focus-visible{outline:2px solid #788e7b;outline-offset:2px}
 </style>

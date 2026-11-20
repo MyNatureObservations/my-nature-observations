@@ -14,7 +14,7 @@ const script = source => ts.transpileModule(source.match(/<script lang="ts">([\s
 const flush = async () => {for(let i=0;i<12;i++)await Promise.resolve();};
 function navHarness({blocked=false, initial='https://mno.invalid/journal'}={}) {
   const calls=[],timers=new Map(),effects=[]; let navigate; let next=0;
-  const context=vm.createContext({$state:v=>v,$derived:v=>v,$effect:f=>effects.push(f),
+  const context=vm.createContext({createObservationCalendarReader:()=>async()=>null,$state:v=>v,$derived:v=>v,$effect:f=>effects.push(f),
     onMount() {},
     PLACE_MAP: 'mno:place-map', getContext: () => ({ close() {} }),
     createJournalReader:()=>()=>Promise.resolve({data:[]}),language:{current:'sv'},m:new Proxy({},{get:()=>()=>''}),
@@ -114,18 +114,19 @@ test('entry back link retains the exact search text and does not start editing',
 });
 
 test('only an open left panel on search receives the docked layout and desktop click-through',async()=>{
-  async function panelHtml(path,open) {
-    const seeded=nav.replace('let activePanel = $state<Panel | null>(null)',`let activePanel = $state<Panel | null>(${open?'"left"':'null'})`);
+  async function panelHtml(path,open,birdsAvailable=false,locale='sv') {
+    const seeded=nav.replace('let activePanel = $state<Panel | null>(null)',`let activePanel = $state<Panel | null>(${open?'"left"':'null'})`).replace('let birdsAvailable = $state(false)',`let birdsAvailable = $state(${birdsAvailable})`);
     const compiled=compile(seeded,{filename:'AppNavigation.svelte',generate:'server'});
     const imports={
       '$lib/journal-data':moduleUrl('export const createJournalReader=()=>()=>{};'),
+      '$lib/observation-calendar':moduleUrl('export const createObservationCalendarReader=()=>async()=>null;export const observationDates=()=>[];'),
       '$lib/components/CalendarGrid.svelte':moduleUrl('export default function() {}'),
       '$lib/components/CalendarDayPanel.svelte':moduleUrl('export default function() {}'),
       '$lib/components/PlaceMapPanel.svelte':moduleUrl('export default function() {}'),
       '$lib/components/WeatherDefaultPlace.svelte':moduleUrl('export default function() {}'),
       '$lib/components/AboutMno.svelte':moduleUrl('export default function() {}'),
       '$lib/place-map.svelte':moduleUrl('export const PLACE_MAP="mno:place-map";'),
-      '$lib/language.svelte':moduleUrl('export const language={current:"sv"};export function changeLanguage() {}'),
+      '$lib/language.svelte':moduleUrl(`export const language={current:${JSON.stringify(locale)}};export function changeLanguage() {}`),
       '$lib/paraglide/messages.js':new URL('../src/lib/paraglide/messages.js',import.meta.url).href,
       '@tauri-apps/api/core':moduleUrl('export function invoke() {}'),
       '$app/navigation':moduleUrl('export function afterNavigate() {} export function goto() {}'),
@@ -139,6 +140,11 @@ test('only an open left panel on search receives the docked layout and desktop c
   assert.match(open,/<div[^>]*class="[^"]*panel-backdrop[^"]*search-docked/);
   assert.doesNotMatch(await panelHtml('/journal',true),/class="[^"]*search-docked/);
   assert.doesNotMatch(await panelHtml('/search?q=hackspett',false),/<aside|class="[^"]*search-docked/);
+  for(const locale of ['sv','en'])for(const [path,current] of [['/journal?latest=true','/journal?latest=true'],['/journal/entries/entry','/journal?latest=true'],['/observations','/observations'],['/observations/list','/observations'],['/','']]){
+    const rendered=await panelHtml(path,true,true,locale);
+    const links=rendered.match(/<a class="destination-link[^>]*>/g)||[];assert.equal(links.length,2);
+    for(const link of links){const href=link.match(/href="([^"]+)"/)[1];assert.equal(link.includes('aria-current="location"'),href===current);assert.doesNotMatch(link,/backup-button/);}
+  }
   const searchCss=compile(pageSource,{generate:'client'}).css.code;
   const navCss=compile(nav,{generate:'client'}).css.code;
   assert.match(searchCss,/@media\s*\(min-width:\s*1000px\)[\s\S]*body:has\(\.left-panel\.search-docked\)[^{]*\.search-space[^{}]*\{\s*padding-left:\s*360px/);

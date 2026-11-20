@@ -115,7 +115,7 @@ test("strict date fallback rejects normalized invalid dates without changing the
   assert.match(entry, /onEditingChange/);
 });
 function visibilityHarness() {
-  const calls=[],effects=[]; const context=vm.createContext({URL,
+  const calls=[],effects=[]; const context=vm.createContext({URL,createObservationCalendarReader:()=>async()=>null,
     onMount() {}, $state:v=>v,$derived:v=>v,$effect:f=>effects.push(f),
     PLACE_MAP: 'mno:place-map', getContext: () => ({ close() {} }),
     createJournalReader:()=> (command,args)=>new Promise((resolve,reject)=>calls.push({command,args,resolve,reject})),

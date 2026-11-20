@@ -27,7 +27,7 @@
 - Att radera en lista kräver bekräftelse. Listans förhandsvisningar tas bort från journalen, medan journaltext och originalfotofiler bevaras.
 - MNO:s backup ska bevara alla observationslistor, även listor utan journalkoppling. Artidentifieringar, antal, kommentarer, platser och koordinater, besökstider, väder, lagrade fotoförhandsvisningar, referenser till originalfiler och journalkopplingar ska följa med. Originalfotofiler omfattas av MNO:s befintliga backuppolicy.
 - En observationslista är eget innehåll, inte en ny journalanteckning. Att skapa eller spara en lista får inte skapa en extra anteckning eller ändra journalprosan; endast den avsedda kopplingen ska tillkomma.
-- **Framtida kalenderkrav:** observationer ska ha en särskild kalendermarkering/egen färg som skiljer dem från journalanteckningar. Detaljerna hör till ett senare gränssnittssteg och kalendern ändras inte i detta steg.
+- **Kalender och navigation:** Observationer är den gemensamma hemvyn. Journalanteckningar har gröna markörer och fågelobservationer blå; färgen beskriver innehållstyp, aldrig importkälla. Se navigationsbeslutet nedan.
 - Journaltexten skrivs av användaren. Automatiska sammanfattningar och statistik skjuts upp.
 - Registrering kräver inget externt konto och inget exportsteg. Tjänsteintegrationer och exportfunktioner hör till separat prioritering.
 
@@ -147,7 +147,7 @@ För själva observationsflödet gäller fortsatt:
 
 
 - Skapa och återöppna en fristående lista för en plats och ett datum. Återanvänd en namngiven plats med koordinater och använd en separat plats för en annan position. Kontrollera att positionen gäller hela listan.
-- Kontrollera att listskapande och omsändning bevarar journalens anteckningsantal, identiteter och prosa och endast lägger till listdata samt avsedd länk. I ett senare kalendersteg: kontrollera att observationer har en särskild markering/färg.
+- Kontrollera att listskapande och omsändning bevarar journalens anteckningsantal, identiteter och prosa och endast lägger till listdata samt avsedd länk. Kontrollera typmarkeringarna enligt navigationsbeslutet nedan.
 - Spara flera separata besök på samma plats och datum, både med och utan start- och sluttid. Kontrollera att varje besök återöppnas separat.
 - Skicka om samma sparförsök efter ett förlorat svar: exakt samma lista och länk ska återges. Återanvänd sparförsökets identitet med annat innehåll: avvisa utan att ändra den sparade listan. Bevara inmatningen när ett svar är osäkert.
 - Välj samma taxonkoncept igen under skapande: fokusera befintligt antal utan ny rad, summering eller förlorad kommentar. Återöppna äldre sparade dubblettrader och kontrollera att de inte slås ihop.
@@ -173,3 +173,91 @@ För själva observationsflödet gäller fortsatt:
 - Kontrollera attribution, AviList-version, käll-URL, licenshänvisning och exportdatum där det är känt samt dokumentation av MNO:s filtrering och formatkonvertering. Kontrollera att ägarens licenstolkning är spårbar.
 - Granska svenska etiketter med taxonomiska snedstreckskombinationer och andra avvikande artkopplingar utan att automatiskt anta en snävare identifiering.
 - Öppna samma lista från två olika journalanteckningar och kontrollera återgång till den ursprungliga anteckningen i respektive fall. Öppna listan fristående och kontrollera återgång till observationsöversikten även när listan har journalkopplingar.
+
+
+## Navigation och typbaserad kalender — beslut 19 november 2026
+
+- **Observationer / Observations** är ett gemensamt hem för observationer. Moduler
+  bidrar med registreringstyper och vyer, inte varsin startsidessektion. Inga
+  inaktiva importkällor eller observationstyper visas. Open Import för hela
+  journalen förblir skilt från framtida observationsimport.
+- Startsidan behåller journalen som primär, med **Skriv journalanteckning**,
+  befintligt **Fortsätt** och användbart innehåll. **Registrera observation**
+  öppnar fågelformuläret direkt medan fåglar är den enda typen. Observationsöversikten nås från
+  den befintliga sidopanelen.
+- En sparad journalanteckning samlar handlingarna under **Lägg till observation**,
+  med **Skapa ny** och **Koppla befintlig**. Befintliga spar-/lämnaskydd och
+  ursprungsanteckningen bevaras.
+- Kalendern visar en grön journalmarkör och en blå fågelmarkör när
+  respektive typ finns. En blandad dag visar båda. Flera besök eller journallänkar
+  ger inte fler fågelmarkörer. Fristående besök ingår med sitt eget besöksdatum.
+- Vald dag öppnar befintlig dagpanel, med separata avsnitt för journalanteckningar
+  och observationer. Journallänkarna behåller läsvyn; observationslänkar öppnar
+  observationen fristående med återgång till Observationer. En observationsdag
+  utan journalanteckning är också åtkomlig. Tomma dagar behåller journalskapande.
+- En diskret legend och datumknapparnas tillgängliga namn beskriver innehållet;
+  färgen är inte den enda informationen. Ändringar, datumbyte och radering
+  uppdaterar markörerna. Efter journalbyte/Recovery läses den aktuella journalen.
+- Framtida observationstyper kan få andra färger. Det innebär inte en generell
+  pluginmodell eller nya moduler i detta steg. Windows/Linux-gates gäller fortsatt.
+
+**Acceptans:** Kontrollera båda språkens ingångar och återgång, journal-only,
+observation-only, blandad och tom dag; fristående besök, eget datum, flera besök
+och flera länkar; ändrat besöksdatum och radering; tangentbord/etiketter och
+uppdatering efter journalbyte. Ingen manuell acceptans påstås ännu för detta steg.
+Se [implementation och DEV-checklista](../development/MNO_Observation_Navigation_Calendar.md).
+
+
+**Avvisad mellanversion 20 november 2026 (ersatt av beslutet nedan):** Startsidan grupperade de etablerade
+korten i Din journal/Your journal och Dina observationer/Your observations.
+Observationsraden har Registrera observation/Record observation och Se
+observationer/View observations, med samma visuella språk och korta beskrivningar.
+Kalenderns fågelmarkör ska vara tydligt djupare blå, med något större markörer och
+separation; journalgrönt bevaras. Den tidigare presentationen avvisades och denna
+revision väntar på visuell acceptans.
+
+
+## Godkänd riktning för startsida, sidopanel och gemensam dagbok — 20 november 2026
+
+Detta ersätter textlänksförslaget och fyrkortslayouten ovan; båda avvisades.
+Skissen `mno-home-sidebar.html`, tillhandahållen av projektägaren, styr hierarki
+och navigation, inte exakt stil eller exempeldata. Ingen ny visuell DEV-acceptans
+påstås av att riktningen är godkänd.
+
+- Startsidan behåller två huvudkort: Skriv journalanteckning och Fortsätt. Under
+  dem finns ett mindre integrerat fack: **Registrera en observation / Record an
+  observation**, med kort beskrivning. Inga separata kortrader eller framtida
+  modul-/importkort visas.
+- Sidopanelen är dold som standard och öppnas med befintlig menyknapp. Sökning,
+  kalender, tangentbord och öppna/stäng-beteende bevaras. Naturdagboken och den
+  gemensamma observationsöversikten nås där. Befintlig dagpanel är den enda
+  kalenderstyrda innehållslistan, med anteckningar och besök tydligt åtskilda.
+- Fortsätt öppnar samma läsrutt, nu med gemensam kronologi för anteckningar och
+  observationer, utan att öppna sidopanelen. Varje besök har en egen post på sitt
+  besöksdatum, även olänkade besök; antal journallänkar skapar inga kopior.
+- Datum visas nyast först. Samma dags journalordning bevaras; därefter visas
+  besöken i stigande starttid, utan tider sist och med stabil identitetsordning.
+  Inga tider gissas för journalanteckningar eller besök.
+- Inne i en journalanteckning i den gemensamma läsvyn visas en kompakt referens
+  till länkade besök, inte ännu en full besökspresentation. Referensen behåller
+  ursprungsanteckningens öppningskontext. Den sparade anteckningens detaljvy
+  behåller befintliga förhandsvisningar och Lägg till observation.
+- Dagar med bara observationer ingår i datum- och senaste-datum-navigation.
+  Journaltext, inlinebilder, skydd och befintliga länkade bildvisningsdata bevaras.
+  Grön journalmarkör och tydlig blå fågelmarkör behålls.
+
+Acceptans: kontrollera dold sidopanel, Home/Fortsätt/registrering, gemensam ordning,
+en post per besök med flera länkar, observationsdag utan anteckning, kompakt
+referens med rätt återgång, kalenderns befintliga dagpanel och journalbilder.
+Ingen ändring av lagring, schema, arkiv eller Windows/Linux-grindar.
+
+
+**Slutlig visuell DEV-acceptans 20 november 2026:** projektägaren har godkänt
+navigations-/kalenderriktningen med sista justeringen att sidopanelens två
+destinationer förblir visuellt likadana även när de är aktuella. `aria-current`,
+hover och synligt tangentbordsfokus behålls, utan permanent aktiv bakgrund/sidolinje
+eller destinationsautofokus. Sökning ligger över kalendern, destinationerna under
+kalender/legend. Observationsfacket följer vänstra huvudkortets bredd. Tidigare
+avvisade layouter ovan gäller inte. Detta är visuell DEV-acceptans, inte
+paketerad acceptans; automatiska kontrollresultat redovisas separat i
+[utvecklingsrapporten](../development/MNO_Observation_Navigation_Calendar.md#final-combined-review-and-local-checkpoint--20-november-2026).

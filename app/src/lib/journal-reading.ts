@@ -1,3 +1,4 @@
+import type {BirdList} from "$lib/birds";
 import { getSchema } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { JournalImage } from "$lib/journal-image";
@@ -96,6 +97,21 @@ export function groupJournalEntries(entries: ReadingEntry[]) {
   return groups.reverse();
 }
 
+// Preserve journal order within each day; visits follow in start-time/ID order.
+// List identity, not journal links, determines each observation's one diary item.
+export function groupDiaryEntries(entries:ReadingEntry[], observations:BirdList[]) {
+  const dates=new Map<string,{date:string;entries:ReadingEntry[];visits:BirdList[]}>();
+  for(const group of groupJournalEntries(visibleJournalEntries(entries))) dates.set(group.date,{...group,visits:[]});
+  for(const visit of new Map(observations.map(visit=>[visit.id,visit])).values()) {
+    let group=dates.get(visit.visitDate);
+    if(!group){group={date:visit.visitDate,entries:[],visits:[]};dates.set(group.date,group);}
+    group.visits.push(visit);
+  }
+  const compare=(a:string,b:string)=>a<b?-1:a>b?1:0;
+  for(const group of dates.values())group.visits.sort((a,b)=>Number(a.visitStart==null)-Number(b.visitStart==null)||compare(a.visitStart??"",b.visitStart??"")||compare(a.id,b.id));
+  return [...dates.values()].sort((a,b)=>compare(b.date,a.date));
+}
+
 export function journalEntryAnchor(id: string): string {
   return `journal-entry-${id}`;
 }
@@ -114,7 +130,7 @@ export function journalDateAnchor(date: string): string {
 }
 
 // Explicit entry wins over date; latest is only a fallback selector.
-export function resolveJournalTarget(entries: ReadingEntry[], params: URLSearchParams):
+export function resolveJournalTarget(entries: ReadingEntry[], params: URLSearchParams, observations: BirdList[] = []):
   { anchor: string | null; missing: "entry" | "date" | "latest" | null } {
   const visible = visibleJournalEntries(entries);
   if (params.has("entry")) {
@@ -126,11 +142,11 @@ export function resolveJournalTarget(entries: ReadingEntry[], params: URLSearchP
     const parsed = new Date(`${date}T12:00:00Z`);
     const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) &&
       !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
-    const found = valid && visible.some(entry => entry.entryDate === date);
+    const found = valid && (visible.some(entry => entry.entryDate === date) || observations.some(visit=>visit.visitDate===date));
     return { anchor: found ? journalDateAnchor(date) : null, missing: found ? null : "date" };
   }
   if (params.get("latest") === "true") {
-    const newestDay = groupJournalEntries(visible)[0];
+    const newestDay = groupDiaryEntries(visible,observations)[0];
     // Open the newest experience date from its heading and first visible entry.
     // Selecting the last-created article would skip earlier text within that day.
     return { anchor: newestDay ? journalDateAnchor(newestDay.date) : null, missing: newestDay ? null : "latest" };

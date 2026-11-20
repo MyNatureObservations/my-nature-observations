@@ -1,4 +1,4 @@
-import { birdPreviewUrl, thumbnailUrl, journalScopeUrl } from "./bird-test-modules.mjs";
+import { birdPreviewUrl, thumbnailUrl, journalScopeUrl, birdsUrl, visitPreviewUrl, previewUrl } from "./bird-test-modules.mjs";
 import { imageUrl, photographsUrl } from "./photo-test-modules.mjs";
 import { weatherUrl, tileUrl } from "./weather-test-modules.mjs";
 import assert from "node:assert/strict";
@@ -54,6 +54,7 @@ const photographUrl = componentUrl("../src/lib/components/JournalPhotograph.svel
 const contentUrl = componentUrl("../src/lib/components/JournalContent.svelte", { "$lib/components/JournalPhotograph.svelte": photographUrl });
 const { default: JournalReading } = await import(componentUrl("../src/lib/components/JournalReading.svelte", {
   "$lib/components/BirdJournalLists.svelte": birdPreviewUrl,
+  "$lib/birds":birdsUrl,"$lib/components/BirdVisitPreview.svelte":visitPreviewUrl,
   "$lib/components/DeleteEntryDialog.svelte": componentUrl("../src/lib/components/DeleteEntryDialog.svelte"),
   "$lib/components/EntryOptions.svelte": componentUrl("../src/lib/components/EntryOptions.svelte"),
   "$lib/components/EntryPlace.svelte": placeUrl,
@@ -71,7 +72,7 @@ const entry = (id, date, content = [paragraph(id)]) => ({
   id, entryDate: date, title: id, contentJson: document(content), editable: true, documentVersion: 1,
 });
 
-async function routeHarness(response, generation = 1, { url = "https://example.invalid/journal", holdTicks = false } = {}) {
+async function routeHarness(response, generation = 1, { url = "https://example.invalid/journal", holdTicks = false, observationResponse = null } = {}) {
   const calls = [];
   let mount;
   let afterNavigation;
@@ -80,7 +81,10 @@ async function routeHarness(response, generation = 1, { url = "https://example.i
   const scrolls = [];
   const ticks = [];
   const pageState = { url: new URL(url) };
+  const listeners=new Map();
   const context = vm.createContext({
+    createObservationCalendarReader:()=>async()=>typeof observationResponse==="function"?observationResponse():observationResponse,
+    window:{addEventListener:(name,callback)=>listeners.set(name,callback),removeEventListener:name=>listeners.delete(name)},
     $state: value => value,
     $effect: callback => { effect = callback; },
     untrack: callback => callback(),
@@ -116,7 +120,7 @@ async function routeHarness(response, generation = 1, { url = "https://example.i
   const dispose = () => { effectCleanup?.(); unmount(); };
   await flush();
   return {
-    calls, dispose, flush, scrolls,
+    calls, dispose, flush, scrolls, changed:()=>listeners.get("mno:journal-changed")?.(),
     async navigate(url) {
       pageState.url = new URL(url, pageState.url);
       afterNavigation();
@@ -125,7 +129,7 @@ async function routeHarness(response, generation = 1, { url = "https://example.i
     },
     async render() { const pending = ticks.splice(0); pending.forEach(resolve => resolve()); await drain(); },
     message: () => vm.runInContext("navigationMessage", context),
-    props: () => vm.runInContext('({ entries, isLoading, errorMessage })', context),
+    props: () => vm.runInContext('({ entries, observations, isLoading, errorMessage })', context),
   };
 }
 
@@ -656,4 +660,56 @@ test("v2 explicitly accepts Medium, retains old Small/Large attributes, and reje
     assert.equal(reading.readJournalDocument(json,1).document,null);
     node.attrs.size="huge";assert.equal(reading.readJournalDocument(JSON.stringify(value),2).document,null);
   }
+});
+
+const observation=(id,date,start=null)=>({id,visitDate:date,visitStart:start,visitEnd:null,editToken:'token',place:{id:'place',name:'Testgläntan',latitude:59,longitude:18},rows:[{speciesId:'taxon',english:'Great Tit',swedish:'talgoxe',scientific:'Parus major',taxonomyVersion:'AviList v2026',count:'6',comment:null}]});
+
+test('combined diary groups independent visit dates, standalone lists and multiple links exactly once',()=>{
+ const entries=[entry('older','2020-01-01'),entry('first','2026-11-19'),entry('second','2026-11-19')];
+ const visits=[observation('standalone','2026-11-20'),observation('evening','2026-11-19','18:00'),observation('morning','2026-11-19','07:00'),observation('untimed','2026-11-19'),observation('morning','2026-11-19','07:00')];
+ const before=JSON.stringify({entries,visits});const groups=reading.groupDiaryEntries(entries,visits);
+ assert.deepEqual(groups.map(g=>g.date),['2026-11-20','2026-11-19','2020-01-01']);
+ assert.deepEqual(groups[1].entries.map(e=>e.id),['first','second']);assert.deepEqual(groups[1].visits.map(v=>v.id),['morning','evening','untimed']);
+ const result=show({entries,observations:visits});
+ for(const id of ['standalone','morning','evening','untimed'])assert.equal((result.match(new RegExp(`id="observation-${id}"`,'g'))||[]).length,1);
+ assert.ok(result.indexOf('observation-standalone')<result.indexOf('journal-entry-first'));assert.ok(result.indexOf('journal-entry-second')<result.indexOf('observation-morning'));
+ assert.match(result,/href="\/observations\/standalone"/);assert.equal(JSON.stringify({entries,visits}),before);
+});
+test('observation-only dates render and latest/date targets include them while entry selection still wins',()=>{
+ const visits=[observation('only','2026-11-20')],entries=[entry('journal','2026-11-19')];
+ assert.match(show({entries:[],observations:visits}),/id="journal-date-2026-11-20"/);
+ assert.doesNotMatch(show({entries:[],observations:visits}),/första berättelse/);
+ for(const query of ['latest=true','date=2026-11-20'])assert.deepEqual(reading.resolveJournalTarget(entries,new URLSearchParams(query),visits),{anchor:'journal-date-2026-11-20',missing:null});
+ assert.deepEqual(reading.resolveJournalTarget(entries,new URLSearchParams('entry=journal&latest=true'),visits),{anchor:'journal-entry-journal',missing:null});
+ assert.deepEqual(reading.resolveJournalTarget(entries,new URLSearchParams('entry=missing&latest=true'),visits),{anchor:null,missing:'entry'});
+});
+test('Continue waits for guarded observations and scrolls to the latest observation-only date',async()=>{
+ let resolveVisits;
+ const h=await routeHarness(Promise.resolve({generation:1,data:[entry('old','2026-11-19')]}),1,{url:'https://example.invalid/journal?latest=true',observationResponse:()=>new Promise(resolve=>{resolveVisits=resolve})});
+ assert.equal(h.props().isLoading,true);assert.equal(h.scrolls.length,0);
+ resolveVisits({generation:1,data:[observation('only','2026-11-20')]});await h.flush();
+ assert.equal(h.props().observations.length,1);assert.deepEqual(h.scrolls.map(s=>s.id),['journal-date-2026-11-20']);h.dispose();
+});
+test('a mismatched or failed observation read is visible rather than silently omitting visits',async()=>{
+ for(const observationResponse of [()=>Promise.reject('network-independent synthetic read failure'),{generation:2,data:[observation('wrong','2026-11-20')]}]){
+  const h=await routeHarness(Promise.resolve({generation:1,data:[entry('old','2026-11-19')]}),1,{url:'https://example.invalid/journal?latest=true',observationResponse});
+  assert.ok(h.props().errorMessage);assert.equal(h.props().observations.length,0);assert.equal(h.scrolls.length,0);h.dispose();
+ }
+});
+test('diary refresh updates visits in place and ignores replies after disposal',async()=>{
+ let visits=[observation('old-date','2026-11-19')],resolveLate;
+ const h=await routeHarness(Promise.resolve({generation:1,data:[entry('journal','2026-11-19')]}),1,{observationResponse:()=>resolveLate?new Promise(resolve=>{resolveLate=resolve}):{generation:1,data:visits}});
+ visits=[observation('new-date','2026-11-20')];h.changed();await h.flush();assert.equal(h.props().observations[0].visitDate,'2026-11-20');assert.equal(h.scrolls.length,0);
+ visits=[];h.changed();await h.flush();assert.equal(h.props().observations.length,0);
+ resolveLate=true;h.changed();await h.flush();const complete=resolveLate;h.dispose();complete({generation:1,data:[observation('late','2026-11-21')]});await h.flush();assert.equal(h.props().observations.length,0);
+});
+
+
+test('combined reading uses a compact journal-context reference without duplicating the full visit preview',async()=>{
+ const list=observation('linked','2026-11-20','08:00');
+ const seeded=source('../src/lib/components/BirdJournalLists.svelte').replace('available=$state(false)','available=$state(true)').replace('lists=$state<BirdList[]>([])',`lists=$state<BirdList[]>(${JSON.stringify([list])})`);
+ const component=await import(previewUrl(seeded));
+ const result=render(component.default,{props:{entryId:'original',generation:1,locale:'sv',compactReferences:true}}).body;
+ assert.match(result,/observation-reference/);assert.match(result,/href="\/journal\/entries\/original\/birds\/linked"/);assert.match(result,/Testgläntan/);assert.match(result,/20 november 2026/);assert.doesNotMatch(result,/species-preview|bird-photo-thumbnails/);
+ assert.match(source('../src/lib/components/JournalReading.svelte'),/journalDate=\{entry.entryDate\} compactReferences/);
 });

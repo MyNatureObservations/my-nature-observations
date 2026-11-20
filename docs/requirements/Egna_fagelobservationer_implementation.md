@@ -169,3 +169,44 @@ journalkopplingar. Detta är manuell macOS DEV-acceptans, inte paketerad release
 Se [slutlig lokal granskning och testbevisning](../development/MNO_Bird_First_Mac_Flow.md#bird-photos-and-shared-viewer--final-local-review-and-accepted-macos-dev-checks).
 Denna acceptans ersätter tidigare väntande fotostatus ovan. Windows/Linux-grindar,
 UX-005 och övrig uppskjuten produktomfattning är oförändrade.
+
+
+## Gemensam navigation och kalender — 19 november 2026
+
+Implementera [navigationsbeslutet](Egna_fagelobservationer.md#navigation-och-typbaserad-kalender--beslut-19-november-2026)
+genom befintliga journal-/observationsrutter och dagpanelen. Fågelregistrering är
+den enda aktiva observationstypen; ingen typväljare eller importkälla behövs.
+Startsidan förblir journalcentrerad. Sparad journal använder en sammanhållen
+Lägg till observation-meny med Skapa ny/Koppla befintlig.
+
+Återanvänd `read_bird_lists` via generationskontrollerad läsare och tillgänglighetsgate.
+Markörerna räknar listidentiteter/besöksdatum, aldrig antal journallänkar eller
+importkälla. Journalmarkörer använder oförändrat datumkommando. Dagpanelen visar
+båda typerna i separata avsnitt; observationsöppning ger översikten som återgång.
+Befintlig ändringssignal uppdaterar båda; redo-vyn monteras om efter Recovery och
+journalbyte. Sena svar ignoreras vid datumbyte, ny läsning och avmontering.
+
+Inga schema-/arkivändringar eller backendkommandon behövs. Framtida andra typer
+kan få egen markeringsfärg utan ett pluginramverk. Testa datum-/typkombinationer,
+fristående och flerlänkade besök, ändring/radering, kontext, tangentbord och gates.
+[Lokalt resultat och manuell DEV-checklista](../development/MNO_Observation_Navigation_Calendar.md).
+
+
+### Godkänd Home/sidopanelriktning och gemensam läsvy — 20 november 2026
+
+Fyrkortslayouten är avvisad, liksom det tidigare textlänksförslaget. Återanvänd de
+två etablerade huvudkorten och lägg ett mindre registreringsfack under dem.
+Sidopanelen är fortsatt dold tills menyknappen används och ger tillgång till
+Naturdagboken och Observationer. Behåll den befintliga dagpanelen.
+
+Utöka `JournalReading` med besök från befintligt generationskontrollerat
+`read_bird_lists`; inga nya backendkommandon behövs. Samla på anteckningarnas
+respektive besökens egna datum. Bevara journalens ordning och renderare, visa varje
+besöksidentitet en gång och använd kompakt länk i journaltextens observationsdel.
+Fortsätt och explicit datum ska även hitta observationsdagar. Läs båda delarna
+innan initial navigation; fel eller olika generationer får inte tyst gömma besök.
+Ändringssignalen laddar om i befintlig vy utan att återställa läsposition.
+Fristående besöksöppning använder befintlig observationsrutt/återgång; referens
+från journalen behåller journalanteckningens kontext.
+
+Se [aktuellt genomförande och DEV-checklista](../development/MNO_Observation_Navigation_Calendar.md#approved-home-and-sidebar-direction--20-november-2026).

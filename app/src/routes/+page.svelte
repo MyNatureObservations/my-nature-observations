@@ -1,4 +1,8 @@
 <script lang="ts">
+  import {onMount} from "svelte";
+  import {invoke} from "@tauri-apps/api/core";
+  let observationsAvailable=$state(false);
+  onMount(()=>{let disposed=false;void invoke<boolean>("bird_observations_available").then(value=>{if(!disposed)observationsAvailable=value;}).catch(()=>{});return()=>{disposed=true;};});
   import * as m from "$lib/paraglide/messages.js";
   import { language } from "$lib/language.svelte";
 </script>
@@ -23,7 +27,7 @@
             {m.home_card_new_label({}, { locale: language.current })}
           </span>
 
-          <h2>{m.home_card_new_title({}, { locale: language.current })}</h2>
+          <h2>{m.observation_write_journal({}, { locale: language.current })}</h2>
 
           <p>
             {m.home_card_new_description({}, { locale: language.current })}
@@ -49,6 +53,15 @@
         </a>
       </div>
     </section>
+    {#if observationsAvailable}
+      <a class="observation-entry" href="/observations/new">
+        <span class="observation-entry-copy">
+          <strong>{m.home_record_one_observation({}, {locale:language.current})}</strong>
+          <span>{m.home_observation_new_description({}, {locale:language.current})}</span>
+        </span>
+        <span class="card-arrow" aria-hidden="true">→</span>
+      </a>
+    {/if}
     <div class="welcome-message">
       <div class="welcome-intro">
         <h1>{m.home_heading({}, { locale: language.current })}</h1>
@@ -169,6 +182,15 @@
     font-size: 20px;
     color: #788e7b;
   }
+
+  .observation-entry { box-sizing:border-box;width:calc((100% - 20px)/2);display:flex;align-items:center;gap:24px;margin-top:20px;padding:20px 32px;border:1px solid #e4e3dd;border-radius:8px;background:#fbfaf7;color:inherit;text-decoration:none; }
+  .observation-entry:hover { border-color:#bfc8bd;background:#fdfcf9; }
+  .observation-entry:focus-visible { outline:2px solid #788e7b;outline-offset:3px; }
+  .observation-entry-copy { display:grid;gap:6px; }
+  .observation-entry strong { font:normal 20px/1.3 Georgia,serif; }
+  .observation-entry-copy > span { font-size:14px;line-height:1.5;color:var(--text-muted,#686d63); }
+  .observation-entry .card-arrow { flex-shrink:0;margin:0 0 0 auto;padding:0; }
+  @media(max-width:600px) { .observation-entry { width:100%;padding:20px 24px;gap:16px; } }
 
   .welcome-message {
     margin-top: 64px;

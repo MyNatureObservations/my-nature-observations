@@ -1,10 +1,13 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
   import { language } from "$lib/language.svelte";
 
   let {
     displayedMonth = $bindable(),
     selectedDate = null,
     markedDates = [],
+    observationDates = [],
+    observationsAvailable = false,
     onSelectDate,
     onGoToToday,
     isMonthPickerOpen = $bindable(false),
@@ -12,6 +15,8 @@
     displayedMonth: Date;
     selectedDate?: string | null;
     markedDates?: string[];
+    observationDates?: string[];
+    observationsAvailable?: boolean;
     onSelectDate?: (date: string) => void;
     onGoToToday?: () => void;
     isMonthPickerOpen?: boolean;
@@ -136,6 +141,12 @@
 
   function hasContent(day: number): boolean {
     return markedDates.includes(dateKey(day));
+  }
+
+  function dayContent(day:number):string {
+    const options={locale:language.current};
+    const types=[hasContent(day)?m.observation_calendar_journal({},options):"",observationDates.includes(dateKey(day))?m.observation_calendar_birds({},options):""].filter(Boolean);
+    return types.length?types.join(" · "):m.observation_calendar_empty({},options);
   }
 
   function isToday(day: number): boolean {
@@ -298,18 +309,20 @@
                 displayedMonth.getMonth(),
                 day,
               ),
-            )}
+            ) + " · " + dayContent(day)}
             onclick={() => selectDay(day)}
           >
             <span class="day-number">{day}</span>
 
-            {#if hasContent(day)}
-              <span class="day-content-dot" aria-hidden="true"></span>
-            {/if}
+            <span class="day-markers" aria-hidden="true">
+              {#if hasContent(day)}<span class="day-content-dot"></span>{/if}
+              {#if observationDates.includes(dateKey(day))}<span class="observation-dot"></span>{/if}
+            </span>
           </button>
         {/if}
       {/each}
     </div>
+    {#if observationsAvailable}<p class="calendar-legend"><span><i class="journal-key" aria-hidden="true"></i>{m.observation_calendar_journal({}, {locale:language.current})}</span><span><i class="bird-key" aria-hidden="true"></i>{m.observation_calendar_birds({}, {locale:language.current})}</span></p>{/if}
   {/if}
 </div>
 
@@ -363,7 +376,13 @@
   }
 
   .calendar-day {
-    height: 30px;
+    min-height: 38px;
+    display: grid;
+    grid-template-rows: 18px 6px;
+    justify-items: center;
+    align-content: center;
+    row-gap: 4px;
+    padding: 5px 2px;
     border: none;
     border-radius: 5px;
     background: transparent;
@@ -549,23 +568,11 @@
     outline-offset: 2px;
   }
 
-  .calendar-day {
-    position: relative;
-  }
-
-  .day-content-dot {
-    position: absolute;
-    bottom: 3px;
-    left: 50%;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: #788e7b;
-    transform: translateX(-50%);
-    pointer-events: none;
-  }
-
-  .calendar-day.selected .day-content-dot {
-    background: #f8f7f3;
-  }
+  .day-number { line-height:18px; }
+  .day-markers { display:flex;justify-content:center;align-items:center;gap:5px;height:6px;min-width:6px; }
+  .day-content-dot,.observation-dot { display:block;flex:0 0 6px;width:6px;height:6px;border-radius:50%;pointer-events:none; }
+  .day-content-dot { background:#788e7b; }
+  .calendar-day.selected .day-content-dot { background:#f8f7f3; }
+  .observation-dot,.bird-key { background:#376b9b; }
+  .calendar-legend{display:flex;flex-wrap:wrap;gap:8px 14px;font:11px/1.5 system-ui,sans-serif;color:var(--text-muted,#686d63);margin:14px 0 0}.calendar-legend span{display:inline-flex;align-items:center;gap:6px}.calendar-legend i{width:6px;height:6px;border-radius:50%}.journal-key{background:#788e7b}
 </style>

@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
+  import {createObservationCalendarReader} from "$lib/observation-calendar";
+  import type {BirdList} from "$lib/birds";
+  const readObservations=createObservationCalendarReader();
   import JournalReading from "$lib/components/JournalReading.svelte";
   import { createJournalReader } from "$lib/journal-data";
   import { resolveJournalTarget, type ReadingEntry } from "$lib/journal-reading";
@@ -9,6 +12,7 @@
   import * as m from "$lib/paraglide/messages.js";
 
   const readJournal = createJournalReader();
+  let observations=$state<BirdList[]>([]);
   let generation = $state<number | null>(null);
   let entries = $state<ReadingEntry[]>([]);
   let isLoading = $state(true);
@@ -30,23 +34,24 @@
     // Reapply URL targets on navigation or initial load, while an in-place
     // deletion keeps the reader near its current position.
     const currentEntries = untrack(() => entries);
+    const currentObservations = untrack(() => observations);
     const locale = language.current;
     let cancelled = false;
     navigationMessage = "";
     if (loading || error) return;
-    const target = resolveJournalTarget(currentEntries, url.searchParams);
+    const target = resolveJournalTarget(currentEntries, url.searchParams,currentObservations);
     void tick().then(() => {
       if (cancelled || revision !== navigationRevision || url !== page.url) return;
       if (target.missing) {
         const sv = {
           entry: "Anteckningen finns inte i journalens läsvy.",
-          date: "Det finns inga synliga anteckningar för det valda datumet.",
-          latest: "Journalen har inga synliga anteckningar ännu.",
+          date: "Det finns inget synligt innehåll för det valda datumet.",
+          latest: "Dagboken har inget synligt innehåll ännu.",
         };
         const en = {
           entry: "The entry is not available in the journal reading view.",
-          date: "There are no visible entries for the selected date.",
-          latest: "The journal has no visible entries yet.",
+          date: "There is no visible content for the selected date.",
+          latest: "The diary has no visible content yet.",
         };
         navigationMessage = (locale === "sv" ? sv : en)[target.missing];
       } else if (target.anchor) {
@@ -57,15 +62,21 @@
   });
 
   onMount(() => {
-    let disposed = false;
-    void readJournal<ReadingEntry[]>("read_journal_entries")
-      .then(snapshot => { if (!disposed) { entries = snapshot.data; generation = snapshot.generation; } })
-      .catch(error => {
-        if (!disposed) errorMessage = m.journal_list_error({ error: String(error) }, { locale: language.current });
-      })
-      .finally(() => { if (!disposed) isLoading = false; });
-    return () => { disposed = true; };
+    let disposed = false, request=0;
+    async function load(initial=false){
+      const ticket=++request;
+      try{
+        const [snapshot,visits]=await Promise.all([readJournal<ReadingEntry[]>("read_journal_entries"),readObservations()]);
+        if(disposed||ticket!==request)return;
+        if(visits&&visits.generation!==snapshot.generation)throw "journal_generation_conflict";
+        entries=snapshot.data;observations=visits?.data??[];generation=snapshot.generation;errorMessage="";
+      }catch(error){if(!disposed&&ticket===request)errorMessage=m.journal_list_error({error:String(error)},{locale:language.current});}
+      finally{if(!disposed&&ticket===request)isLoading=false;}
+    }
+    const refresh=()=>void load();window.addEventListener("mno:journal-changed",refresh);void load(true);
+    return () => { disposed=true;request++;window.removeEventListener("mno:journal-changed",refresh); };
   });
+
 </script>
 
 <svelte:head>
@@ -87,7 +98,7 @@
       <p class="navigation-message" role="status">{navigationMessage}</p>
     {/if}
 
-    <JournalReading {generation} {entries} {isLoading} {errorMessage} locale={language.current}
+    <JournalReading {generation} {entries} {observations} {isLoading} {errorMessage} locale={language.current}
       onEntryDeleted={(id) => { entries = entries.filter(entry => entry.id !== id); }} />
 
     <footer class="journal-footer">
