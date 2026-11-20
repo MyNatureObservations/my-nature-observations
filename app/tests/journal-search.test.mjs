@@ -120,6 +120,7 @@ test('only an open left panel on search receives the docked layout and desktop c
     const imports={
       '$lib/journal-data':moduleUrl('export const createJournalReader=()=>()=>{};'),
       '$lib/observation-calendar':moduleUrl('export const createObservationCalendarReader=()=>async()=>null;export const observationDates=()=>[];'),
+      '$lib/components/BirdModuleSetting.svelte':moduleUrl('export default function() {}'),
       '$lib/components/CalendarGrid.svelte':moduleUrl('export default function() {}'),
       '$lib/components/CalendarDayPanel.svelte':moduleUrl('export default function() {}'),
       '$lib/components/PlaceMapPanel.svelte':moduleUrl('export default function() {}'),

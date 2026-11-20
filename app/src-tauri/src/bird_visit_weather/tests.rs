@@ -646,6 +646,9 @@ fn referenced_place_coordinate_changes_invalidate_in_same_transaction() {
 
 #[test]
 fn complete_visit_weather_restore_and_import_activation_reopen() {
+    let module = crate::bird_module::test_module(false);
+    assert!(module.operation().is_err());
+    // Archive verification/activation uses persistence contracts, never UI activation.
     const CHILD: &str = "MNO_VISIT_WEATHER_ACTIVATION";
     if std::env::var_os(CHILD).is_none() {
         for mode in ["restore", "import", "restore-old", "import-old"] {

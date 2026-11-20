@@ -1,8 +1,19 @@
 # My Nature Observations 0.2.0 for macOS — draft
 
+> Publication paused. These notes describe the forthcoming replacement candidate.
+> The accepted `1685de6` DMG does not contain optional-module activation and remains
+> unchanged; its existing release draft stays unpublished. Replacement package
+> acceptance is pending.
+
 ## English
 
 ### What’s new
+
+- Bird observations are optional on macOS. Enable them in Settings → Modules →
+  Bird observations. New and upgraded installations start with the module off.
+  Turning it off hides bird features without deleting their content; turning it
+  back on restores access. Journal photos, the shared viewer and journal weather
+  remain core. Journal replacement does not change this account-level setting.
 
 - Register bird observations offline with AviList v2026 species search in Swedish,
   English and scientific names. Each visit has its own place, date, optional times,
@@ -42,7 +53,9 @@ general BirdLife names, regional search/maps and statistics are not included.
 Missing Swedish names use the recorded fallback. In macOS DEV, clicking blank
 space to the right of a species result may require two clicks (UX-005); clicking
 the species name works directly. Native file-picker buttons may use the system
-language independently of MNO. Packaged macOS acceptance passed for the exact candidate: upgrade from public
+language independently of MNO. Historical packaged macOS acceptance passed for the earlier `1685de6` candidate,
+which did not include optional-module activation. Replacement acceptance is pending.
+In that earlier test: upgrade from public
 v0.1.1 preserved text, photo and caption, and a new edit persisted after restart.
 Bird observations and separate-account Backup/Restore and Export/Open Import
 also passed, including linked and unlinked observations. See the
@@ -51,6 +64,12 @@ also passed, including linked and unlinked observations. See the
 ## Svenska
 
 ### Nytt i versionen
+
+- Fågelobservationer är valbara på macOS. Aktivera dem under Inställningar →
+  Moduler → Fågelobservationer. Modulen är avstängd från början även efter
+  uppgradering. Avstängning döljer funktionerna men behåller innehållet;
+  återaktivering visar det igen. Journalbilder, gemensam bildvisare och
+  journalväder är kärnfunktioner. Journalbyte ändrar inte kontots inställning.
 
 - Registrera fågelobservationer offline med AviList v2026 och sökning på svenska,
   engelska och vetenskapliga namn. Varje besök har egen plats, datum, frivilliga
@@ -90,7 +109,8 @@ allmänt BirdLife-namnstöd, regional sökning/karta och statistik ingår inte. 
 svenska namn använder beslutad reservvisning. I macOS DEV kan blankytan till höger
 om en artträff kräva två klick (UX-005); klick på artnamnet fungerar direkt.
 Filväljarens systemknappar kan följa ett annat språk än MNO. Paketerad macOS-
-acceptans är godkänd för den exakta kandidaten: uppgradering från publicerad
+acceptans är historiskt godkänd för den tidigare kandidaten `1685de6`, utan valbar
+modulaktivering. Ersättningskandidatens acceptans återstår. I det tidigare testet: uppgradering från publicerad
 v0.1.1 bevarade text, foto och bildtext, och en ny redigering fanns kvar efter
 omstart. Fågelobservationer samt Backup/Restore och Export/Open Import i separata
 konton godkändes också, inklusive länkade och olänkade observationer. Se

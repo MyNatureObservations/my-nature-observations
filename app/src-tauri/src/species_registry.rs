@@ -333,22 +333,33 @@ mod paste_tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn paste_command_contract_preserves_order_unknowns_and_limits() {
-        let hits = crate::bird_app::match_bird_paste_names(vec![
-            "Talgoxe".into(),
-            "unknown".into(),
-            "CYANISTES CAERULEUS".into(),
-        ])
+        let hits = crate::bird_app::match_bird_paste_names_with_module(
+            &crate::bird_module::test_module(true),
+            vec![
+                "Talgoxe".into(),
+                "unknown".into(),
+                "CYANISTES CAERULEUS".into(),
+            ],
+        )
         .unwrap();
         let json = serde_json::to_value(&hits).unwrap();
         assert_eq!(json[0][0]["scientific"], "Parus major");
         assert!(hits[1].is_empty());
         assert_eq!(json[2][0]["swedish"], "blåmes");
         assert_eq!(
-            crate::bird_app::match_bird_paste_names(vec!["a".repeat(201)]).unwrap_err(),
+            crate::bird_app::match_bird_paste_names_with_module(
+                &crate::bird_module::test_module(true),
+                vec!["a".repeat(201)]
+            )
+            .unwrap_err(),
             "bird_paste_limit"
         );
         assert_eq!(
-            crate::bird_app::match_bird_paste_names(vec!["a".into(); 201]).unwrap_err(),
+            crate::bird_app::match_bird_paste_names_with_module(
+                &crate::bird_module::test_module(true),
+                vec!["a".into(); 201]
+            )
+            .unwrap_err(),
             "bird_paste_limit"
         );
     }
@@ -356,7 +367,11 @@ mod paste_tests {
     #[cfg(not(target_os = "macos"))]
     fn paste_command_preserves_platform_gate() {
         assert_eq!(
-            crate::bird_app::match_bird_paste_names(vec!["Talgoxe".into()]).unwrap_err(),
+            crate::bird_app::match_bird_paste_names_with_module(
+                &crate::bird_module::test_module(true),
+                vec!["Talgoxe".into()]
+            )
+            .unwrap_err(),
             "bird_platform_unsupported"
         );
     }

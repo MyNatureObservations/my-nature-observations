@@ -62,10 +62,15 @@
   if(!deleteAttempted||deleting||deleted)return;deleting=true;
   try{await verifyDeletion();}catch{if(!disposed)deleteError="failed";}finally{if(!disposed)deleting=false;}
  }
+ $effect(()=>{
+  const beforeDisable=(event:Event)=>{if(deleting||deleteAttempted||linkBusy||linksRefreshing||linksRefreshFailed)(event as CustomEvent<import("$lib/bird-module.svelte").DisableRequest>).detail.waitUntil(Promise.resolve(false));};
+  window.addEventListener("mno:before-bird-disable",beforeDisable);
+  return()=>window.removeEventListener("mno:before-bird-disable",beforeDisable);
+ });
 </script>
 <svelte:head><title>{m.bird_list({}, {locale:language.current})} — MNO</title></svelte:head>
 <main>
- {#if available===false}<a href={origin}>← {entryId?m.bird_back_entry({}, {locale:language.current}):m.bird_overview({}, {locale:language.current})}</a><p>{m.bird_unavailable({}, {locale:language.current})}</p>
+ {#if available===false}<a href={entryId?entryHref(entryId):"/"}>← {entryId?m.bird_back_entry({}, {locale:language.current}):m.restore_back_to_home({}, {locale:language.current})}</a><p>{m.bird_unavailable({}, {locale:language.current})}</p>
  {:else if failed}<a href={origin}>← {entryId?m.bird_back_entry({}, {locale:language.current}):m.bird_overview({}, {locale:language.current})}</a><p role="alert">{m.bird_load_failed({}, {locale:language.current})}</p>
  {:else if list}
   <BirdListDetail {list} {origin} standalone={!entryId} editHref={`${birdHref(entryId,list.id)}/edit`} onDelete={requestDeletion} actionsDisabled={deleting||deleteAttempted||linkBusy||linksRefreshing||linksRefreshFailed} locale={language.current} {preferences} {preferencesSaved} onPreferencesChange={setPreferences}>

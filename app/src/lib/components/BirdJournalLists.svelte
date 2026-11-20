@@ -27,6 +27,11 @@
   void (async()=>{try {const enabled=await invoke<boolean>("bird_observations_available");if(cancelled||!enabled||g===null)return;available=true;const response=await read<BirdList[]>("read_journal_bird_lists",{entryId:id,generation:g});if(!cancelled)lists=response.data;}catch{if(!cancelled)failed=true;}})();
   return ()=>{cancelled=true;};
  });
+ $effect(()=>{
+  const beforeDisable=(event:Event)=>{if(unlinkBusy)(event as CustomEvent<import("$lib/bird-module.svelte").DisableRequest>).detail.waitUntil(Promise.resolve(false));};
+  window.addEventListener("mno:before-bird-disable",beforeDisable);
+  return()=>window.removeEventListener("mno:before-bird-disable",beforeDisable);
+ });
 </script>
 {#if available}
  <section class="bird-links" aria-label={m.bird_lists({}, {locale})}>

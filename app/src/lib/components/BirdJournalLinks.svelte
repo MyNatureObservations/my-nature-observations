@@ -35,6 +35,11 @@
   finally{if(!disposed)busy=false;onbusy(false);}
  }
  async function confirmUnlink(){if(unlinkTarget)await change(unlinkTarget,false);}
+ $effect(()=>{
+  const beforeDisable=(event:Event)=>{if(busy)(event as CustomEvent<import("$lib/bird-module.svelte").DisableRequest>).detail.waitUntil(Promise.resolve(false));};
+  window.addEventListener("mno:before-bird-disable",beforeDisable);
+  return()=>window.removeEventListener("mno:before-bird-disable",beforeDisable);
+ });
 </script>
 <section class="journal-links" aria-label={m.bird_journal_links({}, {locale})}>
  <h2>{m.bird_journal_links({}, {locale})}</h2>
