@@ -6,6 +6,7 @@
  import {formatBirdDate} from "$lib/bird-names";
  import BirdVisitPreview from "$lib/components/BirdVisitPreview.svelte";
  import * as m from "$lib/paraglide/messages.js";
+ let ebirdPreviewAvailable=$state(false);
  let available=$state<boolean|null>(null),lists=$state<BirdList[]>([]),failed=$state(false),loading=$state(true);
  const groups=$derived(groupBirdVisits(lists));
  onMount(()=>{
@@ -13,7 +14,8 @@
   async function load(){
    const request=++revision;loading=true;failed=false;
    try{
-    const enabled=await invoke<boolean>("bird_observations_available");if(disposed||request!==revision)return;available=enabled;if(!enabled)return;
+    const enabled=await invoke<boolean>("bird_observations_available");if(disposed||request!==revision)return;available=enabled;if(!enabled){ebirdPreviewAvailable=false;return;}
+    ebirdPreviewAvailable=await invoke<boolean>("ebird_preview_available");if(disposed||request!==revision)return;
     const session=await invoke<{generation:number}>("new_journal_session");
     const result=await makeBirdReader()<BirdList[]>("read_bird_lists",{generation:session.generation});
     if(!disposed&&request===revision)lists=result.data;
@@ -33,6 +35,7 @@
  {:else if available}
   <p class="intro">{m.bird_overview_intro({}, {locale:language.current})}</p>
   <a class="create" href="/observations/new">＋ {m.bird_create({}, {locale:language.current})}</a>
+  {#if ebirdPreviewAvailable}<p><a class="create" href="/observations/ebird-preview">{m.ebird_title({}, {locale:language.current})} (DEV)</a></p>{/if}
   {#if !lists.length}<p>{m.bird_no_lists({}, {locale:language.current})}</p>{/if}
   {#each groups as group (group.date)}<section class="date-group" aria-label={formatBirdDate(group.date,language.current)}>
    <h2><time datetime={group.date}>{formatBirdDate(group.date,language.current)}</time></h2>

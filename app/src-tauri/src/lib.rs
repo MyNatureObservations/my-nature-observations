@@ -1,4 +1,5 @@
 mod about;
+mod ebird_preview;
 mod environment;
 mod photographs;
 mod startup_error;
@@ -200,6 +201,8 @@ pub fn run() {
             place_registry::set_journal_place,
             place_registry::read_weather_default_place,
             place_registry::set_weather_default_place,
+            ebird_preview::ebird_preview_available,
+            ebird_preview::preview_ebird_export,
             bird_module::bird_module_supported,
             bird_module::bird_module_enabled,
             bird_module::set_bird_module_enabled,
