@@ -8,9 +8,10 @@ Version remains 0.2.0, identifier `org.mynatureobservations.app`, Apple Silicon
 
 RC2 supersedes [RC1](MNO_macOS_0.2.0_RC_Acceptance.md) because it includes explicit,
 default-off bird-module activation. Preserve RC1's bytes, checksum and acceptance
-history. The existing GitHub release draft remains unpublished/unmodified and
-still contains RC1; it must not be mistaken for RC2. RC2 packaged acceptance
-passed within the scope recorded below; publication remains paused. [Bilingual release notes](MNO_macOS_0.2.0_Release_Notes.md).
+history. The draft initially contained RC1, was subsequently updated to the exact
+accepted RC2, and was published as the separate macOS v0.2.0 pre-release. RC2
+packaged acceptance and the narrower public-download check are recorded separately
+below. [Bilingual release notes](MNO_macOS_0.2.0_Release_Notes.md).
 
 ## Build and evidence
 
@@ -75,8 +76,37 @@ archive rejection; stored previews and external originals remain distinct.
 The misleading unreadable-archive message is a non-blocking
 [UX-006 follow-up in issue #4](https://github.com/MyNatureObservations/my-nature-observations/issues/4).
 No validation weakening or automatic permission change was introduced. Source/
-target profiles and original archives were preserved. The old draft, RC1 and tags
-remain unchanged; final public download acceptance has not been performed for RC2.
+target profiles and original archives were preserved. At that investigation stage, the draft, RC1 and tags were unchanged and public
+download acceptance had not yet been performed. The later publication/check is
+recorded separately below.
+
+## Publication and public-download closeout — 21 November 2026
+
+Published release: [My Nature Observations 0.2.0 — macOS](https://github.com/MyNatureObservations/my-nature-observations/releases/tag/v0.2.0),
+a public GitHub pre-release. Tag `v0.2.0` resolves to the exact tested build
+`9fa9da6074bd579a5eaadcb56aafa6019587530e`; later documentation commits do not
+identify a rebuilt app.
+
+Published assets:
+- `My-Nature-Observations-0.2.0-macos-arm64.dmg`
+- `My-Nature-Observations-0.2.0-macos-arm64.dmg.sha256`
+
+Accepted and publicly downloaded DMG SHA-256:
+`4b08e77f979caa209cb919a04e91a8cc5537ff97e1c444d501bf3e574f69b1e8`.
+After publication, unauthenticated downloads of both assets verified the served
+filename, matching manifest and accepted checksum.
+
+**Owner-reported public-download installation: PASS within this narrow scope.**
+Installing from the public v0.2.0 download preserved the existing journal and left
+the module activation preference unchanged. This is a later public-distribution
+check, distinct from the broader RC2 packaged acceptance above. It does not imply
+that every RC2 subcheck was repeated or that all users see identical security UI.
+
+This closes the reported macOS v0.2.0 publication/download check, not the entire
+bird roadmap item. UX-005/UX-006, native-dialog localization and deferred bird/
+catalog/region requirements remain open follow-ups. The empty-caption limitation
+of the cross-account RC2 archive fixture remains unchanged. No rebuild or release/
+tag modification accompanied this documentation closeout.
 
 ## Packaged acceptance procedure — retained for reference
 
