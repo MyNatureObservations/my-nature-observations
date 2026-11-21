@@ -9,8 +9,8 @@ Version remains 0.2.0, identifier `org.mynatureobservations.app`, Apple Silicon
 RC2 supersedes [RC1](MNO_macOS_0.2.0_RC_Acceptance.md) because it includes explicit,
 default-off bird-module activation. Preserve RC1's bytes, checksum and acceptance
 history. The existing GitHub release draft remains unpublished/unmodified and
-still contains RC1; it must not be mistaken for RC2. No RC2 packaged acceptance
-has been performed. [Bilingual release notes](MNO_macOS_0.2.0_Release_Notes.md).
+still contains RC1; it must not be mistaken for RC2. RC2 packaged acceptance
+passed within the scope recorded below; publication remains paused. [Bilingual release notes](MNO_macOS_0.2.0_Release_Notes.md).
 
 ## Build and evidence
 
@@ -31,7 +31,54 @@ UI, 1,037 Rust passed/two existing ignored, all-targets, Svelte and formatting).
 Only documentation/release preparation changes here; focused version/notices
 checks, documentation links, diff checks and the production build are appropriate.
 
-## Packaged acceptance — pending, synthetic data only
+## Accepted RC2 identity and packaged results
+
+- Tested clean build commit: `9fa9da6074bd579a5eaadcb56aafa6019587530e`.
+- DMG: `My-Nature-Observations-0.2.0-macos-arm64-rc2-9fa9da6.dmg`.
+- SHA-256: `4b08e77f979caa209cb919a04e91a8cc5537ff97e1c444d501bf3e574f69b1e8`,
+  reverified when recording acceptance. No rebuild or modification.
+- Later documentation commits record acceptance; they are not the tested build.
+- Finished-DMG inspection verified 0.2.0, arm64, `org.mynatureobservations.app`,
+  macOS 13.0 minimum, valid deep/strict ad hoc app signature, embedded MIT license,
+  matching Apple Silicon notices and DMG integrity. App not notarized; DMG unsigned.
+  Build completed with rust-objcopy debug-information stripping warnings, retained
+  in the local build/inspection record.
+
+**Owner-reported packaged macOS acceptance: PASS within this scope.**
+
+- Fresh account: default-off core experience and explicit activation.
+- Upgrade from public v0.1.1: journal content preserved; bird module stays off.
+- Disable/re-enable and restart preserve bird content and account preference.
+- Backup/Restore and Export/Open Import across separate test accounts: core content
+  before activation, bird content after explicit activation, then persistence on restart.
+
+These manual packaged results are distinct from earlier DEV and automated tests.
+
+### Archive-transfer investigation and evidence limits
+
+Initial Restore failed because `/Users/Shared/0.2.0.mno-backup` had mode 600 and
+was owned by `MNOTEST`; target account `mno1` could not read it. Both running apps
+used the shared installed app, whose 13 regular files matched accepted RC2.
+A readable copy passed ZIP/CRC, manifest/database checksums, SQLite integrity and
+foreign-key checks, then RC2's real `verify_backup` and Restore `validate_archive`
+validators in an isolated source probe with CI-pinned Rust 1.99.1 (**1 test passed**).
+The owner subsequently confirmed manual Restore succeeded with the readable copy.
+
+The inspected format-13/schema-12 archive contained linked/unlinked bird lists,
+stored image data, comments, weather and links. Its bird-photo caption was null;
+the owner confirmed it was absent in the source too. **No caption loss was
+established, and this archive test did not verify a nonempty bird-photo caption.**
+Earlier independent caption coverage remains historical evidence, not an expanded
+claim for this fixture. Cross-account original-file references did not cause the
+archive rejection; stored previews and external originals remain distinct.
+
+The misleading unreadable-archive message is a non-blocking
+[UX-006 follow-up in issue #4](https://github.com/MyNatureObservations/my-nature-observations/issues/4).
+No validation weakening or automatic permission change was introduced. Source/
+target profiles and original archives were preserved. The old draft, RC1 and tags
+remain unchanged; final public download acceptance has not been performed for RC2.
+
+## Packaged acceptance procedure — retained for reference
 
 Use separate disposable **standard macOS accounts**, for example:
 `MNO-020-RC2-Fresh`, `MNO-020-RC2-Upgrade`, `MNO-020-RC2-Restore`,
@@ -115,6 +162,6 @@ not assert migration from an already public bird release (none exists).
    changed. If reusing an account with several journals, set off through Settings
    before each replacement rather than assuming a new journal resets it.
 
-Record the exact RC2 build commit/hash, macOS version, account isolation, warnings
-and each outcome. These instructions are not manual acceptance. A later rebuilt
+The accepted results and limitations above are separate from this retained
+procedure; it does not establish any unreported subcheck or public-download result. A later rebuilt
 artifact is a new candidate and cannot inherit RC2's eventual acceptance silently.
