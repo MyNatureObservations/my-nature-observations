@@ -11,7 +11,8 @@ The accepted artifact below remains unchanged and its acceptance is historical.
 The explicit optional-module decision requires a replacement candidate: bird
 observations default off, with account-level activation. The existing GitHub
 release draft is left unpublished and unmodified. Do not publish its old artifact
-as if it included this change. No replacement DMG has been built.
+as if it included this change. RC1 is superseded. See the [RC2 build and acceptance plan](MNO_macOS_0.2.0_RC2_Acceptance.md);
+RC1 evidence below is retained unchanged.
 
 After the module change is reviewed, record the replacement's exact build commit
 and hash and repeat focused packaged acceptance: journal-only upgrade stays off;

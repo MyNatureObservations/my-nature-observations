@@ -1,6 +1,6 @@
 # My Nature Observations 0.2.0 for macOS — draft
 
-> Publication paused. These notes describe the forthcoming replacement candidate.
+> Publication paused. These notes describe replacement candidate RC2, including the optional bird module.
 > The accepted `1685de6` DMG does not contain optional-module activation and remains
 > unchanged; its existing release draft stays unpublished. Replacement package
 > acceptance is pending.
