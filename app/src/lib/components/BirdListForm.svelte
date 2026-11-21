@@ -35,10 +35,18 @@
  let requestId=$state<string|null>(null);
  let requestReservation:Promise<string>|null=null;
  let generation=$state<number|null>(null),available=$state<boolean|null>(null),date=$state(""),place=$state<Place|null>(null),start=$state(""),end=$state(""),rows=$state<BirdRow[]>([]),query=$state(""),results=$state<Species[]>([]),busy=$state(false),dirty=$state(false),saved=$state(false),error=$state(""),searchError=$state(false),leave=$state(false),leaveUrl=$state<string|null>(null),pendingClose=false;
+ let disableTrigger:HTMLElement|null=null;
+ let disableDecision:((allowed:boolean)=>void)|null=null;
  let stayButton=$state<HTMLButtonElement|undefined>(undefined);let cancelMap:(()=>void)|undefined;let disposed=false;let baseline=$state("");let savedListId=$state<string|null>(null);
  const weatherContext=$derived(visitContext(date,place,start,end));
  const valid=$derived(canSaveBirdList(date,place,rows,start,end));
  onMount(()=>{
+  const beforeDisable=(event:Event)=>{
+   const request=(event as CustomEvent<import("$lib/bird-module.svelte").DisableRequest>).detail;
+   if(busy||photoPending>0||saveUncertain){request.waitUntil(Promise.resolve(false));return;}
+   if(dirty||pasteOpen){disableTrigger=document.activeElement as HTMLElement|null;request.waitUntil(new Promise<boolean>(resolve=>{disableDecision=resolve;void askLeave(null);}));}
+  };
+  window.addEventListener("mno:before-bird-disable",beforeDisable);
   namePreferences=loadBirdNamePreferences();
   let unlisten:(()=>void)|undefined;
   void(async()=>{try{
@@ -66,7 +74,7 @@
   }catch{if(!disposed){generation=null;error="load";}}})();
   void getCurrentWindow().onCloseRequested(event=>{if(saved||(!dirty&&!busy&&!pasteOpen&&photoPending===0))return;event.preventDefault();if(!busy){pendingClose=true;void askLeave(null);}}).then(stop=>{if(disposed)stop();else unlisten=stop;});
   const unload=(event:BeforeUnloadEvent)=>{if((dirty||busy||pasteOpen||photoPending>0)&&!saved){event.preventDefault();event.returnValue="";}};window.addEventListener("beforeunload",unload);
-  return()=>{disposed=true;cancelMap?.();unlisten?.();window.removeEventListener("beforeunload",unload);};
+  return()=>{window.removeEventListener("mno:before-bird-disable",beforeDisable);disableDecision?.(false);disableDecision=null;disposed=true;cancelMap?.();unlisten?.();window.removeEventListener("beforeunload",unload);};
  });
  let reviewOpened=false;
  $effect(()=>{
@@ -90,8 +98,12 @@
  beforeNavigate(nav=>{if(saved||(!dirty&&!busy&&!pasteOpen&&photoPending===0))return;nav.cancel();if(!busy)void askLeave(nav.to?.url.href??origin);});
  function mountLeaveDialog(node:HTMLDialogElement){node.showModal();return {destroy(){node.close();}};}
  async function askLeave(url:string|null){leaveUrl=url;leave=true;await tick();stayButton?.focus();}
+ function stay(){
+  leave=false;pendingClose=false;const resolve=disableDecision;disableDecision=null;resolve?.(false);
+  const trigger=disableTrigger;disableTrigger=null;if(resolve)void tick().then(()=>{if(trigger?.isConnected)trigger.focus({preventScroll:true});});
+ }
  function cancel(){if(busy)return;if(dirty||photoPending>0)void askLeave(origin);else {saved=true;void goto(origin);}}
- async function discard(){saved=true;leave=false;if(pendingClose){await invoke("close_journal_window");}else await goto(leaveUrl??origin);}
+ async function discard(){if(disableDecision){saved=true;leave=false;const resolve=disableDecision;disableDecision=null;resolve(true);return;}saved=true;leave=false;if(pendingClose){await invoke("close_journal_window");}else await goto(leaveUrl??origin);}
  async function creationRequest(){
   if(generation===null)throw Error('journal_generation_conflict');
   const g=generation;if(requestId)return requestId;
@@ -179,7 +191,7 @@
 <svelte:head><title>{editId?m.bird_edit({}, {locale:language.current}):m.bird_create({}, {locale:language.current})} — MNO</title></svelte:head>
 <main class="bird-page">
  <header class="page-header">
-  <button class="back" type="button" onclick={cancel} disabled={busy}>← {editId?m.bird_back_list({}, {locale:language.current}):entryId?m.bird_back_entry({}, {locale:language.current}):m.bird_overview({}, {locale:language.current})}</button>
+  <button class="back" type="button" onclick={()=>{if(available===false)void goto(entryId?entryHref(entryId):"/");else cancel();}} disabled={busy}>← {available===false&&!entryId?m.restore_back_to_home({}, {locale:language.current}):editId?m.bird_back_list({}, {locale:language.current}):entryId?m.bird_back_entry({}, {locale:language.current}):m.bird_overview({}, {locale:language.current})}</button>
   <span class="section-label">{m.bird_lists({}, {locale:language.current})}</span>
  </header>
  {#if error==="load"}<p class="error" role="alert">{m.bird_initialization_failed({}, {locale:language.current})}</p>
@@ -257,7 +269,7 @@
  </form><BirdAttribution locale={language.current}/>
  {/if}
 </main>
-{#if leave}<dialog class="leave-dialog" use:mountLeaveDialog aria-labelledby="bird-leave-title" oncancel={event=>{event.preventDefault();leave=false;pendingClose=false;}}><h2 id="bird-leave-title">{m.bird_discard_title({}, {locale:language.current})}</h2><p>{saveUncertain?m.bird_uncertain_leave({}, {locale:language.current}):m.bird_discard_text({}, {locale:language.current})}</p><button bind:this={stayButton} onclick={()=>{leave=false;pendingClose=false;}}>{m.bird_stay({}, {locale:language.current})}</button><button onclick={()=>void discard()}>{m.bird_discard({}, {locale:language.current})}</button></dialog>{/if}
+{#if leave}<dialog class="leave-dialog" use:mountLeaveDialog aria-labelledby="bird-leave-title" oncancel={event=>{event.preventDefault();stay();}}><h2 id="bird-leave-title">{m.bird_discard_title({}, {locale:language.current})}</h2><p>{saveUncertain?m.bird_uncertain_leave({}, {locale:language.current}):m.bird_discard_text({}, {locale:language.current})}</p><button bind:this={stayButton} onclick={stay}>{m.bird_stay({}, {locale:language.current})}</button><button onclick={()=>void discard()}>{m.bird_discard({}, {locale:language.current})}</button></dialog>{/if}
 
 {#if pasteOpen}<BirdPasteReview existingRows={rows} locale={language.current} onapply={applyPaste} oncancel={()=>pasteOpen=false}/>{/if}
 

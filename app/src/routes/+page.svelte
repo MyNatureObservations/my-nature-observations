@@ -2,7 +2,10 @@
   import {onMount} from "svelte";
   import {invoke} from "@tauri-apps/api/core";
   let observationsAvailable=$state(false);
-  onMount(()=>{let disposed=false;void invoke<boolean>("bird_observations_available").then(value=>{if(!disposed)observationsAvailable=value;}).catch(()=>{});return()=>{disposed=true;};});
+  onMount(()=>{let disposed=false,revision=0;
+    const refresh=()=>{const ticket=++revision;observationsAvailable=false;void invoke<boolean>("bird_observations_available").then(value=>{if(!disposed&&ticket===revision)observationsAvailable=value;}).catch(()=>{});};
+    refresh();window.addEventListener("mno:bird-module-changed",refresh);
+    return()=>{disposed=true;window.removeEventListener("mno:bird-module-changed",refresh);};});
   import * as m from "$lib/paraglide/messages.js";
   import { language } from "$lib/language.svelte";
 </script>

@@ -24,15 +24,15 @@ test('one preview per list is below journal text, shows first three rows and pre
  assert.equal(birds.birdHref('another-origin','same-list'),'/journal/entries/another-origin/birds/same-list');
 });
 function formHarness({entryId="origin",editId=null,editList=null,reject=false,rejectNavigation=false,rejectConfirmation=false,saveImplementation=null,journalPlace=place,entry=async()=>({generation:7,data:{id:"origin",entryDate:"2026-11-12"}}),failAt=null,enabled=true}={}){
- const calls=[],navigation=[],effects=[],mounts=[],initialization=[],focus=[],diagnostics=[],confirmations=[];let before;
+ const calls=[],navigation=[],effects=[],mounts=[],initialization=[],focus=[],diagnostics=[],confirmations=[];let before;const moduleListeners=new Map();
  const check=stage=>{initialization.push(stage);if(failAt===stage)throw Error("injected "+stage);};
  const context=vm.createContext({visitContext:birdWeather.visitContext,$props:()=>({editId}),$state:v=>v,$derived:v=>v,$effect:fn=>effects.push(fn),page:{params:{id:entryId??undefined}},getContext:()=>({open:()=>()=>{}}),PLACE_MAP:'map',onMount:fn=>mounts.push(fn),invoke:async command=>{check(command);if(command==="bird_observations_available")return enabled;if(command==="new_journal_session")return {generation:7};if(command==="list_places")return {generation:7,data:[place]};throw Error("unexpected command "+command);},createJournalReader:()=>async(command)=>{check(command);if(command==="read_journal_bird_list")return {generation:7,data:editList};return entry();},readJournalPlace:async()=>{check("read_journal_place");return {place:journalPlace};},getCurrentWindow:()=>({onCloseRequested:async()=>()=>{}}),tick:()=>Promise.resolve(),beforeNavigate:fn=>before=fn,goto:async href=>{navigation.push(href);if(rejectNavigation)throw Error("navigation failed");},localVisitDate:birds.localVisitDate,entryHref:birds.entryHref,birdHref:birds.birdHref,speciesLabel:birds.speciesLabel,capitalizeCommonName:names.capitalizeCommonName,validDate:birds.validDate,validTime:birds.validTime,validBirdCount:birds.validBirdCount,validBirdComment:birds.validBirdComment,DEFAULT_BIRD_NAMES:names.DEFAULT_BIRD_NAMES,loadBirdNamePreferences:()=>({...names.DEFAULT_BIRD_NAMES}),canSaveBirdList:birds.canSaveBirdList,
- reserveBirdRequest:async()=>"33333333-3333-4333-8333-333333333333",crypto:{randomUUID:()=>"33333333-3333-4333-8333-333333333333"},confirmSavedBirdList:async(...args)=>{confirmations.push(args);if(rejectConfirmation)throw Error("confirmation failed");},updateBirdList:async(...args)=>{calls.push(args);if(reject)throw Error("bird_edit_stale");return "b".repeat(64);},saveBirdList:async(...args)=>{calls.push(args);if(saveImplementation)return saveImplementation(...args);if(reject)throw typeof reject==='string'?reject:Error('lost response');return 'saved-list';},window:{dispatchEvent:()=>{},addEventListener:()=>{},removeEventListener:()=>{}},Event,URL,JSON,Error,console:{error:(...args)=>diagnostics.push(args)},
+ reserveBirdRequest:async()=>"33333333-3333-4333-8333-333333333333",crypto:{randomUUID:()=>"33333333-3333-4333-8333-333333333333"},confirmSavedBirdList:async(...args)=>{confirmations.push(args);if(rejectConfirmation)throw Error("confirmation failed");},updateBirdList:async(...args)=>{calls.push(args);if(reject)throw Error("bird_edit_stale");return "b".repeat(64);},saveBirdList:async(...args)=>{calls.push(args);if(saveImplementation)return saveImplementation(...args);if(reject)throw typeof reject==='string'?reject:Error('lost response');return 'saved-list';},window:{dispatchEvent:()=>{},addEventListener:(name,fn)=>moduleListeners.set(name,fn),removeEventListener:name=>moduleListeners.delete(name)},Event,URL,JSON,Error,console:{error:(...args)=>diagnostics.push(args)},
  searchControl:{focus:()=>focus.push('search')},
- document:{getElementById:id=>{const i=Number(id.replace(/^bird-(?:count|comment)-/,''));return i>=0&&i<vm.runInContext('rows.length',context)?{focus:()=>focus.push(id),select:()=>{}}:null;},querySelector:()=>({focus:()=>focus.push('result-0')}),querySelectorAll:()=>[0,1,2].map(i=>({focus:()=>focus.push(`result-${i}`)}))}});
+ document:{activeElement:{isConnected:true,focus:()=>focus.push("module-toggle")},getElementById:id=>{const i=Number(id.replace(/^bird-(?:count|comment)-/,''));return i>=0&&i<vm.runInContext('rows.length',context)?{focus:()=>focus.push(id),select:()=>{}}:null;},querySelector:()=>({focus:()=>focus.push('result-0')}),querySelectorAll:()=>[0,1,2].map(i=>({focus:()=>focus.push(`result-${i}`)}))}});
  const script=source('../src/lib/components/BirdListForm.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'').replace('const valid=$derived','let valid=$derived');
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
- const run=s=>vm.runInContext(s,context);return{run,calls,navigation,initialization,focus,diagnostics,confirmations,mount:()=>mounts[0](),before:()=>before,reviewEffect:()=>effects[0]()};
+ const run=s=>vm.runInContext(s,context);return{disable:()=>{const pending=[];moduleListeners.get("mno:before-bird-disable")?.({detail:{waitUntil:p=>pending.push(p)}});return Promise.all(pending).then(results=>results.every(Boolean));},run,calls,navigation,initialization,focus,diagnostics,confirmations,mount:()=>mounts[0](),before:()=>before,reviewEffect:()=>effects[0]()};
 }
 test('cancellation creates neither list nor link and dirty navigation waits for confirmation',async()=>{
  const h=formHarness();h.run('dirty=true;cancel()');await Promise.resolve();assert.equal(h.run('leave'),true);assert.equal(h.calls.length,0);assert.equal(h.navigation.length,0);await h.run('discard()');assert.deepEqual(h.navigation,['/journal/entries/origin']);assert.equal(h.calls.length,0);
@@ -325,7 +325,7 @@ test('real edit invoke preserves identity, recorded taxonomy and optimistic toke
 
 test('mounted journal previews reread edited content on the shared change event and clean up listeners',async()=>{
  const effects=[],mounts=[],listeners=new Map();let count='2',reads=0;
- const context=vm.createContext({$props:()=>({entryId:'origin',generation:7,locale:'sv'}),$state:v=>v,$effect:fn=>effects.push(fn),onMount:fn=>mounts.push(fn),invoke:async()=>true,makeBirdReader:()=>async()=>{reads++;return {generation:7,data:[{id:'same-list',place,visitDate:'2026-11-12',rows:[{...species,count}]}]};},window:{addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:(name)=>listeners.delete(name)}});
+ const context=vm.createContext({$effect:()=>{},$props:()=>({entryId:'origin',generation:7,locale:'sv'}),$state:v=>v,$effect:fn=>effects.push(fn),onMount:fn=>mounts.push(fn),invoke:async()=>true,makeBirdReader:()=>async()=>{reads++;return {generation:7,data:[{id:'same-list',place,visitDate:'2026-11-12',rows:[{...species,count}]}]};},window:{addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:(name)=>listeners.delete(name)}});
  const script=source('../src/lib/components/BirdJournalLists.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
  const unmount=mounts[0]();let cleanup=effects[0]();await settle();assert.equal(vm.runInContext('lists[0].rows[0].count',context),'2');
@@ -336,7 +336,7 @@ test('mounted journal previews reread edited content on the shared change event 
 function deletionHarness({mode='success',originExists=true,rejectNavigation=false,entryId='origin',refreshToken=null,refreshFails=false}={}){
  let listReads=0;const list={id:'visit',editToken:'a'.repeat(64),visitDate:'2026-11-12',visitStart:'08:00',visitEnd:'09:00',place,rows:[{...species,count:'4',comment:'Keep until confirmed'}]};
  const mounts=[],calls=[],checks=[],navigation=[],events=[];let exists=true,failStatus=mode==='unknown';
- const context=vm.createContext({$props:()=>({entryId,listId:'visit'}),$derived:v=>v,$state:v=>v,onMount:fn=>mounts.push(fn),page:{params:{id:'origin',listId:'visit'}},localVisitDate:birds.localVisitDate,entryHref:birds.entryHref,birdHref:birds.birdHref,DEFAULT_BIRD_NAMES:names.DEFAULT_BIRD_NAMES,loadBirdNamePreferences:()=>({...names.DEFAULT_BIRD_NAMES}),saveBirdNamePreferences:()=>true,
+ const context=vm.createContext({$effect:()=>{},$props:()=>({entryId,listId:'visit'}),$derived:v=>v,$state:v=>v,onMount:fn=>mounts.push(fn),page:{params:{id:'origin',listId:'visit'}},localVisitDate:birds.localVisitDate,entryHref:birds.entryHref,birdHref:birds.birdHref,DEFAULT_BIRD_NAMES:names.DEFAULT_BIRD_NAMES,loadBirdNamePreferences:()=>({...names.DEFAULT_BIRD_NAMES}),saveBirdNamePreferences:()=>true,
  invoke:async cmd=>{if(cmd==='bird_observations_available')return true;if(cmd==='new_journal_session')return {generation:7};throw Error(cmd);},
  makeBirdReader:()=>async cmd=>{if(cmd==='read_journal_bird_list'){listReads++;if(listReads>1&&refreshFails)throw Error('refresh failed');return {generation:7,data:refreshToken&&listReads>1?{...list,editToken:refreshToken}:list};}return {generation:7,data:originExists?{id:'origin'}:null};},
  deleteBirdList:async(...args)=>{calls.push(args);if(mode==='failed')throw Error('journal_generation_conflict');exists=false;if(mode==='lost'||mode==='unknown')throw Error('response lost');},
@@ -381,7 +381,7 @@ test('whole-list confirmation identifies the visit and retained data, with Cance
  }
  let focused=0,restored=0,opened=0,closed=0;class Element{isConnected=true;focus(){restored++;}}
  const script=source('../src/lib/components/DeleteEntryDialog.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');
- const context=vm.createContext({$props:Object.assign(()=>({title:'Lake',date:'date',locale:'sv',busy:false,oncancel(){},onconfirm(){}}),{id:()=> 'test'}),document:{activeElement:new Element()},HTMLElement:Element});
+ const context=vm.createContext({$effect:()=>{},$props:Object.assign(()=>({title:'Lake',date:'date',locale:'sv',busy:false,oncancel(){},onconfirm(){}}),{id:()=> 'test'}),document:{activeElement:new Element()},HTMLElement:Element});
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
  context.dialog={showModal:()=>opened++,close:()=>closed++,querySelector:()=>({focus:()=>focused++})};
  vm.runInContext('const action=mountDialog(dialog);action.destroy()',context);assert.equal(opened,1);assert.equal(focused,1);assert.equal(restored,1);assert.equal(closed,1);
@@ -404,7 +404,7 @@ test('real read-only deletion status rejects malformed data and changed generati
 
 function timeHarness(value='',disabled=false){
  let focused=0,triggerFocused=0;class Node{}
- const context=vm.createContext({$props:()=>({value,id:'visit-time',label:'Start',locale:'en',disabled}),$bindable:v=>v,$state:v=>v,$derived:v=>v,$effect:()=>{},validTime:birds.validTime,Node,focusInput:()=>focused++,focusTrigger:()=>triggerFocused++});
+ const context=vm.createContext({$effect:()=>{},$props:()=>({value,id:'visit-time',label:'Start',locale:'en',disabled}),$bindable:v=>v,$state:v=>v,$derived:v=>v,$effect:()=>{},validTime:birds.validTime,Node,focusInput:()=>focused++,focusTrigger:()=>triggerFocused++});
  const script=source('../src/lib/components/VisitTimePicker.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
  return {run:s=>vm.runInContext(s,context),focused:()=>focused,triggerFocused:()=>triggerFocused};
@@ -531,7 +531,7 @@ test('standalone detail keeps the overview return context even when the list has
 });
 function linkPickerHarness({reject=false}={}){
  const mounts=[],calls=[],events=[],focus=[];let props;
- const context=vm.createContext({$props:()=>props,$state:v=>v,onMount:fn=>mounts.push(fn),makeBirdReader:()=>async()=>({generation:7,data:[{id:'linked'},{id:'free'}]}),setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('stale');}});
+ const context=vm.createContext({$effect:()=>{},$props:()=>props,$state:v=>v,onMount:fn=>mounts.push(fn),makeBirdReader:()=>async()=>({generation:7,data:[{id:'linked'},{id:'free'}]}),setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('stale');}});
  props={entryId:'origin',generation:7,linkedIds:['linked'],locale:'sv',oncancel:()=>events.push('cancel'),onlinked:()=>events.push('linked')};
  const script=source('../src/lib/components/BirdLinkPicker.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
  return {run:s=>vm.runInContext(s,context),mount:()=>mounts[0](),calls,events,focus,props};
@@ -544,7 +544,7 @@ test('link picker cancellation writes nothing, existing links cannot duplicate a
 });
 test('unlink cancellation does not write; confirmation changes only the selected journal link and refreshes previews',async()=>{
  const calls=[],events=[];let reject=false;
- const context=vm.createContext({$props:()=>({entryId:'origin',generation:7,locale:'sv',allowCreate:true}),$state:v=>v,$effect:()=>{},onMount:()=>{},makeBirdReader:()=>()=>{},setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('failed');},window:{dispatchEvent:e=>events.push(e.type)},Event});
+ const context=vm.createContext({$effect:()=>{},$props:()=>({entryId:'origin',generation:7,locale:'sv',allowCreate:true}),$state:v=>v,$effect:()=>{},onMount:()=>{},makeBirdReader:()=>()=>{},setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('failed');},window:{dispatchEvent:e=>events.push(e.type)},Event});
  const script=source('../src/lib/components/BirdJournalLists.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
  const run=s=>vm.runInContext(s,context);await run('unlink()');assert.equal(calls.length,0);run('unlinkTarget={id:"second"};unlinkTarget=null');await run('unlink()');assert.equal(calls.length,0);
  run('unlinkTarget={id:"second"}');await run('unlink()');assert.deepEqual(calls,[[7,'origin','second',false]]);assert.deepEqual(events,['mno:journal-changed']);assert.equal(run('unlinkTarget'),null);
@@ -572,7 +572,7 @@ test('hour and minute typing keeps partial values invalid, colon advances, and c
 
 function journalLinksHarness({reject=false,refreshReject=false}={}){
  const mounts=[],calls=[],events=[];let changed=0;let data=[{id:'a',entryDate:'2026-11-13',title:'A',preview:'',linked:true},{id:'b',entryDate:'2026-11-12',title:'',preview:'Useful text',linked:false}];
- const context=vm.createContext({$props:()=>({listId:'visit',generation:7,locale:'sv',onchanged:async()=>{changed++;if(refreshReject)throw Error('refresh');},onbusy:()=>{}}),$state:v=>v,onMount:fn=>mounts.push(fn),makeBirdReader:()=>async()=>({generation:7,data:JSON.parse(JSON.stringify(data))}),setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('stale');data=data.map(e=>e.id===args[1]?{...e,linked:args[3]}:e);},window:{dispatchEvent:e=>events.push(e.type)},Event});
+ const context=vm.createContext({$effect:()=>{},$props:()=>({listId:'visit',generation:7,locale:'sv',onchanged:async()=>{changed++;if(refreshReject)throw Error('refresh');},onbusy:()=>{}}),$state:v=>v,onMount:fn=>mounts.push(fn),makeBirdReader:()=>async()=>({generation:7,data:JSON.parse(JSON.stringify(data))}),setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('stale');data=data.map(e=>e.id===args[1]?{...e,linked:args[3]}:e);},window:{dispatchEvent:e=>events.push(e.type)},Event});
  const script=source('../src/lib/components/BirdJournalLinks.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
  return {run:s=>vm.runInContext(s,context),mount:()=>mounts[0](),calls,events,changed:()=>changed};
 }
@@ -656,7 +656,7 @@ function weatherEditorHarness({records=[],context=birdWeather.visitContext('2026
  const script=source('../src/lib/components/BirdWeatherEditor.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1]
   .replace(/^\s*import .*;\n/gm,'').replace(/export (?=(?:async )?function)/g,'')
   .replace(/const (\w+)=\$derived\((.*)\);/g,(_,name,expr)=>`Object.defineProperty(globalThis,'${name}',{get:()=>(${expr})});`);
- const ctx=vm.createContext({$props:()=>props,$state:v=>v,$effect:fn=>effects.push(fn),untrack:fn=>fn(),tick:()=>Promise.resolve(),visitWeatherSummary:birdWeather.visitWeatherSummary,sameVisit:birdWeather.sameVisit,weatherStale:birdWeather.weatherStale,manualWeatherChange:birdWeather.manualWeatherChange,cancelVisitWeather:async()=>{},formatBirdDate:names.formatBirdDate,JSON});
+ const ctx=vm.createContext({$effect:()=>{},$props:()=>props,$state:v=>v,$effect:fn=>effects.push(fn),untrack:fn=>fn(),tick:()=>Promise.resolve(),visitWeatherSummary:birdWeather.visitWeatherSummary,sameVisit:birdWeather.sameVisit,weatherStale:birdWeather.weatherStale,manualWeatherChange:birdWeather.manualWeatherChange,cancelVisitWeather:async()=>{},formatBirdDate:names.formatBirdDate,JSON});
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,ctx);
  const run=s=>vm.runInContext(s,ctx);run(`fields={getPart:()=>(${JSON.stringify(part)}),draftSnapshot:()=>fields.getPart(),restoreDraft:part=>{fields.getPart=()=>part;}}`);
  return{run,flush:()=>effects.forEach(fn=>fn()),inject:(name,value)=>{ctx[name]=value;},dirties:()=>dirties};
@@ -790,7 +790,7 @@ function fetchHarness({transport=null,review=null,onApply=null,onBusy=null,onRev
  const effects=[],calls=[],cancelled=[],applied=[],busy=[];let destroy;
  const requestContext={...originalVisit,date:'2026-11-19'};
  const props={context:requestContext,generation:7,locale:'sv',getOwner:async()=>({ownerId:'visit',expectedToken:'token'}),onApply:p=>{onApply?.(p);applied.push(p);},onBusy:b=>{busy.push(b);onBusy?.(b);},onReview:value=>onReview?.(value)};
- const ctx=vm.createContext({$props:()=>props,$state:v=>v,$effect:fn=>effects.push(fn),onDestroy:fn=>destroy=fn,sameVisit:birdWeather.sameVisit,fetchVisitWeather:async(...args)=>{calls.push(['fetch',...args]);return transport?transport(...args):{previewId:args[1],record:dailyRecord(args[2]),todayForecast:true};},reviewVisitWeather:async(...args)=>{calls.push(['review',...args]);return review?review(...args):{previewId:args[1],record:dailyRecord(args[2]),todayForecast:true};},cancelVisitWeather:async id=>cancelled.push(id),crypto:{randomUUID:()=> '44444444-4444-4444-8444-444444444444'},historicalError:cause=>String(cause)==='network'?'network':'fetchFailed',weatherLabels:{},m:{bird_weather_fetch_conflict:()=> 'conflict',weather_history_fetchFailed:()=> 'failed'},JSON});
+ const ctx=vm.createContext({$effect:()=>{},$props:()=>props,$state:v=>v,$effect:fn=>effects.push(fn),onDestroy:fn=>destroy=fn,sameVisit:birdWeather.sameVisit,fetchVisitWeather:async(...args)=>{calls.push(['fetch',...args]);return transport?transport(...args):{previewId:args[1],record:dailyRecord(args[2]),todayForecast:true};},reviewVisitWeather:async(...args)=>{calls.push(['review',...args]);return review?review(...args):{previewId:args[1],record:dailyRecord(args[2]),todayForecast:true};},cancelVisitWeather:async id=>cancelled.push(id),crypto:{randomUUID:()=> '44444444-4444-4444-8444-444444444444'},historicalError:cause=>String(cause)==='network'?'network':'fetchFailed',weatherLabels:{},m:{bird_weather_fetch_conflict:()=> 'conflict',weather_history_fetchFailed:()=> 'failed'},JSON});
  let script=source('../src/lib/components/BirdWeatherFetch.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'').replace(/export (?=(?:async )?function)/g,'').replace(/const (\w+)=\$derived\((.*)\);/g,(_,name,expr)=>`Object.defineProperty(globalThis,'${name}',{get:()=>(${expr})});`);
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,ctx);
  return{run:s=>vm.runInContext(s,ctx),flush:()=>effects.forEach(fn=>fn()),calls,cancelled,applied,busy,destroy:()=>destroy()};
@@ -905,4 +905,17 @@ test('rendered fetched review uses Use weather and hides the extra Done confirma
   const footer=editor.slice(editor.lastIndexOf('<footer'),editor.lastIndexOf('</footer>'));
   assert.match(footer,locale==='sv'?/Avbryt/:/Cancel/);assert.doesNotMatch(footer,/primary|>Klart<|>Done</);
  }
+});
+
+test('module disable uses the real form leave confirmation and preserves draft when cancelled',async()=>{
+ const h=formHarness();const cleanup=h.mount();await Promise.resolve();h.run('dirty=true;rows=[{id:"tit",count:"4",comment:"keep"}]');
+ const decision=h.disable();await Promise.resolve();assert.equal(h.run('leave'),true);assert.equal(h.calls.length,0);
+ h.run('stay()');assert.equal(await decision,false);await Promise.resolve();assert.ok(h.focus.includes('module-toggle'));
+ assert.equal(h.run('rows[0].comment'),'keep');assert.equal(h.run('saved'),false);
+ const accepted=h.disable();await h.run('discard()');assert.equal(await accepted,true);assert.equal(h.run('saved'),true);assert.equal(h.calls.length,0);cleanup();
+});
+test('pending or uncertain form operations prevent completing module disable',async()=>{
+ const h=formHarness();const cleanup=h.mount();await Promise.resolve();
+ for(const flag of ['busy','photoPending','saveUncertain']){h.run(`${flag}=true`);assert.equal(await h.disable(),false);h.run(`${flag}=false`);}
+ assert.equal(await h.disable(),true);assert.equal(h.calls.length,0);cleanup();
 });

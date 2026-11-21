@@ -10,7 +10,7 @@ const reader = ts.transpileModule(readFileSync(new URL('../src/lib/journal-data.
 const translations = Object.fromEntries(['sv','en'].map(locale => [locale, JSON.parse(readFileSync(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8'))]));
 function harness(restoreAvailable = true, importAvailable = true, birdsAvailable = true) {
   const calls = [];
-  const context = vm.createContext({createObservationCalendarReader:()=>async()=>null, $state: v => v, $derived: v => v, $effect() {}, afterNavigate() {}, onMount: mount => mount(), language: { current: 'sv' },
+  const context = vm.createContext({window:{addEventListener(){},removeEventListener(){}},createObservationCalendarReader:()=>async()=>null, $state: v => v, $derived: v => v, $effect() {}, afterNavigate() {}, onMount: mount => mount(), language: { current: 'sv' },
     PLACE_MAP: 'mno:place-map', getContext: () => ({ close() {} }),
     m: new Proxy({}, { get: (_, key) => (_args, options) => translations[options.locale][key] }),
     invoke: (name, args) => {

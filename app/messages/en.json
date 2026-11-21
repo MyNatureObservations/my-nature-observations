@@ -491,7 +491,7 @@
   "bird_list": "Bird observation",
   "bird_create": "Create bird observation",
   "bird_back_entry": "Back to journal entry",
-  "bird_unavailable": "Bird observations are not available on this platform.",
+  "bird_unavailable": "Bird observations are disabled or unavailable here. On macOS, you can enable them in Settings → Modules.",
   "bird_loading": "Loading…",
   "bird_load_failed": "The observation data could not be loaded. Go back and try again.",
   "bird_save_failed": "The save result could not be confirmed. Your input is preserved. Use Check save to resend the same request safely, or check the journal before starting another observation.",
@@ -684,5 +684,10 @@
   "home_observation_new_description": "Record the birds you saw, with place, date and counts.",
   "home_record_one_observation": "Record an observation",
   "observation_visit_label": "Bird observation",
-  "observation_diary": "Nature diary"
+  "observation_diary": "Nature diary",
+  "modules_heading": "Modules",
+  "modules_birds": "Bird observations",
+  "modules_birds_explanation": "Record birds from your visits. Your data is kept when the module is turned off.",
+  "modules_pending": "Finish the current operation or keep editing, then try again. The module is still enabled.",
+  "modules_failed": "The module setting could not be saved. Check the current setting and try again."
 }

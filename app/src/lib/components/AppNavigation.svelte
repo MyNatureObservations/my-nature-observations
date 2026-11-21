@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BirdModuleSetting from "$lib/components/BirdModuleSetting.svelte";
   import PlaceMapPanel from "$lib/components/PlaceMapPanel.svelte";
   import { getContext, onMount } from "svelte";
   import { PLACE_MAP, type PlaceMapController } from "$lib/place-map.svelte";
@@ -23,9 +24,13 @@
   let restoreAvailable = $state(false);
   let importAvailable = $state(false);
   onMount(() => {
-    void invoke<boolean>("bird_observations_available").then(available => { birdsAvailable = available; }).catch(() => {});
+    let moduleRequest=0,moduleDisposed=false;
+    const refreshModules=()=>{const ticket=++moduleRequest;birdsAvailable=false;void invoke<boolean>("bird_observations_available").then(available=>{if(!moduleDisposed&&ticket===moduleRequest)birdsAvailable=available;}).catch(()=>{});};
+    refreshModules();
+    window.addEventListener("mno:bird-module-changed",refreshModules);
     void invoke<boolean>("open_import_available").then((available) => { importAvailable = available; }).catch(() => {});
     void invoke<boolean>("restore_available").then((available) => { restoreAvailable = available; }).catch(() => {});
+    return ()=>{moduleDisposed=true;window.removeEventListener("mno:bird-module-changed",refreshModules);};
   });
 
   let isCreatingBackup = $state(false);
@@ -509,6 +514,7 @@
       </div>
     </section>
 
+    <BirdModuleSetting />
     <section class="settings-group" aria-labelledby="data-security-heading">
       <details class="data-security-details">
         <summary id="data-security-heading" class="panel-section-heading">

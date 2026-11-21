@@ -491,7 +491,7 @@
   "bird_list": "Fågelobservation",
   "bird_create": "Skapa fågelobservation",
   "bird_back_entry": "Tillbaka till anteckningen",
-  "bird_unavailable": "Fågelobservationer är inte tillgängliga på denna plattform.",
+  "bird_unavailable": "Fågelobservationer är avstängda eller inte tillgängliga här. På macOS kan du aktivera dem under Inställningar → Moduler.",
   "bird_loading": "Läser in…",
   "bird_load_failed": "Observationsdata kunde inte läsas. Gå tillbaka och försök igen.",
   "bird_save_failed": "Sparresultatet kunde inte bekräftas. Dina uppgifter finns kvar. Välj Kontrollera sparningen för att säkert skicka om samma begäran, eller kontrollera journalen innan du börjar på en ny observation.",
@@ -684,5 +684,10 @@
   "home_observation_new_description": "Spara fåglarna du såg, med plats, datum och antal.",
   "home_record_one_observation": "Registrera en observation",
   "observation_visit_label": "Fågelobservation",
-  "observation_diary": "Naturdagboken"
+  "observation_diary": "Naturdagboken",
+  "modules_heading": "Moduler",
+  "modules_birds": "Fågelobservationer",
+  "modules_birds_explanation": "Registrera fåglar från dina besök. Dina uppgifter finns kvar när modulen är avstängd.",
+  "modules_pending": "Avsluta den pågående åtgärden eller fortsätt redigera och försök sedan igen. Modulen är fortfarande på.",
+  "modules_failed": "Modulinställningen kunde inte sparas. Kontrollera inställningen och försök igen."
 }

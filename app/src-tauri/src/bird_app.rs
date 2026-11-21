@@ -118,7 +118,13 @@ pub(crate) struct ListView {
     weather: Vec<crate::bird_visit_weather::Record>,
 }
 #[tauri::command]
-pub(crate) fn bird_observations_available(state: State<'_, DatabaseState>) -> bool {
+pub(crate) fn bird_observations_available(
+    module: State<'_, crate::bird_module::BirdModule>,
+    state: State<'_, DatabaseState>,
+) -> bool {
+    if !module.enabled() {
+        return false;
+    }
     available(&state)
 }
 fn available(state: &DatabaseState) -> bool {
@@ -136,8 +142,16 @@ fn available(state: &DatabaseState) -> bool {
 
 #[tauri::command]
 pub(crate) fn search_bird_species(
+    module: State<'_, crate::bird_module::BirdModule>,
     query: String,
 ) -> Result<Vec<crate::species_registry::Species>, String> {
+    search_bird_species_with_module(&module, query)
+}
+pub(crate) fn search_bird_species_with_module(
+    module: &crate::bird_module::BirdModule,
+    query: String,
+) -> Result<Vec<crate::species_registry::Species>, String> {
+    let _module_permit = module.command()?;
     if !cfg!(target_os = "macos") {
         return Err("bird_platform_unsupported".into());
     }
@@ -145,8 +159,16 @@ pub(crate) fn search_bird_species(
 }
 #[tauri::command]
 pub(crate) fn match_bird_paste_names(
+    module: State<'_, crate::bird_module::BirdModule>,
     names: Vec<String>,
 ) -> Result<Vec<Vec<crate::species_registry::Species>>, String> {
+    match_bird_paste_names_with_module(&module, names)
+}
+pub(crate) fn match_bird_paste_names_with_module(
+    module: &crate::bird_module::BirdModule,
+    names: Vec<String>,
+) -> Result<Vec<Vec<crate::species_registry::Species>>, String> {
+    let _module_permit = module.command()?;
     if !cfg!(target_os = "macos") {
         return Err("bird_platform_unsupported".into());
     }
@@ -161,6 +183,7 @@ pub(crate) fn match_bird_paste_names(
 
 #[tauri::command]
 pub(crate) fn create_journal_bird_list(
+    module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
     search: State<'_, SearchState>,
     previews: State<'_, crate::bird_weather_fetch::PreviewState>,
@@ -174,6 +197,7 @@ pub(crate) fn create_journal_bird_list(
     visit_end: Option<String>,
     weather: Option<Vec<WeatherInput>>,
 ) -> Result<String, String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         create_with_previews(
@@ -492,17 +516,29 @@ mod tests {
             "Eurasian Magpie",
             "EURASIAN MAGPIE",
         ] {
-            let found = search_bird_species(query.into()).unwrap();
+            let found = search_bird_species_with_module(
+                &crate::bird_module::test_module(true),
+                query.into(),
+            )
+            .unwrap();
             assert_eq!(found[0].id, "avibase-FBBBA943", "query: {query}");
             assert_eq!(found[0].swedish.as_deref(), Some("skata"));
         }
         for query in ["kråka", "KRÅKA"] {
-            let found = search_bird_species(query.into()).unwrap();
+            let found = search_bird_species_with_module(
+                &crate::bird_module::test_module(true),
+                query.into(),
+            )
+            .unwrap();
             assert_eq!(found[0].id, "avibase-E4EE9AC4");
             assert_eq!(found[0].swedish.as_deref(), Some("Kråka"));
         }
         assert_eq!(
-            search_bird_species("gråkråka".into()).unwrap()[0]
+            search_bird_species_with_module(
+                &crate::bird_module::test_module(true),
+                "gråkråka".into()
+            )
+            .unwrap()[0]
                 .referral
                 .as_deref(),
             Some("gråkråka")
@@ -762,10 +798,12 @@ mod tests {
 
 #[tauri::command]
 pub(crate) fn read_journal_bird_lists(
+    module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
     generation: u32,
     entry_id: String,
 ) -> Result<Snapshot<Vec<ListView>>, String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         // Each read checks the same generation; do not nest operation permits.
@@ -790,11 +828,13 @@ pub(crate) fn read_journal_bird_lists(
 }
 #[tauri::command]
 pub(crate) fn read_journal_bird_list(
+    module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
     generation: u32,
     entry_id: Option<String>,
     id: String,
 ) -> Result<Snapshot<ListView>, String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         let view = read_view(&state, generation, entry_id.as_deref(), &id)?;
@@ -858,6 +898,7 @@ fn read_view(
 
 #[tauri::command]
 pub(crate) fn update_journal_bird_list(
+    module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
     search: State<'_, SearchState>,
     previews: State<'_, crate::bird_weather_fetch::PreviewState>,
@@ -872,6 +913,7 @@ pub(crate) fn update_journal_bird_list(
     visit_end: Option<String>,
     weather: Option<Vec<WeatherInput>>,
 ) -> Result<String, String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         update_with_previews(
@@ -1046,6 +1088,7 @@ fn delete_in_session(
 }
 #[tauri::command]
 pub(crate) fn delete_journal_bird_list(
+    module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
     search: State<'_, SearchState>,
     generation: u32,
@@ -1053,6 +1096,7 @@ pub(crate) fn delete_journal_bird_list(
     expected_token: String,
     confirmed: bool,
 ) -> Result<(), String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         delete_in_session(
@@ -1074,10 +1118,12 @@ pub(crate) fn delete_journal_bird_list(
 }
 #[tauri::command]
 pub(crate) fn journal_bird_list_exists(
+    module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
     generation: u32,
     id: String,
 ) -> Result<Snapshot<bool>, String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         let exists = crate::bird_observations::exists(&state, generation, &id)?;
@@ -1092,10 +1138,12 @@ pub(crate) fn journal_bird_list_exists(
 
 #[tauri::command]
 pub(crate) fn reserve_bird_creation(
+    module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
     search: State<'_, SearchState>,
     generation: u32,
 ) -> Result<String, String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         crate::bird_observations::reserve(&state, &search, generation)
@@ -1122,9 +1170,11 @@ fn all_views(state: &DatabaseState, generation: u32) -> Result<Vec<ListView>, St
 }
 #[tauri::command]
 pub(crate) fn read_bird_lists(
+    module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
     generation: u32,
 ) -> Result<Snapshot<Vec<ListView>>, String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         let lists = all_views(&state, generation)?;
@@ -1138,6 +1188,7 @@ pub(crate) fn read_bird_lists(
 }
 #[tauri::command]
 pub(crate) fn set_journal_bird_link(
+    module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
     search: State<'_, SearchState>,
     generation: u32,
@@ -1145,6 +1196,7 @@ pub(crate) fn set_journal_bird_link(
     id: String,
     linked: bool,
 ) -> Result<(), String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         if !available(&state) {
@@ -1497,10 +1549,12 @@ fn journal_targets(
 }
 #[tauri::command]
 pub(crate) fn read_bird_journal_entries(
+    module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
     generation: u32,
     id: String,
 ) -> Result<Snapshot<Vec<JournalTarget>>, String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         let entries = journal_targets(&state, generation, &id)?;

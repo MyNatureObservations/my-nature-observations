@@ -15,6 +15,11 @@
   try{await setBirdLink(generation,entryId,list.id,true);if(!disposed)onlinked();}
   catch{if(!disposed)saveError=true;}finally{if(!disposed)busy=false;}
  }
+ $effect(()=>{
+  const beforeDisable=(event:Event)=>{if(busy)(event as CustomEvent<import("$lib/bird-module.svelte").DisableRequest>).detail.waitUntil(Promise.resolve(false));};
+  window.addEventListener("mno:before-bird-disable",beforeDisable);
+  return()=>window.removeEventListener("mno:before-bird-disable",beforeDisable);
+ });
 </script>
 <dialog use:mount aria-labelledby="bird-link-heading" oncancel={event=>{event.preventDefault();if(!busy)oncancel();}}>
  <h2 id="bird-link-heading">{m.bird_link_existing({}, {locale})}</h2>

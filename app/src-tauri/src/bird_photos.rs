@@ -119,6 +119,8 @@ pub(crate) async fn prepare_bird_photograph(
     }
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::Manager;
+        let module = app.state::<crate::bird_module::BirdModule>();
+        let _module_permit = module.command()?;
         let state = app.state::<crate::database_state::DatabaseState>();
         let _permit = state.operation(Some(generation))?;
         let photo = Photo::from_asset(crate::photographs::prepare(

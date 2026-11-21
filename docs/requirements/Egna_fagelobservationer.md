@@ -270,3 +270,35 @@ kalender/legend. Observationsfacket följer vänstra huvudkortets bredd. Tidigar
 avvisade layouter ovan gäller inte. Detta är visuell DEV-acceptans, inte
 paketerad acceptans; automatiska kontrollresultat redovisas separat i
 [utvecklingsrapporten](../development/MNO_Observation_Navigation_Calendar.md#final-combined-review-and-local-checkpoint--20-november-2026).
+
+## Valbar fågelmodul — uttryckligt produktbeslut 20 november 2026
+
+Journaltext, journalbilder, gemensam bildvisare och befintligt journalväder är
+kärnfunktioner. Fågelobservationer aktiveras uttryckligen under
+**Inställningar → Moduler → Fågelobservationer** på macOS.
+
+- Inställningen gäller installationen/användarkontot och lagras utanför journalen.
+  Saknad inställning betyder avstängd, även efter uppgradering och med befintliga
+  fågeldata. DEV och produktion har separata inställningar.
+- Journalbyte, Restore och Open Import ändrar aldrig valet. Avstängning döljer
+  fågelingångar, länkar/referenser, fågelbilder, dagboksposter och kalendermarkörer,
+  men raderar eller ändrar inte observationer, länkar, bilder eller väder.
+- Återaktivering visar samma innehåll. Rust kontrollerar även direkta kommandon;
+  direktrutter ger ett lokaliserat avstängt läge med återgång till kärnvyn.
+- Osparade ändringar kräver befintlig bekräftelse före avstängning. Pågående eller
+  osäkra skrivningar ska klarläggas först. Sena svar får inte tillämpas efter
+  avstängning; tidigare väderpreviews kan inte återupplivas genom återaktivering.
+- Schemahantering, migration, integritetsregler och fullständig arkivverifiering
+  gäller även när modulen är avstängd. Alla fågeldata bevaras i Backup/Restore och
+  Export/Open Import. Inget nytt journalschema eller arkivformat införs.
+- Observationstyper är skilda från importkällor. Ingen nedladdningsbar pluginmodell
+  eller dynamisk kodladdning införs. Windows/Linux-gates ändras inte.
+
+Detta beslut kvalificerar tidigare navigationskrav: fågelingångar och typmarkörer
+visas när modulen är aktiverad. Tidigare DEV-/paketacceptans kvarstår som historisk
+evidens, men godkänner inte den nya aktiveringslivscykeln.
+
+**Acceptans:** Kontrollera standard-av vid färsk installation/uppgradering,
+kontobeständighet, DEV-separation, kärnfunktioner utan fågelinnehåll, direktrutter,
+återaktivering med identiskt innehåll, osparat utkast/Avbryt, pågående operationer,
+arkiv med länkade/olänkade listor i avstängt läge samt oförändrat val efter journalbyte.

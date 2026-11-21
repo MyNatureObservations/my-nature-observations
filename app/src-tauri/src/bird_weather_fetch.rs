@@ -36,6 +36,12 @@ struct Slots {
 }
 #[derive(Default)]
 pub(crate) struct PreviewState(Mutex<Slots>);
+impl PreviewState {
+    pub(crate) fn invalidate(&self) -> Result<(), String> {
+        *self.0.lock().map_err(|_| "bird_weather_preview_expired")? = Slots::default();
+        Ok(())
+    }
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Preview {
@@ -232,6 +238,8 @@ pub(crate) async fn preview_bird_visit_weather(
     {
         use tauri::Manager;
         tauri::async_runtime::spawn_blocking(move || {
+            let module = app.state::<crate::bird_module::BirdModule>();
+            let _module_permit = module.command()?;
             preview_with(
                 &app.state::<DatabaseState>(),
                 &app.state::<PreviewState>(),
@@ -253,12 +261,14 @@ pub(crate) async fn preview_bird_visit_weather(
 }
 #[tauri::command]
 pub(crate) fn review_bird_visit_weather(
+    module: tauri::State<'_, crate::bird_module::BirdModule>,
     state: tauri::State<'_, DatabaseState>,
     previews: tauri::State<'_, PreviewState>,
     generation: u32,
     preview_id: String,
     request: Request,
 ) -> Result<Snapshot<Preview>, String> {
+    let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
         review(&state, &previews, generation, &preview_id, &request)
@@ -303,9 +313,11 @@ pub(crate) fn review(
 }
 #[tauri::command]
 pub(crate) fn cancel_bird_visit_weather(
+    module: tauri::State<'_, crate::bird_module::BirdModule>,
     previews: tauri::State<'_, PreviewState>,
     preview_id: String,
 ) -> Result<(), String> {
+    let _module_permit = module.command()?;
     if !cfg!(target_os = "macos") {
         return Err("bird_platform_unsupported".into());
     }

@@ -337,3 +337,27 @@ Fristående besöksöppning använder befintlig observationsrutt/återgång; ref
 från journalen behåller journalanteckningens kontext.
 
 Se [aktuellt genomförande och DEV-checklista](../development/MNO_Observation_Navigation_Calendar.md#approved-home-and-sidebar-direction--20-november-2026).
+
+## Valbar macOS-aktivering — 20 november 2026
+
+Det [uttryckliga modulbeslutet](Egna_fagelobservationer.md#valbar-fågelmodul--uttryckligt-produktbeslut-20-november-2026)
+inför en liten separat kontoinställning, inte en ny modulplattform.
+Rusts `BirdModule` läser en versionsmärkt boolesk inställning i Tauri-appens
+kontokonfigurationskatalog i en separat syskonnamnrymd utanför journalroten. Programidentifieraren separerar DEV från produktion.
+Saknad/ogiltig inställning är avstängd; skrivfel rapporteras utan att ändra valet.
+
+Alla fågelkommandon antas under ett lästillstånd som hålls genom kommandot.
+Ändring av inställningen tar exklusivt tillstånd och väntar på antagna operationer;
+väderpreviews ogiltigförklaras före slutförandet. Frontend förfrågar formulärets
+befintliga lämna-dialog före avstängning och avstår om skrivningar/bildarbete eller
+osäkra resultat ännu behöver klarläggas. Fågelvyn lämnas före inställningsbytet;
+vyernas livscykelskydd avvisar sena svar. Ändringshändelser uppdaterar fågelläsning, navigation/kalender och bildsamlingar
+utan att montera om journalredigeraren eller kasta kärnans osparade innehåll.
+
+Persistens-, migrations- och arkivlagren frågar inte efter modultillgänglighet.
+Schema 12/arkivformat 13 och Windows/Linux-gates behålls. Journalens bilder,
+bildvisare och väder förblir kärna. Inställningen ingår inte i journalarkivet.
+
+Se [lokal rapport och separat DEV-checklista](../development/MNO_Optional_Bird_Module.md).
+Den accepterade 0.2.0-kandidaten från `1685de6` ersätts inför kommande byggnad;
+ingen ny paketacceptans eller publicering har genomförts för moduländringen.

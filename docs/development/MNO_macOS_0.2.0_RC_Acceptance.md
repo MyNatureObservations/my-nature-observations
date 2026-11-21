@@ -5,6 +5,21 @@ Branch: `codex/macos-v0.2.0-rc1`. Packaged acceptance passed as reported by the
 project owner. The tested build remains the exact source checkpoint below; later
 documentation commits do not identify a rebuilt artifact. [Draft bilingual release notes](MNO_macOS_0.2.0_Release_Notes.md).
 
+## Publication paused — replacement candidate required
+
+The accepted artifact below remains unchanged and its acceptance is historical.
+The explicit optional-module decision requires a replacement candidate: bird
+observations default off, with account-level activation. The existing GitHub
+release draft is left unpublished and unmodified. Do not publish its old artifact
+as if it included this change. No replacement DMG has been built.
+
+After the module change is reviewed, record the replacement's exact build commit
+and hash and repeat focused packaged acceptance: journal-only upgrade stays off;
+core photos/viewer/weather work; enabling restores access; disabling preserves
+content; archives preserve linked/unlinked observations while off and do not
+change the account preference. Use separate disposable accounts and production
+paths as below. Prior acceptance does not cover this lifecycle.
+
 ## Build identity
 
 - App version 0.2.0, Apple Silicon `aarch64-apple-darwin`, macOS 13.0 minimum.

@@ -358,3 +358,24 @@ fn existing_visit_preview_rechecks_owner_expiry_and_context_inside_edit_transact
         .is_err()
     );
 }
+
+#[test]
+fn module_invalidation_retires_preview_receipts_before_reenable() {
+    let (_root, state, _path, request, _wire) = fixture();
+    let slots = PreviewState::default();
+    let id = uuid::Uuid::new_v4().to_string();
+    let preview = preview_with(
+        &state,
+        &slots,
+        1,
+        id.clone(),
+        request.clone(),
+        now(),
+        |_| Ok(response("2026-11-19")),
+    )
+    .unwrap();
+    slots.invalidate().unwrap();
+    assert!(review(&state, &slots, 1, &preview.data.preview_id, &request).is_err());
+    assert!(slots.0.lock().unwrap().ready.is_empty());
+    assert!(slots.0.lock().unwrap().pending.is_empty());
+}
