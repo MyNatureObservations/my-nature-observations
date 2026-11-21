@@ -28,7 +28,7 @@ fn fixture_version(legacy: bool) -> Fixture {
     let path = if legacy {
         state.initialize_schema10_startup(&root)
     } else {
-        state.initialize_startup(&root)
+        state.initialize_schema12_startup(&root)
     }
     .unwrap();
     let db = crate::database::open_existing(&path).unwrap();
@@ -176,7 +176,7 @@ fn photo_add_replace_remove_preserve_row_links_comments_original_and_restart() {
     let root = f.path.parent().unwrap().to_owned();
     drop(f.state);
     let state = DatabaseState::default();
-    state.initialize_startup(&root).unwrap();
+    state.initialize_schema12_startup(&root).unwrap();
     assert!(!birds::exists(&state, 1, &id).unwrap());
 }
 #[test]
@@ -258,7 +258,7 @@ fn photo_archive_candidates_and_protected_activation_preserve_linked_unlinked_an
         let root = f.path.parent().unwrap().to_owned();
         drop(f.state);
         let restarted = DatabaseState::default();
-        assert!(restarted.initialize_startup(&root).is_err());
+        assert!(restarted.initialize_schema12_startup(&root).is_err());
         crate::backup::restore_context::activation::startup::run(
             &restarted,
             crate::backup::restore_context::activation::startup::Action::FinishNew,
@@ -266,7 +266,7 @@ fn photo_archive_candidates_and_protected_activation_preserve_linked_unlinked_an
         .unwrap();
         drop(restarted);
         let ready = DatabaseState::default();
-        ready.initialize_startup(&root).unwrap();
+        ready.initialize_schema12_startup(&root).unwrap();
         assert_eq!(birds::reopen(&ready, 1, &id).unwrap(), before);
         assert_eq!(birds::reopen(&ready, 1, &unlinked).unwrap(), second);
         let protection = fs::read_dir(root.join("backups/pre-restore"))
@@ -421,7 +421,7 @@ fn older_photo_archives_normalize_to_captions_without_losing_content_or_receipts
     let root = f.path.parent().unwrap().to_owned();
     drop(f.state);
     let state = DatabaseState::default();
-    state.initialize_startup(&root).unwrap();
+    state.initialize_schema12_startup(&root).unwrap();
     assert_eq!(birds::reopen(&state, 1, &id).unwrap(), before);
     assert_eq!(fs::read(&f.original).unwrap(), f.bytes);
 }

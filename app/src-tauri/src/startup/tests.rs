@@ -32,10 +32,10 @@ fn normal_first_startup_initializes_and_holds_lock_until_state_drops() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        if cfg!(target_os = "macos") { 12 } else { 4 }
+        if cfg!(target_os = "macos") { 13 } else { 4 }
     );
     #[cfg(target_os = "macos")]
-    crate::storage_content::verify_v13(&mut db, &std::sync::atomic::AtomicBool::new(false))
+    crate::storage_content::verify_v14(&mut db, &std::sync::atomic::AtomicBool::new(false))
         .unwrap();
     #[cfg(not(target_os = "macos"))]
     crate::storage_content::verify_v5(&mut db, &std::sync::atomic::AtomicBool::new(false)).unwrap();
@@ -622,7 +622,7 @@ fn valid_existing_schema_is_read_only_with_or_without_initialization_marker() {
         let path = database::expected_database_path(dir.path());
         database::create_current_database(&path).unwrap();
         #[cfg(target_os = "macos")]
-        crate::backup::restore_context::bird_upgrade::initialize_current(&path).unwrap();
+        crate::backup::restore_context::bird_upgrade::initialize_ebird(&path).unwrap();
         if marked {
             established::publish(dir.path()).unwrap();
         }

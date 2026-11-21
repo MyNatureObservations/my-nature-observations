@@ -419,7 +419,7 @@ fn begin_bird_upgrade(root: &Path) -> Result<StartupOutcome, String> {
             if new {
                 database::create_current_database(path)?;
             }
-            crate::backup::restore_context::bird_upgrade::initialize_current(path)
+            crate::backup::restore_context::bird_upgrade::initialize_ebird(path)
         },
     )
 }
@@ -697,3 +697,7 @@ mod windows_tests;
 
 #[cfg(any(test, windows))]
 mod generation_selection;
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "startup/ebird_tests.rs"]
+mod ebird_tests;

@@ -422,3 +422,5 @@ fn editor_window_close_uses_the_shared_work_reservation_and_releases_it() {
     assert!(!shared.is_busy());
     request_window_close(&shared, || Ok(())).unwrap();
 }
+
+mod schema13;

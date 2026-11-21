@@ -18,11 +18,25 @@ fn fixture() -> (
     Request,
     Value,
 ) {
+    fixture_schema(12)
+}
+fn fixture_schema(
+    schema: u32,
+) -> (
+    tempfile::TempDir,
+    DatabaseState,
+    std::path::PathBuf,
+    Request,
+    Value,
+) {
     let root = tempfile::TempDir::new().unwrap();
     let state = DatabaseState::default();
-    let path = state
-        .initialize_startup(&root.path().join("journal"))
-        .unwrap();
+    let path = if schema == 13 {
+        state.initialize_schema13_startup(&root.path().join("journal"))
+    } else {
+        state.initialize_schema12_startup(&root.path().join("journal"))
+    }
+    .unwrap();
     let mut wire: Value = serde_json::from_str(include_str!(
         "../../../tests/fixtures/bird-create-command.json"
     ))
@@ -282,73 +296,75 @@ fn failed_fetch_and_expired_transaction_leave_observation_uncreated() {
 
 #[test]
 fn existing_visit_preview_rechecks_owner_expiry_and_context_inside_edit_transaction() {
-    for mode in ["valid", "expired", "place", "deleted", "generation"] {
-        let (_root, state, path, mut request, wire) = fixture();
-        let slots = PreviewState::default();
-        let id = bird_app::create_with_previews(
-            &state,
-            &SearchState::default(),
-            None,
-            serde_json::from_value(wire.clone()).unwrap(),
-        )
-        .unwrap();
-        let saved = crate::bird_observations::reopen(&state, 1, &id).unwrap();
-        request.expected_token = Some(crate::bird_observations::edit_token(&saved));
-        let p = fetch(&state, &slots, &request).data;
-        let mut edit = wire.clone();
-        edit.as_object_mut().unwrap().remove("requestId");
-        edit["id"] = id.clone().into();
-        edit["expectedToken"] = request.expected_token.clone().unwrap().into();
-        edit["weather"] = json!([{"action":"fetched","previewId":p.preview_id}]);
-        match mode {
-            "expired" => {
-                slots
-                    .0
-                    .lock()
-                    .unwrap()
-                    .ready
-                    .get_mut(&p.preview_id)
-                    .unwrap()
-                    .expires = Instant::now() - Duration::from_secs(1)
-            }
-            "place" => {
-                let db = crate::database::open_existing(&path).unwrap();
-                db.execute("UPDATE places SET longitude=19,revision=revision+1", [])
-                    .unwrap();
-            }
-            "deleted" => crate::bird_observations::delete(
+    for schema in [12, 13] {
+        for mode in ["valid", "expired", "place", "deleted", "generation"] {
+            let (_root, state, path, mut request, wire) = fixture_schema(schema);
+            let slots = PreviewState::default();
+            let id = bird_app::create_with_previews(
                 &state,
                 &SearchState::default(),
-                1,
-                &id,
-                request.expected_token.as_deref().unwrap(),
-                true,
+                None,
+                serde_json::from_value(wire.clone()).unwrap(),
             )
-            .unwrap(),
-            "generation" => {
-                state.maintenance().unwrap().advance_generation().unwrap();
+            .unwrap();
+            let saved = crate::bird_observations::reopen(&state, 1, &id).unwrap();
+            request.expected_token = Some(crate::bird_observations::edit_token(&saved));
+            let p = fetch(&state, &slots, &request).data;
+            let mut edit = wire.clone();
+            edit.as_object_mut().unwrap().remove("requestId");
+            edit["id"] = id.clone().into();
+            edit["expectedToken"] = request.expected_token.clone().unwrap().into();
+            edit["weather"] = json!([{"action":"fetched","previewId":p.preview_id}]);
+            match mode {
+                "expired" => {
+                    slots
+                        .0
+                        .lock()
+                        .unwrap()
+                        .ready
+                        .get_mut(&p.preview_id)
+                        .unwrap()
+                        .expires = Instant::now() - Duration::from_secs(1)
+                }
+                "place" => {
+                    let db = crate::database::open_existing(&path).unwrap();
+                    db.execute("UPDATE places SET longitude=19,revision=revision+1", [])
+                        .unwrap();
+                }
+                "deleted" => crate::bird_observations::delete(
+                    &state,
+                    &SearchState::default(),
+                    1,
+                    &id,
+                    request.expected_token.as_deref().unwrap(),
+                    true,
+                )
+                .unwrap(),
+                "generation" => {
+                    state.maintenance().unwrap().advance_generation().unwrap();
+                }
+                _ => {}
             }
-            _ => {}
-        }
-        let before = std::fs::read(&path).unwrap();
-        let result = bird_app::update_with_previews(
-            &state,
-            &SearchState::default(),
-            Some(&slots),
-            serde_json::from_value(edit).unwrap(),
-        );
-        if mode == "valid" {
-            result.unwrap();
-            assert_eq!(
-                crate::bird_observations::reopen(&state, 1, &id)
-                    .unwrap()
-                    .weather
-                    .len(),
-                1
+            let before = std::fs::read(&path).unwrap();
+            let result = bird_app::update_with_previews(
+                &state,
+                &SearchState::default(),
+                Some(&slots),
+                serde_json::from_value(edit).unwrap(),
             );
-        } else {
-            assert!(result.is_err(), "{mode}");
-            assert_eq!(std::fs::read(&path).unwrap(), before);
+            if mode == "valid" {
+                result.unwrap();
+                assert_eq!(
+                    crate::bird_observations::reopen(&state, 1, &id)
+                        .unwrap()
+                        .weather
+                        .len(),
+                    1
+                );
+            } else {
+                assert!(result.is_err(), "{mode}");
+                assert_eq!(std::fs::read(&path).unwrap(), before);
+            }
         }
     }
     assert!(
@@ -378,4 +394,104 @@ fn module_invalidation_retires_preview_receipts_before_reenable() {
     assert!(review(&state, &slots, 1, &preview.data.preview_id, &request).is_err());
     assert!(slots.0.lock().unwrap().ready.is_empty());
     assert!(slots.0.lock().unwrap().pending.is_empty());
+}
+
+#[test]
+fn schema13_preview_creation_receipt_and_strict_schema_rejection() {
+    for mode in ["valid", "future", "structural"] {
+        let (_root, state, path, request, mut wire) = fixture_schema(13);
+        let slots = PreviewState::default();
+        let p = fetch(&state, &slots, &request).data;
+        review(&state, &slots, 1, &p.preview_id, &request).unwrap();
+        let receipt = slots
+            .resolve(
+                &p.preview_id,
+                1,
+                &request.owner_id,
+                None,
+                &request.context.date,
+                &request.context.place_id,
+                None,
+                None,
+            )
+            .unwrap();
+        let db = crate::database::open_existing(&path).unwrap();
+        if mode == "future" {
+            db.pragma_update(None, "user_version", 14).unwrap();
+        }
+        if mode == "structural" {
+            db.execute_batch("CREATE TABLE unexpected(x)").unwrap();
+        }
+        let before = std::fs::read(&path).unwrap();
+        if mode != "valid" {
+            assert!(receipt.check(&db).is_err());
+            db.close().unwrap();
+            assert!(
+                preview_with(
+                    &state,
+                    &slots,
+                    1,
+                    uuid::Uuid::new_v4().to_string(),
+                    request.clone(),
+                    now(),
+                    |_| panic!("invalid schema must reject before HTTP")
+                )
+                .is_err()
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            continue;
+        }
+        receipt.check(&db).unwrap();
+        db.close().unwrap();
+        wire["weather"] = json!([{"action":"fetched","previewId":p.preview_id}]);
+        let id = bird_app::create_with_previews(
+            &state,
+            &SearchState::default(),
+            Some(&slots),
+            serde_json::from_value(wire).unwrap(),
+        )
+        .unwrap();
+        let list = crate::bird_observations::reopen(&state, 1, &id).unwrap();
+        assert_eq!(list.weather.len(), 1);
+        assert_eq!(list.weather[0].kind, "fetched");
+        assert!(!list.weather[0].stale);
+    }
+}
+#[test]
+fn schema13_shared_place_coordinate_change_preserves_weather_as_stale() {
+    let (_root, state, path, request, mut wire) = fixture_schema(13);
+    wire["weather"] = json!([{"action":"set","context":request.context,"payload":{"period":{"kind":"day","date":"2026-11-19"},"temperatureC":7},"confirmed":false}]);
+    let id = bird_app::create_with_previews(
+        &state,
+        &SearchState::default(),
+        None,
+        serde_json::from_value(wire).unwrap(),
+    )
+    .unwrap();
+    let before = crate::bird_observations::reopen(&state, 1, &id)
+        .unwrap()
+        .weather;
+    crate::place_registry::update_with(
+        &state,
+        1,
+        || crate::database::open_existing(&path),
+        &request.context.place_id,
+        1,
+        "Lake".into(),
+        Some(60.),
+        Some(18.),
+    )
+    .unwrap();
+    let after = crate::bird_observations::reopen(&state, 1, &id)
+        .unwrap()
+        .weather;
+    assert_eq!(after.len(), 1);
+    assert!(after[0].stale);
+    assert_eq!(after[0].payload_json, before[0].payload_json);
+    assert_eq!(after[0].context_json, before[0].context_json);
+    assert_eq!(crate::bird_visit_weather::current(&after).count(), 0);
+    let mut db = crate::database::open_existing(&path).unwrap();
+    crate::storage_content::verify_v14(&mut db, &std::sync::atomic::AtomicBool::new(false))
+        .unwrap();
+    db.close().unwrap();
 }

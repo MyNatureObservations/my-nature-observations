@@ -1,4 +1,6 @@
 mod about;
+#[allow(dead_code)] // Internal import writes remain unavailable to IPC/UI.
+mod ebird_persistence;
 mod ebird_preview;
 mod environment;
 mod photographs;

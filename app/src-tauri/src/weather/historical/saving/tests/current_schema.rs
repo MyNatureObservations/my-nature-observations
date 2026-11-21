@@ -22,8 +22,10 @@ fn upgraded(
     let path = root.join("mno.sqlite");
     fs::rename(original, &path).unwrap();
     let state = DatabaseState::default();
-    if schema == 12 {
+    if schema == 13 {
         state.initialize_startup(&root).unwrap();
+    } else if schema == 12 {
+        state.initialize_schema12_startup(&root).unwrap();
     } else if schema == 11 {
         state.initialize_schema11_startup(&root).unwrap();
     } else {
@@ -73,7 +75,7 @@ fn view(state: &DatabaseState, path: &Path) -> serde_json::Value {
 }
 #[test]
 fn ordinary_current_startup_reads_preserved_weather_and_manual_save_reopens() {
-    let (_dir, path, state, expected) = upgraded(12);
+    let (_dir, path, state, expected) = upgraded(13);
     let first = view(&state, &path);
     assert_eq!(
         first["manual"],
@@ -106,7 +108,7 @@ fn ordinary_current_startup_reads_preserved_weather_and_manual_save_reopens() {
 }
 #[test]
 fn ordinary_current_startup_fetches_and_saves_exact_fixture_without_network() {
-    let (_dir, path, state, expected) = upgraded(12);
+    let (_dir, path, state, expected) = upgraded(13);
     let slots = PreviewState::default();
     let before = fs::read(&path).unwrap();
     let p = preview(&state, &slots, &path);
@@ -131,7 +133,7 @@ fn ordinary_current_startup_fetches_and_saves_exact_fixture_without_network() {
 }
 #[test]
 fn supported_prior_photo_schemas_use_their_exact_validators() {
-    for schema in [10, 11] {
+    for schema in [10, 11, 12] {
         let (_dir, path, state, expected) = upgraded(schema);
         assert_eq!(
             storage::read(&open(&path).unwrap(), "one").unwrap(),
@@ -145,13 +147,17 @@ fn supported_prior_photo_schemas_use_their_exact_validators() {
 }
 #[test]
 fn future_and_malformed_current_schemas_still_reject_weather_without_writes() {
-    for schema in [10, 11, 12] {
+    for schema in [10, 11, 12, 13] {
         for sql in [
             "PRAGMA user_version=13",
+            "PRAGMA user_version=14",
             "PRAGMA user_version=999",
             "CREATE TABLE unexpected(value TEXT)",
             "ALTER TABLE bird_row_photos ADD COLUMN unexpected TEXT",
         ] {
+            if schema == 13 && sql == "PRAGMA user_version=13" {
+                continue;
+            }
             let (_dir, path, state, _) = upgraded(schema);
             let db = open(&path).unwrap();
             db.execute_batch(sql).unwrap();

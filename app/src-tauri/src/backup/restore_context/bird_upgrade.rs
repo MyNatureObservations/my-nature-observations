@@ -50,13 +50,16 @@ fn full(db: &mut Connection, schema: u32) -> Result<Proof> {
         9 => crate::storage_content::verify_v10(db, &flag),
         10 => crate::storage_content::verify_v11(db, &flag),
         11 => crate::storage_content::verify_v12(db, &flag),
+        13 => crate::storage_content::verify_v14(db, &flag),
         12 => crate::storage_content::verify_v13(db, &flag),
         _ => return Err("bird_schema_unsupported".into()),
     })
     .map_err(error)
 }
 fn preserved(db: &Connection, schema: u32) -> Result<Proof> {
-    (if schema == 12 {
+    (if schema == 13 {
+        crate::storage_content::verified_snapshot_v14(db, &AtomicBool::new(false))
+    } else if schema == 12 {
         crate::storage_content::verified_snapshot_v13(db, &AtomicBool::new(false))
     } else if schema == 11 {
         crate::storage_content::verified_snapshot_v12(db, &AtomicBool::new(false))
@@ -137,7 +140,7 @@ fn initialize_to(
         .map_err(error);
     if version
         .as_ref()
-        .is_ok_and(|v| *v != 4 && !(*v >= 5 && *v < target && *v <= 11))
+        .is_ok_and(|v| *v != 4 && !(*v >= 5 && *v < target && *v <= 12))
     {
         if active.close_inner().is_err() {
             std::process::abort();
@@ -206,6 +209,9 @@ fn initialize_to(
         }
         if source_schema < 12 && target >= 12 {
             crate::database::bird_visit_weather::upgrade(next)?;
+        }
+        if source_schema < 13 && target >= 13 {
+            crate::database::ebird_schema::upgrade(next)?;
         }
         point("upgraded", &candidate)?;
         full(next, target)?;
@@ -307,4 +313,16 @@ pub(crate) fn initialize_schema10(path: &Path) -> Result<()> {
 #[cfg(test)]
 pub(crate) fn initialize_schema11(path: &Path) -> Result<()> {
     initialize_to(path, 11, |_, _| Ok(()))
+}
+
+// Ordinary macOS startup, after the directory lease and Recovery checkpoint.
+pub(crate) fn initialize_ebird(path: &Path) -> Result<()> {
+    initialize_to(path, 13, |point, _| {
+        #[cfg(test)]
+        if std::env::var("MNO_BIRD_UPGRADE_CRASH").as_deref() == Ok(point) {
+            std::process::exit(77);
+        }
+        let _ = point;
+        Ok(())
+    })
 }

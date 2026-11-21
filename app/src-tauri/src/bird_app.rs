@@ -122,10 +122,10 @@ pub(crate) fn bird_observations_available(
     module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
 ) -> bool {
-    if !module.enabled() {
-        return false;
-    }
-    available(&state)
+    available_with_module(&module, &state)
+}
+fn available_with_module(module: &crate::bird_module::BirdModule, state: &DatabaseState) -> bool {
+    module.enabled() && available(state)
 }
 fn available(state: &DatabaseState) -> bool {
     if !cfg!(target_os = "macos") {
@@ -135,7 +135,7 @@ fn available(state: &DatabaseState) -> bool {
         let path = state.ready_database_path()?;
         let _permit = state.operation(None)?;
         let db = crate::database::open_existing(&path)?;
-        crate::database::bird_visit_weather::validate_schema(&db).map_err(|e| e.to_string())
+        crate::database::ebird_schema::weather_schema(&db).map_err(|e| e.to_string())
     })()
     .unwrap_or(false)
 }
@@ -1381,7 +1381,7 @@ mod overview_tests {
             birds::set_link(&state, &search, 1, &linked, e, true).unwrap();
         }
         let mut db = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
-        let proof = crate::storage_content::verify_v13(&mut db, &AtomicBool::new(false)).unwrap();
+        let proof = crate::storage_content::verify_v14(&mut db, &AtomicBool::new(false)).unwrap();
         let backup = temp.path().join("visits.mno-backup");
         crate::backup::create_backup(&db, &backup, crate::backup::BackupKind::Manual).unwrap();
         let export = temp.path().join("visits.mno-export");
@@ -1391,7 +1391,7 @@ mod overview_tests {
             crate::backup::restore::prepare_candidate(&backup, Arc::new(AtomicBool::new(false)))
                 .unwrap();
         assert_eq!(
-            crate::storage_content::verified_snapshot_v13(
+            crate::storage_content::verified_snapshot_v14(
                 candidate.source().unwrap(),
                 &AtomicBool::new(false)
             )
@@ -1413,16 +1413,16 @@ mod overview_tests {
             );
         }
         drop(candidate);
-        let imported = crate::open_import::build_for_schema12(
+        let imported = crate::open_import::build_for_schema13(
             &mut fs::File::open(export).unwrap(),
             temp.path(),
             &AtomicBool::new(false),
-            13,
+            14,
         )
         .unwrap();
         assert_eq!(imported.proof().sha256, proof.sha256);
         let mut db = crate::database::open_existing(imported.path()).unwrap();
-        crate::storage_content::verify_v13(&mut db, &AtomicBool::new(false)).unwrap();
+        crate::storage_content::verify_v14(&mut db, &AtomicBool::new(false)).unwrap();
         db.close().unwrap();
     }
     #[test]
@@ -1526,8 +1526,12 @@ fn journal_targets(
     let _permit = state.operation(Some(generation))?;
     let mut db = crate::database::open_existing(&path)?;
     let tx = db.transaction().map_err(|e| e.to_string())?;
-    crate::storage_content::snapshot_v13(&tx, &std::sync::atomic::AtomicBool::new(false))
-        .map_err(|_| "bird_list_invalid")?;
+    (if crate::database::ebird_schema::validate_schema(&tx).map_err(|_| "bird_list_invalid")? {
+        crate::storage_content::snapshot_v14(&tx, &std::sync::atomic::AtomicBool::new(false))
+    } else {
+        crate::storage_content::snapshot_v13(&tx, &std::sync::atomic::AtomicBool::new(false))
+    })
+    .map_err(|_| "bird_list_invalid")?;
     if !tx
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM bird_lists WHERE id=?1)",
@@ -1617,3 +1621,7 @@ mod photo_contract_tests {
         assert_eq!(std::fs::read(original).unwrap(), bytes);
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "bird_app/schema13_tests.rs"]
+mod schema13_tests;

@@ -55,7 +55,7 @@ const EXPIRED: &str = "bird_weather_preview_expired";
 #[cfg(target_os = "macos")]
 fn binding(db: &rusqlite::Connection, request: &Request) -> Result<String, String> {
     request.context.validate()?;
-    if !crate::database::bird_visit_weather::validate_schema(db).map_err(|e| e.to_string())? {
+    if !crate::database::ebird_schema::weather_schema(db).map_err(|e| e.to_string())? {
         return Err("bird_schema_unsupported".into());
     }
     let place = crate::place_registry::read_place(db, &request.context.place_id)?;

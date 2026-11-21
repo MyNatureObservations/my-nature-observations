@@ -1447,3 +1447,58 @@ pub(crate) fn verified_snapshot_v13(db: &Connection, flag: &AtomicBool) -> Resul
         entry_count: previous.entry_count,
     })
 }
+
+pub(crate) fn verify_v14(db: &mut Connection, flag: &AtomicBool) -> Result<Proof> {
+    use rusqlite::limits::Limit;
+    if !db.is_autocommit() {
+        return Err(Error::Invalid);
+    }
+    let old = db.limit(Limit::SQLITE_LIMIT_LENGTH)?;
+    db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old.min(ROW_LIMIT as i32))?;
+    let result = (|| {
+        let tx = db.transaction()?;
+        let p = snapshot_v14(&tx, flag)?;
+        tx.commit()?;
+        Ok(p)
+    })();
+    let reset = db.set_limit(Limit::SQLITE_LIMIT_LENGTH, old);
+    match (result, reset) {
+        (Ok(p), Ok(_)) => Ok(p),
+        (Err(e), _) => Err(e),
+        (_, Err(e)) => Err(e.into()),
+    }
+}
+pub(crate) fn snapshot_v14(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    if db.is_autocommit() || !crate::database::ebird_schema::validate_schema(db)? {
+        return Err(Error::Invalid);
+    }
+    let integrity: String = db.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
+    if integrity != "ok"
+        || db
+            .prepare("PRAGMA foreign_key_check")?
+            .query([])?
+            .next()?
+            .is_some()
+    {
+        return Err(Error::Invalid);
+    }
+    verified_snapshot_v14(db, flag)
+}
+
+pub(crate) fn verified_snapshot_v14(db: &Connection, flag: &AtomicBool) -> Result<Proof> {
+    let previous = verified_snapshot_v13(db, flag)?;
+    crate::ebird_persistence::validate(db).map_err(|_| Error::Invalid)?;
+    let mut hash = Sha256::new().chain_update(b"MNO-preserved-content\0\x00\x00\x00\x0e");
+    hash.update(previous.sha256.as_bytes());
+    hash.update(b"ebird-visits-rows-additions-links\0");
+    for record in crate::ebird_persistence::records(db).map_err(|_| Error::Invalid)? {
+        check(flag)?;
+        let value = serde_json::to_string(&record).map_err(|_| Error::Invalid)?;
+        field_v3(&mut hash, ValueRef::Text(value.as_bytes()))?;
+    }
+    hash.update([0x45]);
+    Ok(Proof {
+        sha256: format!("{:x}", hash.finalize()),
+        entry_count: previous.entry_count,
+    })
+}

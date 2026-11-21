@@ -844,3 +844,43 @@ impl DatabaseState {
         crate::startup::migration_probe::with_initializer(schema1, || self.initialize_startup(root))
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+impl DatabaseState {
+    // Explicit schema13 helper retained for frozen test fixtures.
+    pub(crate) fn initialize_schema13_startup(
+        &self,
+        root: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        fn initialize(path: &std::path::Path, new: bool) -> Result<(), String> {
+            if new {
+                crate::database::create_current_database(path)?;
+            }
+            crate::backup::restore_context::bird_upgrade::initialize_ebird(path)
+        }
+        crate::startup::migration_probe::with_initializer(initialize, || {
+            self.initialize_startup(root)
+        })
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+impl DatabaseState {
+    pub(crate) fn initialize_schema12_startup(
+        &self,
+        root: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        if crate::startup::migration_probe::has_initializer() {
+            return self.initialize_startup(root);
+        }
+        fn initialize(path: &std::path::Path, new: bool) -> Result<(), String> {
+            if new {
+                crate::database::create_current_database(path)?;
+            }
+            crate::backup::restore_context::bird_upgrade::initialize_current(path)
+        }
+        crate::startup::migration_probe::with_initializer(initialize, || {
+            self.initialize_startup(root)
+        })
+    }
+}

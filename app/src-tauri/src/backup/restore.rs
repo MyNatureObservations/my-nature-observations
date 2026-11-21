@@ -408,7 +408,7 @@ fn extract_archive_in(
     if manifest.format != FORMAT
         || !matches!(
             manifest.format_version,
-            1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13
+            1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14
         )
         || manifest.database_file != DATABASE
         || manifest.book_id.is_some()
@@ -430,6 +430,7 @@ fn extract_archive_in(
             | (11, 10)
             | (12, 11)
             | (13, 12)
+            | (14, 13)
     ) {
         return Err(PrepareError::IncompatibleSchema);
     }
@@ -534,7 +535,9 @@ fn prepare_file_in(
                 crate::storage_content::ROW_LIMIT as i32,
             )
             .map_err(sql_error)?;
-        if manifest.format_version == 13 {
+        if manifest.format_version == 14 {
+            crate::storage_content::snapshot_v14(&database, &cancel).map_err(preservation_error)?;
+        } else if manifest.format_version == 13 {
             crate::storage_content::snapshot_v13(&database, &cancel).map_err(preservation_error)?;
         } else if manifest.format_version == 12 {
             crate::storage_content::snapshot_v12(&database, &cancel).map_err(preservation_error)?;
