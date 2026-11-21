@@ -29,7 +29,9 @@ fn date_only_change_preserves_november_18_weather_as_stale_after_november_19_res
     db.close().unwrap();
     drop(f.state);
     let state = DatabaseState::default();
-    state.initialize_startup(f.path.parent().unwrap()).unwrap();
+    state
+        .initialize_schema12_startup(f.path.parent().unwrap())
+        .unwrap();
     let reopened = birds::reopen(&state, 1, &id).unwrap();
     assert_eq!(reopened.visit_date, "2026-11-19");
     assert_eq!(reopened.weather, stored);
@@ -102,7 +104,7 @@ fn fixture() -> Fixture {
     let temp = tempfile::TempDir::new().unwrap();
     let state = DatabaseState::default();
     let path = state
-        .initialize_startup(&temp.path().join("journal"))
+        .initialize_schema12_startup(&temp.path().join("journal"))
         .unwrap();
     let db = crate::database::open_existing(&path).unwrap();
     db.execute("INSERT INTO places VALUES (?1,'Lake',59.0,18.0,1)", [PLACE])
@@ -219,7 +221,7 @@ fn guarded_creation_preserves_independent_sources_restart_and_request_receipts()
     let root = f.path.parent().unwrap().to_owned();
     drop(f.state);
     let state = DatabaseState::default();
-    state.initialize_startup(&root).unwrap();
+    state.initialize_schema12_startup(&root).unwrap();
     assert_eq!(birds::reopen(&state, 1, &id).unwrap(), list);
 }
 #[test]
@@ -709,7 +711,9 @@ fn complete_visit_weather_restore_and_import_activation_reopen() {
     fs::rename(f.path.parent().unwrap(), root.join("data")).unwrap();
     f.path = root.join("data/mno.sqlite");
     f.state = DatabaseState::default();
-    f.state.initialize_startup(&root.join("data")).unwrap();
+    f.state
+        .initialize_schema12_startup(&root.join("data"))
+        .unwrap();
     let flag = AtomicBool::new(false);
     let mut db =
         Connection::open_with_flags(&f.path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
@@ -800,7 +804,11 @@ fn complete_visit_weather_restore_and_import_activation_reopen() {
     drop(maintenance);
     drop(f.state);
     let recovery = DatabaseState::default();
-    assert!(recovery.initialize_startup(&root.join("data")).is_err());
+    assert!(
+        recovery
+            .initialize_schema12_startup(&root.join("data"))
+            .is_err()
+    );
     assert!(
         crate::backup::restore_context::activation::startup::status(&recovery)
             .unwrap()
@@ -814,7 +822,9 @@ fn complete_visit_weather_restore_and_import_activation_reopen() {
     .unwrap();
     drop(recovery);
     let ready = DatabaseState::default();
-    ready.initialize_startup(&root.join("data")).unwrap();
+    ready
+        .initialize_schema12_startup(&root.join("data"))
+        .unwrap();
     if older {
         let db = crate::database::open_existing(&f.path).unwrap();
         assert!(read_all(&db).unwrap().is_empty());

@@ -5,7 +5,7 @@ fn schema13_module_availability_and_ordinary_create_edit_are_strict() {
     let root = tempfile::TempDir::new().unwrap();
     let state = DatabaseState::default();
     let path = state
-        .initialize_schema13_startup(&root.path().join("journal"))
+        .initialize_startup(&root.path().join("journal"))
         .unwrap();
     let enabled = crate::bird_module::test_module(true);
     let disabled = crate::bird_module::test_module(false);

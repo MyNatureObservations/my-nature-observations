@@ -315,7 +315,14 @@ pub(crate) fn initialize_schema11(path: &Path) -> Result<()> {
     initialize_to(path, 11, |_, _| Ok(()))
 }
 
-// Not called by ordinary startup until eBird activation is separately approved.
+// Ordinary macOS startup, after the directory lease and Recovery checkpoint.
 pub(crate) fn initialize_ebird(path: &Path) -> Result<()> {
-    initialize_to(path, 13, |_, _| Ok(()))
+    initialize_to(path, 13, |point, _| {
+        #[cfg(test)]
+        if std::env::var("MNO_BIRD_UPGRADE_CRASH").as_deref() == Ok(point) {
+            std::process::exit(77);
+        }
+        let _ = point;
+        Ok(())
+    })
 }

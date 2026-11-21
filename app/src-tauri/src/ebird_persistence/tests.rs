@@ -65,16 +65,18 @@ fn fixture() -> (tempfile::TempDir, DatabaseState, std::path::PathBuf) {
     (temp, state, path)
 }
 fn fixture_at(root: &std::path::Path) -> (DatabaseState, std::path::PathBuf) {
+    fixture_at_schema(root, 13)
+}
+pub(crate) fn fixture_at_schema(
+    root: &std::path::Path,
+    schema: u32,
+) -> (DatabaseState, std::path::PathBuf) {
     let state = DatabaseState::default();
-    fn initializer(path: &std::path::Path, new: bool) -> Result<()> {
-        if new {
-            database::create_current_database(path)?;
-        }
-        crate::backup::restore_context::bird_upgrade::initialize_ebird(path)
+    let path = if schema == 12 {
+        state.initialize_schema12_startup(root)
+    } else {
+        state.initialize_schema13_startup(root)
     }
-    let path = crate::startup::migration_probe::with_initializer(initializer, || {
-        state.initialize_startup(root)
-    })
     .unwrap();
     let db = database::open_existing(&path).unwrap();
     for id in ["entry", "other"] {
@@ -418,7 +420,9 @@ fn ebird_backups_exports_and_older_reader_normalization() {
     drop(candidate);
     // Older schema12 export normalizes to a verified schema13 with empty eBird tables.
     let old = DatabaseState::default();
-    let oldpath = old.initialize_startup(&temp.path().join("old")).unwrap();
+    let oldpath = old
+        .initialize_schema12_startup(&temp.path().join("old"))
+        .unwrap();
     let mut db =
         Connection::open_with_flags(&oldpath, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
     let oldexport = temp.path().join("older.mno-export");
@@ -506,7 +510,7 @@ fn ebird_archive_activation_preserves_replaced_content_and_restarts() {
     use std::{fs, sync::Arc};
     const CHILD: &str = "MNO_EBIRD_ACTIVATION_CHILD";
     if std::env::var_os(CHILD).is_none() {
-        for mode in ["restore", "import"] {
+        for mode in ["restore", "import", "restore12", "import13"] {
             let root = tempfile::Builder::new()
                 .prefix("mno-ebird-activation-")
                 .tempdir()
@@ -539,20 +543,31 @@ fn ebird_archive_activation_preserves_replaced_content_and_restarts() {
         std::env::var("MNO_EBIRD_TOKEN").unwrap()
     );
     assert!(!root.join("data").exists());
+    let older = mode == "restore12" || mode == "import13";
+    let restoring = mode.starts_with("restore");
+    let source_format = if older { 13 } else { 14 };
     {
         let (state, path) = fixture_at(&root.join("data"));
         apply(&state, &[input("S100"), input("S101")]).unwrap();
         additions(&path);
-        let expected = saved(&path);
+        let expected = if older { Vec::new() } else { saved(&path) };
         let flag = AtomicBool::new(false);
+        let source = if older {
+            let (old, oldpath) = fixture_at_schema(&root.join("older"), 12);
+            drop(old);
+            oldpath
+        } else {
+            path.clone()
+        };
         let mut db =
-            Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
-        let archive = root.as_path().join(if mode == "restore" {
+            Connection::open_with_flags(&source, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .unwrap();
+        let archive = root.as_path().join(if restoring {
             "roundtrip.mno-backup"
         } else {
             "roundtrip.mno-export"
         });
-        if mode == "restore" {
+        if restoring {
             crate::backup::create_backup(&db, &archive, crate::backup::BackupKind::Manual).unwrap();
         } else {
             crate::open_export::export(&mut db, &archive, &flag).unwrap();
@@ -562,7 +577,7 @@ fn ebird_archive_activation_preserves_replaced_content_and_restarts() {
         let replaced = saved(&path);
         let old = crate::backup::restore_context::activation::journal_proof(&path).unwrap();
         let maintenance = state.maintenance().unwrap();
-        if mode == "restore" {
+        if restoring {
             drop(
                 crate::backup::restore_context::activation::activate(
                     &maintenance,
@@ -576,7 +591,7 @@ fn ebird_archive_activation_preserves_replaced_content_and_restarts() {
                 &mut fs::File::open(&archive).unwrap(),
                 root.as_path(),
                 &flag,
-                14,
+                source_format,
             )
             .unwrap();
             let proof = candidate.proof().clone();
@@ -588,18 +603,24 @@ fn ebird_archive_activation_preserves_replaced_content_and_restarts() {
                     &old,
                     &proof,
                     Arc::new(AtomicBool::new(false)),
-                    14,
+                    source_format,
                 )
                 .unwrap(),
             );
         }
         drop(maintenance);
         drop(state);
+        let installed = fs::read(&path).unwrap();
         let recovery = DatabaseState::default();
         assert!(
             recovery
                 .initialize_startup(&root.as_path().join("data"))
                 .is_err()
+        );
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            installed,
+            "pending Recovery must not upgrade its journal"
         );
         use crate::backup::restore_context::activation::startup::{self, Action};
         assert!(
@@ -615,6 +636,19 @@ fn ebird_archive_activation_preserves_replaced_content_and_restarts() {
             .initialize_startup(&root.as_path().join("data"))
             .unwrap();
         assert_eq!(saved(&path), expected);
+        let db = database::open_existing(&path).unwrap();
+        assert!(database::ebird_schema::validate_schema(&db).unwrap());
+        db.close().unwrap();
+        if mode == "restore12" {
+            assert!(
+                fs::read_dir(path.parent().unwrap().join("backups/bird-schema-upgrade"))
+                    .unwrap()
+                    .any(|e| fs::read(e.unwrap().path().join("schema12.sqlite"))
+                        .ok()
+                        .as_ref()
+                        == Some(&installed))
+            );
+        }
         let backups = fs::read_dir(path.parent().unwrap().join("backups/pre-restore")).unwrap();
         let mut protected = false;
         for entry in backups {

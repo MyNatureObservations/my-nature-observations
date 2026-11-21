@@ -1,7 +1,8 @@
 # Protected eBird persistence foundation — internal macOS work
 
 Base: public main `a24fb8b27948a911087c4d3351cc734aeaf61b80`.
-Branch: `codex/ebird-persistence-foundation`. Local, uncommitted implementation.
+Branch: `codex/ebird-persistence-foundation`. Current local phase: ordinary macOS
+startup reaches schema 13; user-facing eBird import writing remains disabled.
 [Requirements](../requirements/Import_fran_eBird.md).
 
 ## Ownership and identity
@@ -106,20 +107,17 @@ future-version allowance.
 
 ## Activation boundary and next work
 
-**Ordinary startup still targets schema 12.** The protected schema-13 initializer
-is internal and is exercised under the startup lease by synthetic tests. It is not
-connected to ordinary startup. Existing schema-13 journals can safely reopen, but
-schema-12 targets do not gain a new format-14 Open Import combination in this step.
-The read-only eBird preview still has no persistent save command or UI action.
-No network/media fetching, place association UI or new module activation is added.
+**Ordinary macOS startup now targets schema 13** through the protected initializer.
+Existing schema-13 journals reopen without repeating migration. Unfinished Recovery
+still prevents migration: older Restore results upgrade on the subsequent normal
+startup after verified completion, rather than changing an unfinished proof.
+The read-only preview still exposes no persistent import command or UI action.
 
-Before enabling import writes: review this foundation; connect the protected
-schema-13 upgrade to ordinary macOS startup (including post-Recovery upgrade), then
-build the confirmed preview-to-save/reimport comparison and unresolved-addition
-review. Source parsing must reach the validated internal contract; current preview
-name matches must never be promoted into catalog identities. Manual macOS DEV and
-packaged acceptance are still required. No existing profile/export was opened or
-changed for these tests, and no personal CSV is copied into fixtures.
+Before enabling import writes: review the startup integration and perform isolated
+DEV acceptance, then build confirmed preview-to-save/reimport comparison and
+unresolved-addition review. See [the schema-13 DEV procedure](MNO_Ebird_Schema13_Startup_DEV.md).
+No network/media downloads or source-place association UI is added. No existing
+profile or personal export was used by these automated checks.
 
 ## Validation
 
@@ -132,7 +130,7 @@ replaced-journal protection. The shared fixture also contains journal text/photo
 caption/weather and a manual bird list with comment/photo/caption/visit weather.
 Protected migration tests inject failure at eight publication boundaries, compare
 the independent schema-12 source byte-for-byte, retry, reject a changed candidate
-and verify ordinary startup has not silently activated schema 13.
+and verify the frozen schema-12 initializer remains at its explicit target.
 
 Local results with CI-pinned Rust **1.99.1**:
 
@@ -179,8 +177,8 @@ Additional CI-pinned Rust 1.99.1 evidence for this correction:
   Frontend contracts did not change; no Svelte rerun was necessary.
 
 These checks supplement the earlier complete library result; that full suite was
-not rerun for this focused correction. Ordinary startup remains at schema 12,
-import writing remains unregistered/unavailable and row matching is unchanged.
+not rerun for this focused correction. At that correction checkpoint ordinary startup remained at schema 12; import
+writing remained unregistered/unavailable and row matching was unchanged.
 No manual or packaged acceptance is claimed. The next steps remain review,
 protected startup integration and isolated acceptance before import activation.
 
@@ -206,5 +204,35 @@ rows, transaction rollback, unchanged original/manual-photo bytes and no-op impo
 All-targets compilation, formatting and whitespace checks passed. The earlier
 **45 app-boundary tests** and **1,052-test full library result (two ignored)** are
 reused for unaffected paths; they are not represented as reruns after continuity.
-Ordinary startup remains schema 12. Internal schema 13/archive 14 are unchanged,
+At that continuity checkpoint startup remained schema 12. Schema 13/archive 14 were unchanged,
 import saving is still unavailable, and no profile/personal export was accessed.
+
+## Ordinary schema-13 startup integration
+
+Ordinary startup now uses the protected schema-13 candidate path after acquiring
+the lifetime directory lease and checking Recovery/artifacts. Lower-level publication
+failure/proof tests are reused. New ordinary-startup coverage uses the existing rich
+synthetic fixture (journal text/photos/captions/weather, manual bird rows, photos,
+comments, journal links and visit weather), checks independent source bytes and
+proof preservation, fresh/repeated startup, and child-process interruption before
+and after publication. Enabled/disabled module availability runs on ordinary startup.
+Older Restore/Import replacement cases verify no upgrade while Recovery is pending,
+then a subsequent normal startup reaches schema 13 with replaced content protected.
+Frozen format-13/schema-12 test fixtures explicitly request schema 12; current-archive
+checks now assert schema13/proof14. No validation assertion is weakened.
+
+Manual DEV acceptance remains pending. Import writing remains unavailable.
+
+Startup integration also identified an exact-proof omission in the ordinary
+journal-link chooser. It now selects strict proof 14 for a valid schema13 journal
+and retains proof13/schema12 validation otherwise. Existing link/order tests run
+through ordinary schema13 startup. Current Backup/Export tests assert format14;
+ordinary journal-weather read/manual/fetched tests assert schema13, with explicit
+older-schema and invalid/future-schema regressions retained.
+
+Final startup-integration validation with CI-pinned Rust **1.99.1**:
+complete macOS library suite **1,064 passed, 2 existing tests ignored, 0 failed**;
+all-targets compilation, formatting, five changed-document links/anchors and
+`git diff --check` passed. The full suite was rerun after the link-chooser fix and
+current-schema assertion updates. No frontend contract changed and no Svelte
+rerun, CI dispatch, manual DEV acceptance or packaged acceptance is claimed.

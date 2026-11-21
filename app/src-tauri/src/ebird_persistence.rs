@@ -570,4 +570,4 @@ pub(crate) fn validate(db: &Connection) -> Result<()> {
 }
 #[cfg(test)]
 #[cfg(target_os = "macos")]
-mod tests;
+pub(crate) mod tests;

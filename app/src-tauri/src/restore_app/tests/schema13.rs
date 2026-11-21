@@ -43,7 +43,9 @@ fn ordinary_restore_format14_prepares_activates_and_reopens() {
     db.close().unwrap();
     drop(source);
     let state = DatabaseState::default();
-    let active = state.initialize_startup(&root.join("data")).unwrap();
+    let active = state
+        .initialize_schema12_startup(&root.join("data"))
+        .unwrap();
     assert_eq!(
         Connection::open(&active)
             .unwrap()

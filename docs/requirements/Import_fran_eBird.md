@@ -95,3 +95,8 @@ Borttagna rader behålls; saknade besök raderas inte. Befintlig strikt valideri
 för dubbletter och ogiltig indata kvarstår.
 Importens sparande är fortfarande otillgängligt i UI och inga personliga exporter
 ingår i testfixturerna. Nästa aktiveringssteg kräver separat granskning och acceptans.
+
+Den vanliga macOS-starten använder nu den skyddade schema-13-uppgraderingen även
+när fågelmodulen är avstängd. Pågående Recovery blockerar fortfarande uppgradering;
+ett äldre återställt resultat uppgraderas vid nästa vanliga start efter verifierad
+slutföring. Detta aktiverar inte eBird-importens sparande.

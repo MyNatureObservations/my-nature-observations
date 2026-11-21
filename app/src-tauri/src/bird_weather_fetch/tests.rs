@@ -34,7 +34,7 @@ fn fixture_schema(
     let path = if schema == 13 {
         state.initialize_schema13_startup(&root.path().join("journal"))
     } else {
-        state.initialize_startup(&root.path().join("journal"))
+        state.initialize_schema12_startup(&root.path().join("journal"))
     }
     .unwrap();
     let mut wire: Value = serde_json::from_str(include_str!(
