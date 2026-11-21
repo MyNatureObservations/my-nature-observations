@@ -221,7 +221,9 @@ then a subsequent normal startup reaches schema 13 with replaced content protect
 Frozen format-13/schema-12 test fixtures explicitly request schema 12; current-archive
 checks now assert schema13/proof14. No validation assertion is weakened.
 
-Manual DEV acceptance remains pending. Import writing remains unavailable.
+The owner has accepted the schema-12 → 13 DEV upgrade and restart (record below).
+Import writing remains unavailable; packaged and new manual archive acceptance
+are not claimed by this record.
 
 Startup integration also identified an exact-proof omission in the ordinary
 journal-link chooser. It now selects strict proof 14 for a valid schema13 journal
@@ -236,3 +238,41 @@ all-targets compilation, formatting, five changed-document links/anchors and
 `git diff --check` passed. The full suite was rerun after the link-chooser fix and
 current-schema assertion updates. No frontend contract changed and no Svelte
 rerun, CI dispatch, manual DEV acceptance or packaged acceptance is claimed.
+
+## Combined branch review and accepted DEV upgrade
+
+Reviewed from public base `a24fb8b27948a911087c4d3351cc734aeaf61b80` through
+`bacbaa4c0347f7552fdc6cd2ee2f83153b44e8d9`, including the complete persistence,
+compatibility, continuity and ordinary-startup changes. The working tree was clean
+before adding this acceptance/review record.
+
+No new concrete correctness/data-preservation blocker was found. The review traced
+source ownership and opaque visit identity; exact-first/three-field bounded row
+continuity; atomic/no-op/repeat import and retained missing visits; independent source
+places and MNO additions; generation guards; ordinary startup, module availability,
+journal linking and weather; actual Restore/Open Import preparation/activation
+branches, normalized older archives, frozen proofs and replaced-journal protection.
+Windows/Linux gates remain unchanged. Only the existing read-only eBird preview
+commands are registered; there is no user-facing import writer.
+
+The project owner accepted the macOS DEV upgrade at the tested checkpoint above:
+genuine schema12 → ordinary startup → schema13, journal/bird content including
+photos/captions/weather/links preserved, disabled preference unchanged, access
+restored by reactivation, independent schema12 copy matching the original checksum,
+and content/preference preserved with exactly one schema12 copy after restart.
+**No checksum value was supplied; none is invented or recorded.** See the
+[precise acceptance scope and procedure](MNO_Ebird_Schema13_Startup_DEV.md).
+This is owner-reported DEV acceptance, separate from automated and packaged evidence.
+
+The recorded complete Rust 1.99.1 suite (1,064 passed, two existing ignored),
+all-targets compilation and formatting were reused; no additional test run was
+needed for this documentation-only record. Changed-document links/anchors and
+`git diff --check` were checked again.
+
+Remaining activation work is explicit: preview-to-confirmed-save/reimport UX,
+review of unresolved retained row associations, and isolated acceptance of those
+new write paths. Imported-row photo attachments are **not implemented**: the current
+addition anchor stores plain text, and preservation tests of existing manual bird
+photos do not constitute imported-row photo support. These unfinished areas and
+packaged acceptance are not marked complete. No source/profile/export was changed
+or used for a new acceptance run during this review.

@@ -2,8 +2,9 @@
 
 Starting checkpoint: `fb4a57a786220b95bb199e69adb2967dd8564245`.
 Branch: `codex/ebird-persistence-foundation`. Automated integration is recorded in
-[the persistence report](MNO_Ebird_Persistence_Foundation.md). Manual acceptance
-below is pending; no existing user/test profile was used for these checks.
+[the persistence report](MNO_Ebird_Persistence_Foundation.md). The project owner accepted the DEV upgrade checklist below at the tested source
+checkpoint recorded at the end. Automated checks used disposable synthetic data;
+this document does not claim packaged or new manual archive acceptance.
 
 Ordinary macOS startup now calls the protected schema-13 initializer only after
 the directory lease and existing Recovery/artifact checkpoints. New journals use
@@ -98,3 +99,24 @@ Automated tests, rather than manual file manipulation, cover injected migration
 interruptions and pending Recovery. Older-archive replacement tests verify that
 Recovery leaves the installed bytes unchanged until completion, that the replaced
 eBird journal stays protected, and that a subsequent ordinary startup reaches 13.
+
+## Accepted macOS DEV upgrade — owner-reported result
+
+Tested source checkpoint: `bacbaa4c0347f7552fdc6cd2ee2f83153b44e8d9`.
+This acceptance record is added afterward and does not change the tested build.
+
+The owner confirmed:
+
+- A genuine schema-12 fixture upgraded through ordinary macOS DEV startup.
+- Journal and bird content, photos/captions, weather and links were preserved.
+- The disabled module preference was preserved; explicit reactivation restored
+  access to the existing bird content.
+- The active database was confirmed as schema 13.
+- The independent schema-12 copy matched the original checksum.
+- Another restart preserved content/preference and left exactly one schema-12 copy.
+
+No checksum value was supplied for this acceptance, so none is recorded. The
+checksum match above is the owner's reported check, not a newly recalculated hash.
+This accepts the DEV upgrade/restart behavior only. It does not accept user-facing
+eBird saving, imported-row photo attachments, an unresolved-row review interface,
+packaged behavior or new manual Restore/Open Import tests.
