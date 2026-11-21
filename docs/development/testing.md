@@ -822,3 +822,20 @@ After correction: affected integration target **27 passed, 0 failed, 0 ignored**
 formatting and `git diff --check` passed. Existing requirements/status edits were
 preserved unchanged, and no journal profile or archive was accessed. These are
 local results; no CI rerun, push or publication was performed.
+
+
+## macOS v0.2.0 public-download installation — 21 November 2026
+
+The owner confirmed successful installation from the
+[public macOS v0.2.0 pre-release](https://github.com/MyNatureObservations/my-nature-observations/releases/tag/v0.2.0):
+the existing journal was preserved and the module activation preference stayed
+unchanged. This public-download check is separate from the earlier RC2 packaged
+acceptance; it does not claim all prior checks were repeated.
+
+Exact tested build: `9fa9da6074bd579a5eaadcb56aafa6019587530e`.
+DMG SHA-256: `4b08e77f979caa209cb919a04e91a8cc5537ff97e1c444d501bf3e574f69b1e8`.
+See the [RC2 acceptance and publication record](MNO_macOS_0.2.0_RC2_Acceptance.md#publication-and-public-download-closeout--21-november-2026)
+for asset identity, public checksum verification, earlier acceptance and its limits.
+UX-005/UX-006 and deferred bird functionality remain follow-ups; the complete
+roadmap item is not closed. No application tests or builds were repeated for this
+documentation-only record.
