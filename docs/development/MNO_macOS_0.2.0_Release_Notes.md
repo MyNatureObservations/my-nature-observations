@@ -1,9 +1,9 @@
 # My Nature Observations 0.2.0 for macOS — draft
 
-> Publication paused. These notes describe the forthcoming replacement candidate.
+> Publication paused. These notes describe replacement candidate RC2, including the optional bird module.
 > The accepted `1685de6` DMG does not contain optional-module activation and remains
 > unchanged; its existing release draft stays unpublished. Replacement package
-> acceptance is pending.
+> acceptance passed within the recorded scope; publication remains paused.
 
 ## English
 
@@ -54,7 +54,10 @@ Missing Swedish names use the recorded fallback. In macOS DEV, clicking blank
 space to the right of a species result may require two clicks (UX-005); clicking
 the species name works directly. Native file-picker buttons may use the system
 language independently of MNO. Historical packaged macOS acceptance passed for the earlier `1685de6` candidate,
-which did not include optional-module activation. Replacement acceptance is pending.
+which did not include optional-module activation. RC2 packaged acceptance also passed: default-off fresh/upgrade behavior, explicit
+activation, restart, and separate-account Backup/Restore and Export/Open Import.
+See the [RC2 acceptance record](MNO_macOS_0.2.0_RC2_Acceptance.md). The transfer
+test used a readable copy; it did not verify a nonempty bird-photo caption.
 In that earlier test: upgrade from public
 v0.1.1 preserved text, photo and caption, and a new edit persisted after restart.
 Bird observations and separate-account Backup/Restore and Export/Open Import
@@ -110,7 +113,10 @@ svenska namn använder beslutad reservvisning. I macOS DEV kan blankytan till h�
 om en artträff kräva två klick (UX-005); klick på artnamnet fungerar direkt.
 Filväljarens systemknappar kan följa ett annat språk än MNO. Paketerad macOS-
 acceptans är historiskt godkänd för den tidigare kandidaten `1685de6`, utan valbar
-modulaktivering. Ersättningskandidatens acceptans återstår. I det tidigare testet: uppgradering från publicerad
+modulaktivering. RC2:s paketacceptans är också godkänd: standard-av vid nyinstallation/uppgradering,
+aktivering, omstart och Backup/Restore samt Export/Open Import i separata konton.
+Se [RC2-protokollet](MNO_macOS_0.2.0_RC2_Acceptance.md). Överföringstestet använde
+en läsbar kopia och verifierade inte en ifylld bildtext för fågelbilden. I det tidigare testet: uppgradering från publicerad
 v0.1.1 bevarade text, foto och bildtext, och en ny redigering fanns kvar efter
 omstart. Fågelobservationer samt Backup/Restore och Export/Open Import i separata
 konton godkändes också, inklusive länkade och olänkade observationer. Se
