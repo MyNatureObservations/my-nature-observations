@@ -166,6 +166,13 @@ fn create_with_publication(
                 )
                 .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
             }
+            13 => {
+                crate::storage_content::verify_v14(
+                    &mut snapshot,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+                .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
+            }
             12 => {
                 crate::storage_content::verify_v13(
                     &mut snapshot,
@@ -323,6 +330,7 @@ fn verify_backup_in(path: &Path, staging: &Path) -> BackupResult<BackupManifest>
                 | (11, 10)
                 | (12, 11)
                 | (13, 12)
+                | (14, 13)
         )
         || manifest.database_file != DATABASE
         || manifest.book_id.is_some()
@@ -357,7 +365,13 @@ fn verify_backup_in(path: &Path, staging: &Path) -> BackupResult<BackupManifest>
         return Err("Backup schema differs from manifest".into());
     }
     check_database(&database)?;
-    if manifest.format_version == 13 {
+    if manifest.format_version == 14 {
+        crate::storage_content::verify_v14(
+            &mut database,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .map_err(|e| format!("Invalid preserved content: {e:?}"))?;
+    } else if manifest.format_version == 13 {
         crate::storage_content::verify_v13(
             &mut database,
             &std::sync::atomic::AtomicBool::new(false),
@@ -458,7 +472,12 @@ fn check_database(database: &Connection) -> BackupResult<()> {
         return Err(format!("SQLite quick_check failed: {result}").into());
     }
     let version: u32 = database.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version == 12 {
+    if version == 13 {
+        if !crate::database::ebird_schema::validate_schema(database)? {
+            return Err("Unsupported database schema".into());
+        }
+        return Ok(());
+    } else if version == 12 {
         if !crate::database::bird_visit_weather::validate_schema(database)? {
             return Err("Unsupported database schema".into());
         }

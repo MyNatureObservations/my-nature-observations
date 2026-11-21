@@ -844,3 +844,22 @@ impl DatabaseState {
         crate::startup::migration_probe::with_initializer(schema1, || self.initialize_startup(root))
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+impl DatabaseState {
+    // Synthetic startup integration only. Ordinary startup continues to target12.
+    pub(crate) fn initialize_schema13_startup(
+        &self,
+        root: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        fn initialize(path: &std::path::Path, new: bool) -> Result<(), String> {
+            if new {
+                crate::database::create_current_database(path)?;
+            }
+            crate::backup::restore_context::bird_upgrade::initialize_ebird(path)
+        }
+        crate::startup::migration_probe::with_initializer(initialize, || {
+            self.initialize_startup(root)
+        })
+    }
+}

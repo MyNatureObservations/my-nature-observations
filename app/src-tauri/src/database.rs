@@ -54,12 +54,17 @@ pub(crate) fn initialize_database(path: &Path) -> Result<(), String> {
     if version < SCHEMA_VERSION {
         return Err("database_schema_upgrade_required".into());
     }
-    if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
+    if matches!(version, 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13) {
         #[cfg(not(target_os = "macos"))]
         return Err("database_schema_platform_unsupported".into());
         #[cfg(target_os = "macos")]
         {
-            (if version == 12 {
+            (if version == 13 {
+                crate::storage_content::verify_v14(
+                    &mut connection,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+            } else if version == 12 {
                 crate::storage_content::verify_v13(
                     &mut connection,
                     &std::sync::atomic::AtomicBool::new(false),
@@ -312,3 +317,6 @@ pub(crate) mod bird_captions;
 
 #[path = "database/bird_visit_weather.rs"]
 pub(crate) mod bird_visit_weather;
+
+#[path = "database/ebird_schema.rs"]
+pub(crate) mod ebird_schema;

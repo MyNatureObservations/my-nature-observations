@@ -2,7 +2,8 @@
 
 Status: godkända produktbeslut; första implementationen är en macOS DEV-preview.
 Bygger på publik main `2db4d2667808f632f71197994e45d227695d91c9` och ägarens
-produktbeslut efter undersökningen 21 november 2026. Ingen importlagring är införd.
+produktbeslut efter undersökningen 21 november 2026. Gränssnittet sparar ännu ingen
+import. En separat intern lagringsgrund utvecklas enligt statuslänken nedan.
 
 ## Ägarskap och återimport
 
@@ -75,3 +76,22 @@ kan sparas. Definiera radidentitet och granskning över taxonomibyten; CSV:n ger
 inte ett separat stabilt observations-ID. Bevara befintliga manuella fågellistor.
 Återimportens diff/uppdatering, associationsskrivningar och eventuell mediahämtning
 är senare steg. Ingen pluginplattform eller generell importmotor behövs.
+
+## Intern lagringsgrund — ännu inte aktiverad
+
+Se [skyddad eBird-lagring](../development/MNO_Ebird_Persistence_Foundation.md)
+för schema-/arkivgränser, konservativa radkopplingsregler och verifiering.
+CSV:n ger inga permanenta rad-ID:n eller en explicit taxonomiversion.
+Oförändrade källrader matchas först. Därefter får en entydig en-till-en-koppling
+inom samma checklista behålla radidentitet och MNO-tillägg när endast **Count**,
+**Observation Details** eller **ML Catalog Numbers** ändras. Alla andra källfält
+måste vara oförändrade. Regeln avser kontinuitet för en källrad, inte permanent
+taxonidentitet. Varken vetenskapliga namn eller taxonomisk ordning är permanenta
+ID:n, och taxonomiversion gissas inte.
+
+Namnändringar, tvetydiga fall och andra ändringar hanteras konservativt:
+originalrader och MNO-tillägg bevaras för granskning utan tyst omkoppling.
+Borttagna rader behålls; saknade besök raderas inte. Befintlig strikt validering
+för dubbletter och ogiltig indata kvarstår.
+Importens sparande är fortfarande otillgängligt i UI och inga personliga exporter
+ingår i testfixturerna. Nästa aktiveringssteg kräver separat granskning och acceptans.

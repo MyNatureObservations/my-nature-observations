@@ -122,10 +122,10 @@ pub(crate) fn bird_observations_available(
     module: State<'_, crate::bird_module::BirdModule>,
     state: State<'_, DatabaseState>,
 ) -> bool {
-    if !module.enabled() {
-        return false;
-    }
-    available(&state)
+    available_with_module(&module, &state)
+}
+fn available_with_module(module: &crate::bird_module::BirdModule, state: &DatabaseState) -> bool {
+    module.enabled() && available(state)
 }
 fn available(state: &DatabaseState) -> bool {
     if !cfg!(target_os = "macos") {
@@ -135,7 +135,7 @@ fn available(state: &DatabaseState) -> bool {
         let path = state.ready_database_path()?;
         let _permit = state.operation(None)?;
         let db = crate::database::open_existing(&path)?;
-        crate::database::bird_visit_weather::validate_schema(&db).map_err(|e| e.to_string())
+        crate::database::ebird_schema::weather_schema(&db).map_err(|e| e.to_string())
     })()
     .unwrap_or(false)
 }
@@ -1617,3 +1617,7 @@ mod photo_contract_tests {
         assert_eq!(std::fs::read(original).unwrap(), bytes);
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "bird_app/schema13_tests.rs"]
+mod schema13_tests;

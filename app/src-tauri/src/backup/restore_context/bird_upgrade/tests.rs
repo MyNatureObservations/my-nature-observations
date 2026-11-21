@@ -984,3 +984,5 @@ mod photos;
 
 mod captions;
 mod visit_weather;
+
+mod ebird;

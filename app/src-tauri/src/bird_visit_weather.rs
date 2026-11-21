@@ -209,7 +209,7 @@ pub(crate) enum Change {
 }
 /// Called only inside guarded list creation/update transactions, before full proof.
 pub(crate) fn apply(db: &Connection, id: &str, changes: &[Change]) -> Result<(), String> {
-    if !crate::database::bird_visit_weather::validate_schema(db).map_err(|e| e.to_string())? {
+    if !crate::database::ebird_schema::weather_schema(db).map_err(|e| e.to_string())? {
         return Err("visit_weather_schema_unsupported".into());
     }
     let current = context(db, id)?;

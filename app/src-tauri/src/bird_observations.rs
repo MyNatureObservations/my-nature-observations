@@ -291,7 +291,7 @@ pub(crate) fn read_list(db: &rusqlite::Connection, id: &str) -> Result<List, Str
         visit_end,
         rows,
         journal_entries,
-        weather: if database::bird_visit_weather::validate_schema(db).map_err(|e| e.to_string())? {
+        weather: if database::ebird_schema::weather_schema(db).map_err(|e| e.to_string())? {
             crate::bird_visit_weather::read(db, id)?
         } else {
             Vec::new()
@@ -448,7 +448,7 @@ pub(crate) fn update_with_weather_checked(
    tx.execute("INSERT INTO bird_rows(id,list_id,position,avibase_id,taxonomy_version,count,comment) VALUES (?1,?2,?3,?4,?5,?6,?7)",params![row_ids[position],id,position as i64,row.avibase_id,row.taxonomy_version,row.count,row.comment]).map_err(|e|e.to_string())?;
   }
   for row in rows {if let Some(photo)=&row.photo{photo.insert(&tx)?;}}
-  if database::bird_visit_weather::validate_schema(&tx).map_err(|e|e.to_string())? {
+  if database::ebird_schema::weather_schema(&tx).map_err(|e|e.to_string())? {
     crate::bird_visit_weather::invalidate(&tx,id)?;
     crate::bird_visit_weather::apply(&tx,id,weather)?;
   } else if !weather.is_empty(){return Err("visit_weather_schema_unsupported".into());}
@@ -735,8 +735,12 @@ fn receipt_snapshot(
     db: &rusqlite::Connection,
     flag: &AtomicBool,
 ) -> Result<crate::storage_content::Proof, crate::storage_content::Error> {
-    if database::bird_visit_weather::validate_schema(db)? {
-        crate::storage_content::snapshot_v13(db, flag)
+    if database::ebird_schema::weather_schema(db)? {
+        if database::ebird_schema::validate_schema(db)? {
+            crate::storage_content::snapshot_v14(db, flag)
+        } else {
+            crate::storage_content::snapshot_v13(db, flag)
+        }
     } else if database::bird_captions::validate_schema(db)? {
         crate::storage_content::snapshot_v12(db, flag)
     } else if crate::bird_photos::supported_schema(db)? {
