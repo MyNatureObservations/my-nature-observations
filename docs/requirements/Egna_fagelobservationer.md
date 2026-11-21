@@ -302,3 +302,9 @@ evidens, men godkänner inte den nya aktiveringslivscykeln.
 kontobeständighet, DEV-separation, kärnfunktioner utan fågelinnehåll, direktrutter,
 återaktivering med identiskt innehåll, osparat utkast/Avbryt, pågående operationer,
 arkiv med länkade/olänkade listor i avstängt läge samt oförändrat val efter journalbyte.
+
+## eBird som källägd fågeldata
+
+Se [Import från eBird](Import_fran_eBird.md) för godkända ägarskaps-/återimportbeslut
+och den första skrivskyddade macOS DEV-förhandsgranskningen. Den delar fågelmodul
+men är inte whole-journal Open Import och inför ingen importlagring i detta steg.

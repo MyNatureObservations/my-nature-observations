@@ -1,0 +1,4 @@
+Submission ID,Common Name,Scientific Name,Count,Location ID,Location,Latitude,Longitude,Date,Time,Protocol,Duration (Min),Checklist Comments,ML Catalog Numbers
+S100,Great Tit,Parus major,6,L100,"Synthetic, lake",59,18,2026-11-01,8:15 AM,Stationary,20,"A ""quoted"" note",10001 10002
+S100,Unidentified bird,Aves sp.,X,L100,"Synthetic, lake",59.0,18.0,2026-11-01,08:15 AM,Stationary,20,"A ""quoted"" note"
+S101,Great Tit,Parus major,2,L101,"Synthetic, lake",60,19,2026-11-01,,Historical
