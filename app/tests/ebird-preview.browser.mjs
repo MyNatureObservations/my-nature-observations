@@ -10,11 +10,11 @@ import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 import {svelte} from '@sveltejs/vite-plugin-svelte';
 const root=fileURLToPath(new URL('..',import.meta.url));
-test('rendered eBird preview inspects source fields, preserves cancellation and never writes',async t=>{
+test('rendered eBird import preserves source details, cancels safely and confirms once',async t=>{
  const modules={
- 'ebird-api':'window.nextCsv='+JSON.stringify(await readFile(join(root,'tests/fixtures/ebird/full.csv'),'utf8'))+';'+`export async function invoke(command,args){window.calls??=[];window.calls.push(command);if(command==='ebird_preview_available')return true;if(command==='preview_ebird_export')return window.nextCsv;if(command==='match_bird_paste_names')return args.names.map(name=>name==='Parus major'?[{id:'synthetic-tit',scientific:name,english:'Great Tit',swedish:'Talgoxe'}]:[]);throw Error(command);}`,
+ 'ebird-api':'window.nextCsv='+JSON.stringify(await readFile(join(root,'tests/fixtures/ebird/full.csv'),'utf8'))+';'+`export async function invoke(command,args){window.calls??=[];window.calls.push(command);if(command==='ebird_preview_available')return true;if(command==='preview_ebird_export')return window.nextCsv;if(command==='new_journal_session')return {generation:1};if(command==='review_ebird_import')return {operationId:'synthetic-review',generation:1,changes:args.visits.map(v=>({submissionId:v.submission_id,kind:'new',fields:v.rows[0]}))};if(command==='confirm_ebird_import'){window.imported=true;if(window.loseReply)throw Error('lost reply');return 'committed';}if(command==='ebird_import_status')return window.imported?'committed':'unknown';if(command==='cancel_ebird_import')return null;if(command==='match_bird_paste_names')return args.names.map(name=>name==='Parus major'?[{id:'synthetic-tit',scientific:name,english:'Great Tit',swedish:'Talgoxe'}]:[]);throw Error(command);}`,
  'ebird-opener':`export async function openUrl(url){window.opened=url;}`,
- 'module-navigation':`export async function goto(path){window.destination=path;}`,
+ 'module-navigation':`export function beforeNavigate(){} export async function goto(path){window.destination=path;}`,
  'module-page':`export const page={url:new URL('https://mno.invalid/observations/ebird-preview')};`,
  'bird-main':`import {setLocale} from '${root}/src/lib/paraglide/runtime.js';setLocale('sv',{reload:false});import {language} from '${root}/src/lib/language.svelte.ts';language.current='sv';window.setTestLanguage=locale=>language.current=locale;import {mount} from 'svelte';import Preview from '${root}/src/lib/components/EbirdPreview.svelte';mount(Preview,{target:document.getElementById('app')});`
  };
@@ -39,7 +39,7 @@ test('rendered eBird preview inspects source fields, preserves cancellation and 
 
 
  await click('document.querySelector("button.choose")');await wait('document.querySelectorAll(".visit").length===2');
- assert.equal(await evaluate('document.querySelector("main").textContent.includes("Jämförelse med tidigare importer stöds ännu inte")'),true);
+ assert.equal(await evaluate('document.querySelector("main").textContent.includes("skrivskyddade")'),true);
  assert.equal(await evaluate('document.querySelector(".species-preview").textContent'),'Great Tit 6 · Unidentified bird Antal ej angivet');
  assert.equal(await evaluate('getComputedStyle(document.querySelector(".species-separator")).whiteSpace'),'pre');
  await evaluate('document.querySelector(".visit summary").focus()');
@@ -51,6 +51,14 @@ test('rendered eBird preview inspects source fields, preserves cancellation and 
  assert.equal(await evaluate('Boolean(document.querySelector(".rows").compareDocumentPosition(document.querySelector(".source-details")) & Node.DOCUMENT_POSITION_FOLLOWING)'),true);
  await click('document.querySelector(".rows .text-link")');await wait('window.opened');
  assert.equal(await evaluate('window.opened'),'https://macaulaylibrary.org/asset/10001');
+ // Sorting must move the complete row, keeping X and media on their species.
+ const alphabetCsv=(await readFile(join(root,'tests/fixtures/ebird/full.csv'),'utf8')).replaceAll('Great Tit','Örn').replaceAll('Unidentified bird','Åda');
+ await evaluate('window.nextCsv='+JSON.stringify(alphabetCsv));await click('document.querySelector("button.choose")');
+ await wait('document.querySelector(".species-preview").textContent.includes("Åda Antal ej angivet · Örn 6")');
+ await click('document.querySelector(".visit summary")');await wait('document.querySelectorAll(".rows li").length===2');
+ assert.equal(await evaluate('document.querySelectorAll(".rows li")[0].querySelector("strong").textContent'),'Åda');
+ assert.equal(await evaluate('document.querySelectorAll(".rows li")[0].querySelectorAll(".media-links").length'),0);
+ assert.equal(await evaluate('document.querySelectorAll(".rows li")[1].querySelectorAll(".media-links button").length'),2);
  const extraCsv=(await readFile(join(root,'tests/fixtures/ebird/full.csv'),'utf8')).replace('ML Catalog Numbers\n','ML Catalog Numbers,Observation Details\n').replace('10001 10002\n','10001 10002,synthetic comment\n');
  const extraLine=extraCsv.split('\n').find(line=>line.startsWith('S100,Great'));
  await evaluate('window.nextCsv='+JSON.stringify(extraCsv.trimEnd()+'\n'+extraLine.replace('Great Tit','Synthetic bird three').replace('Parus major','Synthetic taxon three')+'\n'+extraLine.replace('Great Tit','Synthetic bird four').replace('Parus major','Synthetic taxon four')+'\n'));
@@ -61,10 +69,15 @@ test('rendered eBird preview inspects source fields, preserves cancellation and 
  await evaluate("window.setTestLanguage('en')");await wait('document.querySelector(".species-preview").textContent.includes("and 1 more")');
  assert.equal(await evaluate('document.querySelector(".source-details summary").textContent'),'Source details');
  await evaluate("window.setTestLanguage('sv')");
+ await evaluate('window.loseReply=true');
+ await click('document.querySelector(".comparison>button")');await wait('document.querySelector("dialog[open]")');assert.equal(await evaluate('document.activeElement.textContent'),'Avbryt');
+ await click('document.querySelector("dialog footer button")');await wait('!document.querySelector("dialog")');assert.equal(await evaluate('window.imported===undefined'),true);
+ await click('document.querySelector(".comparison>button")');await click('document.querySelector("dialog footer button:last-child")');await wait('window.imported && !document.querySelector("dialog")');
+ assert.equal(await evaluate('window.calls.filter(c=>c==="confirm_ebird_import").length'),1);
  await evaluate('window.nextCsv=null');await click('document.querySelector("button.choose")');
  await wait('!document.querySelector("button.choose").disabled');assert.equal(await evaluate('document.querySelectorAll(".visit").length'),2);
  await evaluate('window.nextCsv='+"\"Species,Count,Location,Observation Date,Start Time\\nGreat Tit (Parus major),2,Synthetic location,\\\"Nov 1, 2026\\\",8:15 AM\\n\"");await click('document.querySelector("button.choose")');
  await wait('document.querySelector("[role=alert]")?.textContent.includes("enskild checklista")');
  await evaluate("window.setTestLanguage('en')");await wait('document.querySelector("[role=alert]").textContent.includes("single-checklist")');
- assert.deepEqual(await evaluate('[...new Set(window.calls)].sort()'),['ebird_preview_available','match_bird_paste_names','preview_ebird_export'].sort());
+ assert.deepEqual(await evaluate('[...new Set(window.calls)].sort()'),['ebird_preview_available','match_bird_paste_names','preview_ebird_export','new_journal_session','review_ebird_import','confirm_ebird_import','ebird_import_status','cancel_ebird_import'].sort());
 });

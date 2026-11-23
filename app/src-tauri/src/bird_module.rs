@@ -109,6 +109,7 @@ pub(crate) async fn set_bird_module_enabled(
     }
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<BirdModule>().set(enabled, || {
+            app.state::<crate::ebird_app::ImportState>().invalidate()?;
             app.state::<crate::bird_weather_fetch::PreviewState>()
                 .invalidate()
         })

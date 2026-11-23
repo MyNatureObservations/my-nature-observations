@@ -6,6 +6,7 @@
  import {makeBirdReader,entryHref,birdHref,deleteBirdList,birdListExists,type BirdList} from "$lib/birds";
  import {formatBirdDate,DEFAULT_BIRD_NAMES,loadBirdNamePreferences,saveBirdNamePreferences,type BirdNamePreferences} from "$lib/bird-names";
  import BirdJournalLinks from "$lib/components/BirdJournalLinks.svelte";
+ import EbirdListDetail from "$lib/components/EbirdListDetail.svelte";
  import BirdListDetail from "$lib/components/BirdListDetail.svelte";
  import DeleteEntryDialog from "$lib/components/DeleteEntryDialog.svelte";
  import * as m from "$lib/paraglide/messages.js";
@@ -73,9 +74,12 @@
  {#if available===false}<a href={entryId?entryHref(entryId):"/"}>← {entryId?m.bird_back_entry({}, {locale:language.current}):m.restore_back_to_home({}, {locale:language.current})}</a><p>{m.bird_unavailable({}, {locale:language.current})}</p>
  {:else if failed}<a href={origin}>← {entryId?m.bird_back_entry({}, {locale:language.current}):m.bird_overview({}, {locale:language.current})}</a><p role="alert">{m.bird_load_failed({}, {locale:language.current})}</p>
  {:else if list}
+  {#if list.source}<EbirdListDetail {list} {origin} locale={language.current}>
+   {#snippet links()}{#if generation!==null}<BirdJournalLinks {listId} {generation} locale={language.current} disabled={linksRefreshing||linksRefreshFailed} onchanged={linksChanged} onbusy={busy=>linkBusy=busy}/>{/if}{/snippet}
+  </EbirdListDetail>{:else}
   <BirdListDetail {list} {origin} standalone={!entryId} editHref={`${birdHref(entryId,list.id)}/edit`} onDelete={requestDeletion} actionsDisabled={deleting||deleteAttempted||linkBusy||linksRefreshing||linksRefreshFailed} locale={language.current} {preferences} {preferencesSaved} onPreferencesChange={setPreferences}>
    {#snippet links()}{#if generation!==null}<BirdJournalLinks {listId} {generation} locale={language.current} disabled={deleting||deleteAttempted||linksRefreshing||linksRefreshFailed} onchanged={linksChanged} onbusy={busy=>linkBusy=busy}/>{/if}{/snippet}
-  </BirdListDetail>
+  </BirdListDetail>{/if}
   {#if linksRefreshFailed}<p role="alert">{m.bird_link_refresh_failed({}, {locale:language.current})}</p>{/if}
   {#if deleteError}<p role="alert">{deleted?m.bird_deleted_navigation_failed({}, {locale:language.current}):m.bird_delete_failed({}, {locale:language.current})}</p>
    {#if deleted}<a href={returnDestination}>{entryId?m.bird_back_entry({}, {locale:language.current}):m.bird_overview({}, {locale:language.current})}</a>

@@ -240,7 +240,7 @@ fn validate_fields(f: &Fields) -> Result<()> {
     }
     Ok(())
 }
-fn validate_visit(v: &InputVisit) -> Result<Fields> {
+pub(crate) fn validate_visit(v: &InputVisit) -> Result<Fields> {
     if !source_id(&v.submission_id, 'S') || v.rows.is_empty() || v.rows.len() > 100000 {
         return invalid();
     }
@@ -327,11 +327,38 @@ fn import_checked(
     visits: &[InputVisit],
     before_commit: impl FnOnce(&Connection) -> Result<()>,
 ) -> Result<()> {
+    import_bound(
+        state,
+        search,
+        module,
+        generation,
+        visits,
+        None,
+        before_commit,
+    )
+}
+pub(crate) fn fingerprint(db: &Connection) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&records(db)?).map_err(sql)?)
+    ))
+}
+pub(crate) fn import_bound(
+    state: &DatabaseState,
+    search: &SearchState,
+    module: &crate::bird_module::BirdModule,
+    generation: u32,
+    visits: &[InputVisit],
+    expected: Option<&str>,
+    before_commit: impl FnOnce(&Connection) -> Result<()>,
+) -> Result<()> {
     let _module = module.command()?;
     search.with_write(||{
   let path=state.ready_database_path()?;let _operation=state.operation(Some(generation))?;
   let mut db=database::open_existing(&path)?;let tx=db.transaction().map_err(sql)?;
   if !database::ebird_schema::validate_schema(&tx).map_err(sql)?{return Err("ebird_schema_unsupported".into());}
+  if expected.is_some_and(|e|fingerprint(&tx).as_deref()!=Ok(e)){return Err("ebird_review_stale".into());}
   let mut seen=BTreeSet::new();let mut rows=0usize;let mut bytes=0usize;
   for visit in visits{
    let meta=validate_visit(visit)?;rows+=visit.rows.len();bytes+=serde_json::to_vec(visit).map_err(sql)?.len();

@@ -1,9 +1,37 @@
-# Import från eBird — beslut och första skrivskyddade förhandsgranskning
+# Import från eBird — beslut och bekräftad import
 
-Status: godkända produktbeslut; första implementationen är en macOS DEV-preview.
-Bygger på publik main `2db4d2667808f632f71197994e45d227695d91c9` och ägarens
-produktbeslut efter undersökningen 21 november 2026. Gränssnittet sparar ännu ingen
-import. En separat intern lagringsgrund utvecklas enligt statuslänken nedan.
+Status: bekräftad macOS-import och återimport är implementerad lokalt; manuell
+DEV-acceptans av detta steg återstår. Se [aktuell implementationsrapport](../development/MNO_Ebird_Confirmed_Import.md).
+Den tidigare skrivskyddade previewn och den skyddade lagringsgrunden är separata,
+tidigare steg. Historiken nedan beskriver deras dåvarande aktiveringsgränser.
+
+## Bekräftad import och återimport
+
+- Aktiverad fågelmodul på macOS ger åtkomst via observationsöversikten.
+  Funktionen är skild från Open Import som ersätter hela journalen.
+- Vald fullständig export jämförs med sparade eBird-besök. Nya, ändrade,
+  oförändrade och kvarvarande besök som saknas i filen redovisas före sparande.
+- Endast uttrycklig bekräftelse skriver. Granskningen binds på serversidan till
+  exakt validerad indata, journalgeneration och befintligt källtillstånd, med
+  15 minuters giltighet. Förändrat tillstånd kräver ny granskning.
+- Importen är atomär. Identisk återimport ändrar inget innehåll och skapar inga
+  dubbletter. Avbruten granskning lämnar journalen oförändrad.
+- Osäkert svar hanteras med operationsstatus, inte automatisk återkörning.
+  Status är processlokal; efter omstart krävs ny jämförelse och ny uttrycklig
+  bekräftelse. Detta är inte en beständig importhistorik.
+- Importerade besök visas i samma översikt, dagbok och fågelkalendertyp som
+  manuella besök, med källmärkning, originallänk och låsta källfält. Koppling
+  och riktad frånkoppling till journalanteckningar ändrar inte källsnapshots.
+- Inaktiva källrader med MNO-tillägg visas skrivskyddat under Tillägg att granska.
+  Ingen automatisk omkoppling, omfördelning eller redigering av importerade
+  raders foton införs. Källplatser förblir separata från MNO-platser.
+- Samma schema 13/arkivformat 14 och äldre läsare används. Aktivering påverkar
+  inte fullständig arkivverifiering. Windows/Linux förblir spärrade.
+
+Acceptans för detta steg: första import, identisk återimport, ändrade/saknade
+besök, avbryt, föråldrad bekräftelse, osäkert svar, källåsning, journalens
+kopplingar och bevarande efter omstart/arkivflöden. Automatiska resultat och
+återstående manuella kontroller redovisas i implementationsrapporten.
 
 ## Ägarskap och återimport
 
@@ -27,7 +55,7 @@ import. En separat intern lagringsgrund utvecklas enligt statuslänken nedan.
   och samma observationstyp/kalenderfärg oberoende av källa. Källmärkning och
   originallänk är separata från modul-/typidentitet.
 
-## Första DEV-steget: endast filgranskning
+## Historik: första DEV-steget, endast filgranskning
 
 Via aktiverade Fågelobservationer → Observationer → Granska eBird-export (DEV).
 Direktrutten och filkommandot kräver macOS DEV och aktiverad modul; ingen
@@ -53,7 +81,7 @@ att förhandsgranskningen stängs. Kontrollen gäller den valda filen; jämföre
 tidigare importer är ännu inte implementerad. Filer begränsas till 16 MB och
 100 000 datarader; alla problem behålls, medan UI visar de första 100 felen.
 
-## Acceptans
+## Historisk acceptans för preview-steget
 
 - Aktiverad macOS DEV-modul ger ingången; avstängd modul, andra plattformar och
   produktionsbyggen kan inte läsa en fil genom detta kommando.
@@ -68,7 +96,7 @@ tidigare importer är ännu inte implementerad. Filer begränsas till 16 MB och
   förändrar inte journalen eller modulvalet.
 - Användarens personliga exporter kopieras inte till repot eller testfixturer.
 
-## Senare, separat lagringsgrund
+## Historik: separat lagringsgrund
 
 Inför beständiga källidentiteter/snapshots, importhistorik, platsbindningar och
 separerade tillägg med skyddad migration och full arkivverifiering innan import
@@ -77,7 +105,7 @@ inte ett separat stabilt observations-ID. Bevara befintliga manuella fågellisto
 Återimportens diff/uppdatering, associationsskrivningar och eventuell mediahämtning
 är senare steg. Ingen pluginplattform eller generell importmotor behövs.
 
-## Intern lagringsgrund — ännu inte aktiverad
+## Historik: intern lagringsgrund före UI-aktivering
 
 Se [skyddad eBird-lagring](../development/MNO_Ebird_Persistence_Foundation.md)
 för schema-/arkivgränser, konservativa radkopplingsregler och verifiering.
@@ -100,3 +128,13 @@ Den vanliga macOS-starten använder nu den skyddade schema-13-uppgraderingen äv
 när fågelmodulen är avstängd. Pågående Recovery blockerar fortfarande uppgradering;
 ett äldre återställt resultat uppgraderas vid nästa vanliga start efter verifierad
 slutföring. Detta aktiverar inte eBird-importens sparande.
+
+
+## Framtida riktning: valbar källanslutning
+
+eBird-import är en valbar källanslutning inom fågelobservationer, inte en separat
+observationstyp. Fågeltypen och dess kalenderfärg är desamma oavsett källa.
+En separat aktiveringsinställning och dess livscykel återstår att utforma;
+avstängning får aldrig radera importerat innehåll. Detta inför inte någon ny
+inställning i nuvarande implementation, som fortsatt använder fågelmodulens
+befintliga aktivering. Ingen pluginplattform eller generell anslutningsmotor krävs.
