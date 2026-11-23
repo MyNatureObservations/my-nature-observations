@@ -7,7 +7,9 @@ export type Species = { id: string; english: string; swedish: string | null; sci
 export type BirdPhoto={caption?:string|null;row_id:string;asset_id:string;original_path:string;mime:string;width:number;height:number;preview:string};
 export type BirdRow = Species & { count: string; rowId?:string;photo?:BirdPhoto|null;taxonomyVersion?:string; comment?:string; commentOpen?:boolean };
 export type ListRow = Omit<Species, "id"> & { speciesId: string;rowId?:string|null;photo?:BirdPhoto|null; taxonomyVersion: string; count: string; comment:string|null };
-export type BirdList = { id: string; editToken:string; visitDate: string; visitStart: string | null; visitEnd: string | null; place: Place; rows: ListRow[]; weather?:VisitWeather[] };
+export type EbirdRow={fields:Record<string,string>;additions:string[]};
+export type EbirdSource={submissionId:string;fields:Record<string,string>;rows:EbirdRow[];unresolved:EbirdRow[];additions:string[]};
+export type BirdList = { source?:EbirdSource; id: string; editToken:string; visitDate: string; visitStart: string | null; visitEnd: string | null; place: Place; rows: ListRow[]; weather?:VisitWeather[] };
 export function speciesLabel(s: Pick<Species,"english"|"swedish"|"scientific">, locale: "sv"|"en"): string {
   return locale === "sv" ? s.swedish ?? `${s.english} · ${s.scientific}` : s.english;
 }

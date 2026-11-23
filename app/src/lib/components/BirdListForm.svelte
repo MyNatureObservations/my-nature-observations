@@ -27,7 +27,7 @@
  const entryId=page.params.id??null;const origin=$derived(editId?birdHref(entryId,editId):entryId?entryHref(entryId):"/observations");const map=getContext<PlaceMapController>(PLACE_MAP);
  let pasteOpen=$state(false);
  let photoPending=$state(0);
- let initialized=$state(false);
+ let initialized=$state(false),sourceLocked=$state(false);
  let proposedDate=$state(false),proposedPlace=$state(false);
  let searchInput=$state<HTMLInputElement|undefined>(undefined);
  let searching=$state(false);
@@ -54,7 +54,7 @@
    if(editId){
     const session=await invoke<{generation:number}>("new_journal_session");
     const response=await createJournalReader()<BirdList>("read_journal_bird_list",{entryId:null,id:editId,generation:session.generation});if(disposed)return;
-    generation=response.generation;const list=response.data;expectedToken=list.editToken;
+    generation=response.generation;const list=response.data;if(list.source){sourceLocked=true;return;}expectedToken=list.editToken;
     weather=list.weather??[];date=list.visitDate;place=list.place;start=list.visitStart??"";end=list.visitEnd??"";
     rows=list.rows.map(row=>({id:row.speciesId,rowId:row.rowId??undefined,photo:row.photo??null,taxonomyVersion:row.taxonomyVersion,english:row.english,swedish:row.swedish,scientific:row.scientific,count:row.count,comment:row.comment??"",commentOpen:!!row.comment}));
     baseline=JSON.stringify([date,place?.id,start,end,rows]);initialized=true;return;
@@ -195,6 +195,7 @@
   <span class="section-label">{m.bird_lists({}, {locale:language.current})}</span>
  </header>
  {#if error==="load"}<p class="error" role="alert">{m.bird_initialization_failed({}, {locale:language.current})}</p>
+ {:else if sourceLocked}<p>{m.ebird_source_locked({}, {locale:language.current})}</p>
  {:else if available===false}<p>{m.bird_unavailable({}, {locale:language.current})}</p>
  {:else if !initialized}<p role="status">{m.bird_loading({}, {locale:language.current})}</p>
  {:else}

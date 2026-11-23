@@ -1,9 +1,9 @@
-//! DEV-only external CSV read. No journal/database state or creation reservations.
+//! macOS external CSV read. No journal/database state or creation reservations.
 use std::io::Read;
 use tauri::Manager;
 const LIMIT: u64 = 16 * 1024 * 1024;
-fn allowed(macos: bool, development: bool, enabled: bool) -> bool {
-    macos && development && enabled
+fn allowed(macos: bool, _development: bool, enabled: bool) -> bool {
+    macos && enabled
 }
 #[tauri::command]
 pub(crate) fn ebird_preview_available(
@@ -68,11 +68,11 @@ pub(crate) async fn preview_ebird_export(
 mod tests {
     use super::*;
     #[test]
-    fn preview_requires_all_three_gates() {
+    fn preview_requires_macos_and_enabled_module() {
         for macos in [false, true] {
             for dev in [false, true] {
                 for enabled in [false, true] {
-                    assert_eq!(allowed(macos, dev, enabled), macos && dev && enabled);
+                    assert_eq!(allowed(macos, dev, enabled), macos && enabled);
                 }
             }
         }

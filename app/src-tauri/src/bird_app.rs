@@ -108,6 +108,8 @@ pub(crate) struct RowView {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ListView {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<EbirdView>,
     edit_token: String,
     id: String,
     visit_date: String,
@@ -810,7 +812,19 @@ pub(crate) fn read_journal_bird_lists(
         let path = state.ready_database_path()?;
         let _permit = state.operation(Some(generation))?;
         let db = crate::database::open_existing(&path)?;
-        let ids=db.prepare("SELECT list_id FROM journal_bird_lists WHERE entry_id=?1 ORDER BY list_id COLLATE BINARY").map_err(|e|e.to_string())?.query_map([&entry_id],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())?.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
+        let mut ids=db.prepare("SELECT list_id FROM journal_bird_lists WHERE entry_id=?1 ORDER BY list_id COLLATE BINARY").map_err(|e|e.to_string())?.query_map([&entry_id],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())?.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
+        if crate::database::ebird_schema::validate_schema(&db).map_err(|e| e.to_string())? {
+            ids.extend(
+                db.prepare(
+                    "SELECT visit_id FROM journal_ebird_visits WHERE entry_id=?1 ORDER BY visit_id",
+                )
+                .map_err(|e| e.to_string())?
+                .query_map([&entry_id], |r| r.get::<_, String>(0))
+                .map_err(|e| e.to_string())?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|e| e.to_string())?,
+            );
+        }
         drop(db);
         drop(_permit);
         let mut lists = Vec::new();
@@ -853,6 +867,9 @@ fn read_view(
     entry: Option<&str>,
     id: &str,
 ) -> Result<ListView, String> {
+    if let Some(source) = read_ebird_view(state, generation, entry, id)? {
+        return Ok(source);
+    }
     let list = crate::bird_observations::reopen(state, generation, id)?;
     if entry.is_some_and(|entry| !list.journal_entries.iter().any(|e| e == entry)) {
         return Err("bird_link_missing".into());
@@ -885,6 +902,7 @@ fn read_view(
         })
         .collect();
     Ok(ListView {
+        source: None,
         edit_token,
         id: list.id,
         visit_date: list.visit_date,
@@ -1164,10 +1182,30 @@ fn all_views(state: &DatabaseState, generation: u32) -> Result<Vec<ListView>, St
     let ids=db.prepare("SELECT id FROM bird_lists ORDER BY visit_date DESC,visit_start IS NULL,visit_start,id COLLATE BINARY").map_err(|e|e.to_string())?.query_map([],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())?.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
     drop(db);
     drop(permit);
-    ids.into_iter()
+    let mut all = ids
+        .into_iter()
         .map(|id| read_view(state, generation, None, &id))
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    let path = state.ready_database_path()?;
+    let _operation = state.operation(Some(generation))?;
+    let mut db = crate::database::open_existing(&path)?;
+    if crate::database::ebird_schema::validate_schema(&db).map_err(|e| e.to_string())? {
+        let tx = db.transaction().map_err(|e| e.to_string())?;
+        crate::storage_content::snapshot_v14(&tx, &std::sync::atomic::AtomicBool::new(false))
+            .map_err(|_| "bird_list_invalid")?;
+        let records = crate::ebird_persistence::records(&tx)?;
+        for record in &records {
+            if let crate::ebird_persistence::Record::Visit { id, .. } = record {
+                if let Some(view) = ebird_view_from_records(&records, None, id)? {
+                    all.push(view);
+                }
+            }
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+    }
+    Ok(all)
 }
+
 #[tauri::command]
 pub(crate) fn read_bird_lists(
     module: State<'_, crate::bird_module::BirdModule>,
@@ -1201,6 +1239,9 @@ pub(crate) fn set_journal_bird_link(
     {
         if !available(&state) {
             return Err("bird_schema_unsupported".into());
+        }
+        if read_ebird_view(&state, generation, None, &id)?.is_some() {
+            return set_ebird_link(&state, &search, generation, &id, &entry_id, linked);
         }
         crate::bird_observations::set_link(&state, &search, generation, &id, &entry_id, linked)
     }
@@ -1532,17 +1573,29 @@ fn journal_targets(
         crate::storage_content::snapshot_v13(&tx, &std::sync::atomic::AtomicBool::new(false))
     })
     .map_err(|_| "bird_list_invalid")?;
-    if !tx
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM bird_lists WHERE id=?1)",
-            [id],
-            |r| r.get::<_, bool>(0),
-        )
-        .map_err(|e| e.to_string())?
+    let imported: bool =
+        if crate::database::ebird_schema::validate_schema(&tx).map_err(|e| e.to_string())? {
+            tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM ebird_visits WHERE id=?1)",
+                [id],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())?
+        } else {
+            false
+        };
+    if !imported
+        && !tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM bird_lists WHERE id=?1)",
+                [id],
+                |r| r.get::<_, bool>(0),
+            )
+            .map_err(|e| e.to_string())?
     {
         return Err("bird_list_missing".into());
     }
-    let rows=tx.prepare("SELECT e.id,e.entry_date,e.title,e.content_json,EXISTS(SELECT 1 FROM journal_bird_lists l WHERE l.entry_id=e.id AND l.list_id=?1) FROM journal_entries e ORDER BY e.entry_date DESC,e.created_at DESC,e.id COLLATE BINARY").map_err(|e|e.to_string())?.query_map([id],|r|{
+    let rows=tx.prepare(if imported {"SELECT e.id,e.entry_date,e.title,e.content_json,EXISTS(SELECT 1 FROM journal_ebird_visits l WHERE l.entry_id=e.id AND l.visit_id=?1) FROM journal_entries e ORDER BY e.entry_date DESC,e.created_at DESC,e.id COLLATE BINARY"} else {"SELECT e.id,e.entry_date,e.title,e.content_json,EXISTS(SELECT 1 FROM journal_bird_lists l WHERE l.entry_id=e.id AND l.list_id=?1) FROM journal_entries e ORDER BY e.entry_date DESC,e.created_at DESC,e.id COLLATE BINARY"}).map_err(|e|e.to_string())?.query_map([id],|r|{
         let raw:String=r.get(3)?;
         let text=crate::journal_search::document_text(&raw).split_whitespace().collect::<Vec<_>>().join(" ");
         let preview=text.chars().take(160).collect::<String>();
@@ -1625,3 +1678,210 @@ mod photo_contract_tests {
 #[cfg(all(test, target_os = "macos"))]
 #[path = "bird_app/schema13_tests.rs"]
 mod schema13_tests;
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EbirdRow {
+    fields: crate::ebird_persistence::Fields,
+    additions: Vec<String>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EbirdView {
+    submission_id: String,
+    fields: crate::ebird_persistence::Fields,
+    rows: Vec<EbirdRow>,
+    unresolved: Vec<EbirdRow>,
+    additions: Vec<String>,
+}
+#[cfg(target_os = "macos")]
+fn read_ebird_view(
+    state: &DatabaseState,
+    generation: u32,
+    entry: Option<&str>,
+    id: &str,
+) -> Result<Option<ListView>, String> {
+    use crate::ebird_persistence as store;
+    let path = state.ready_database_path()?;
+    let _operation = state.operation(Some(generation))?;
+    let mut db = crate::database::open_existing(&path)?;
+    let tx = db.transaction().map_err(|e| e.to_string())?;
+    if !crate::database::ebird_schema::validate_schema(&tx).map_err(|e| e.to_string())? {
+        return Ok(None);
+    }
+    if !tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM ebird_visits WHERE id=?1)",
+            [id],
+            |r| r.get::<_, bool>(0),
+        )
+        .map_err(|e| e.to_string())?
+    {
+        return Ok(None);
+    }
+    crate::storage_content::snapshot_v14(&tx, &std::sync::atomic::AtomicBool::new(false))
+        .map_err(|_| "bird_list_invalid")?;
+    let all = store::records(&tx)?;
+    let view = ebird_view_from_records(&all, entry, id)?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(view)
+}
+#[cfg(target_os = "macos")]
+fn ebird_view_from_records(
+    all: &[crate::ebird_persistence::Record],
+    entry: Option<&str>,
+    id: &str,
+) -> Result<Option<ListView>, String> {
+    use crate::ebird_persistence::{self as store, Record};
+    let Some((submission, fields)) = all.iter().find_map(|r| {
+        if let Record::Visit {
+            id: owner,
+            submission_id,
+            source_json,
+        } = r
+        {
+            (owner == id).then_some((submission_id, source_json))
+        } else {
+            None
+        }
+    }) else {
+        return Ok(None);
+    };
+    if entry.is_some_and(|e| {
+        !all.iter()
+            .any(|r| matches!(r,Record::Link{entry_id,visit_id} if entry_id==e&&visit_id==id))
+    }) {
+        return Err("bird_link_missing".into());
+    }
+    let fields: store::Fields = serde_json::from_str(fields).map_err(|e| e.to_string())?;
+    let mut source_rows = all
+        .iter()
+        .filter_map(|r| {
+            if let Record::Row {
+                id: row,
+                visit_id,
+                position,
+                active,
+                source_json,
+            } = r
+            {
+                (visit_id == id).then_some((row, *position, *active, source_json))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    source_rows.sort_by_key(|r| (r.1, r.0));
+    let mut rows = Vec::new();
+    let mut active = Vec::new();
+    let mut unresolved = Vec::new();
+    for (row, _, enabled, json) in source_rows {
+        let f: store::Fields = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        let additions = all
+            .iter()
+            .filter_map(|r| {
+                if let Record::Addition {
+                    row_id: Some(r),
+                    content,
+                    ..
+                } = r
+                {
+                    (r == row).then_some(content.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if enabled {
+            rows.push(RowView {
+                row_id: Some(row.clone()),
+                photo: None,
+                species_id: String::new(),
+                taxonomy_version: String::new(),
+                count: f["Count"].clone(),
+                comment: f.get("Observation Details").cloned(),
+                english: f["Common Name"].clone(),
+                swedish: None,
+                scientific: f["Scientific Name"].clone(),
+            });
+            active.push(EbirdRow {
+                fields: f,
+                additions,
+            });
+        } else if !additions.is_empty() {
+            unresolved.push(EbirdRow {
+                fields: f,
+                additions,
+            });
+        }
+    }
+    let place = crate::place_registry::Place {
+        id: format!("ebird:{}", fields["Location ID"]),
+        name: fields["Location"].clone(),
+        latitude: Some(
+            fields["Latitude"]
+                .parse()
+                .map_err(|_| "bird_list_invalid")?,
+        ),
+        longitude: Some(
+            fields["Longitude"]
+                .parse()
+                .map_err(|_| "bird_list_invalid")?,
+        ),
+        revision: "0".into(),
+    };
+    let start = fields.get("Time").and_then(|s| {
+        let (t, p) = s.split_once(' ')?;
+        let (h, m) = t.split_once(':')?;
+        let h = h.parse::<u32>().ok()?;
+        Some(format!(
+            "{:02}:{m}",
+            h % 12 + if p == "PM" { 12 } else { 0 }
+        ))
+    });
+    let view = ListView {
+        source: Some(EbirdView {
+            submission_id: submission.clone(),
+            fields: fields.clone(),
+            rows: active,
+            unresolved,
+            additions: all
+                .iter()
+                .filter_map(|r| {
+                    if let Record::Addition {
+                        visit_id,
+                        row_id: None,
+                        content,
+                        ..
+                    } = r
+                    {
+                        (visit_id == id).then_some(content.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        }),
+        edit_token: String::new(),
+        id: id.into(),
+        visit_date: fields["Date"].clone(),
+        visit_start: start,
+        visit_end: None,
+        place,
+        rows,
+        weather: Vec::new(),
+    };
+    Ok(Some(view))
+}
+#[cfg(target_os = "macos")]
+fn set_ebird_link(
+    state: &DatabaseState,
+    search: &SearchState,
+    generation: u32,
+    id: &str,
+    entry: &str,
+    linked: bool,
+) -> Result<(), String> {
+    search.with_write(||{let path=state.ready_database_path()?;let _operation=state.operation(Some(generation))?;let mut db=crate::database::open_existing(&path)?;let tx=db.transaction().map_err(|e|e.to_string())?;
+ if linked{tx.execute("INSERT INTO journal_ebird_visits(entry_id,visit_id) VALUES(?1,?2) ON CONFLICT DO NOTHING",rusqlite::params![entry,id]).map_err(|e|e.to_string())?;}else{tx.execute("DELETE FROM journal_ebird_visits WHERE entry_id=?1 AND visit_id=?2",rusqlite::params![entry,id]).map_err(|e|e.to_string())?;}
+ crate::storage_content::snapshot_v14(&tx,&std::sync::atomic::AtomicBool::new(false)).map_err(|_|"bird_list_invalid")?;tx.commit().map_err(|e|e.to_string())})
+}

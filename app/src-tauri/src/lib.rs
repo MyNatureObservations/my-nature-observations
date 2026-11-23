@@ -1,4 +1,5 @@
 mod about;
+mod ebird_app;
 #[allow(dead_code)] // Internal import writes remain unavailable to IPC/UI.
 mod ebird_persistence;
 mod ebird_preview;
@@ -101,6 +102,7 @@ pub fn run() {
         .manage(journal_search::SearchState::default())
         .manage(restore_app::RestoreState::default())
         .manage(import_app::ImportState::default())
+        .manage(ebird_app::ImportState::default())
         .manage(database_state::DatabaseState::default())
         .manage(weather::historical::saving::PreviewState::default())
         .manage(bird_weather_fetch::PreviewState::default())
@@ -203,6 +205,10 @@ pub fn run() {
             place_registry::set_journal_place,
             place_registry::read_weather_default_place,
             place_registry::set_weather_default_place,
+            ebird_app::review_ebird_import,
+            ebird_app::confirm_ebird_import,
+            ebird_app::ebird_import_status,
+            ebird_app::cancel_ebird_import,
             ebird_preview::ebird_preview_available,
             ebird_preview::preview_ebird_export,
             bird_module::bird_module_supported,

@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {sortSourceSpecies} from '$lib/ebird-presentation';
  import WeatherOverview from "$lib/components/WeatherOverview.svelte";
  import {visitContext,visitWeatherSummary} from "$lib/bird-weather";
  import type {BirdList} from "$lib/birds";
@@ -12,7 +13,8 @@
  <span class="visit-line"><span class="visit"><strong>{list.place.name}</strong>{#if list.visitStart||list.visitEnd}<span>{' · '}{list.visitStart??"…"}–{list.visitEnd??"…"}</span>{/if}</span>
  {#if weather.manual||weather.fetched}<span class="visit-weather"><WeatherOverview data={weather} {locale} compact/></span>{/if}
  {#if list.visitDate!==journalDate}<span class="visit-date">{formatBirdDate(list.visitDate,locale)}</span>{/if}</span>
- <span class="species-preview">{#each list.rows.slice(0,3) as row,i}{#if i>0}{' · '}{/if}{capitalizeCommonName(speciesLabel(row,locale),locale)} <b>{row.count}</b>{/each}{#if list.rows.length>3}{' · '}{m.bird_more_rows({count:list.rows.length-3}, {locale})}{/if}</span>
+ <span class="species-preview">{#each (list.source?sortSourceSpecies(list.rows,locale,row=>row.english||row.scientific):list.rows).slice(0,3) as row,i}{#if i>0}{' · '}{/if}{list.source?(row.english||row.scientific):capitalizeCommonName(speciesLabel(row,locale),locale)} <b>{row.count==='X'?m.ebird_unspecified({}, {locale}):row.count}</b>{/each}{#if list.rows.length>3}{' · '}{m.bird_more_rows({count:list.rows.length-3}, {locale})}{/if}</span>
+ {#if list.source}<span class="linked">{m.ebird_from({}, {locale})}</span>{/if}
  {#if linked}<span class="linked">{m.bird_linked({}, {locale})}</span>{/if}
 {/snippet}
 {#if onSelect}<button class="bird-preview" type="button" {disabled} onclick={onSelect}>{@render content()}</button>

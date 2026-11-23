@@ -2,7 +2,8 @@
 
 Base: public main `a24fb8b27948a911087c4d3351cc734aeaf61b80`.
 Branch: `codex/ebird-persistence-foundation`. Current local phase: ordinary macOS
-startup reaches schema 13; user-facing eBird import writing remains disabled.
+startup reaches schema 13; user-facing eBird import writing remained disabled in this foundation checkpoint.
+The subsequent [confirmed-import flow](MNO_Ebird_Confirmed_Import.md) documents local UI activation.
 [Requirements](../requirements/Import_fran_eBird.md).
 
 ## Ownership and identity

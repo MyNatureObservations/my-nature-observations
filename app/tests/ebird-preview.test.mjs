@@ -53,11 +53,11 @@ test('catalog candidates require an exact scientific name and do not overwrite s
  assert.equal(api.mediaHref('10001'),'https://macaulaylibrary.org/asset/10001');assert.throws(()=>api.mediaHref('../bad'));
 });
 const component=read('../src/lib/components/EbirdPreview.svelte');
-function harness({enabled=true,result=fixture,fail=null}={}){
+function harness({enabled=true,result=fixture,fail=null,confirmFailure=false,status="committed"}={}){
  let mount;const calls=[],events=new EventTarget();
- const context=vm.createContext({$state:v=>v,$derived:v=>v,groupPreviewVisits:presentation.groupPreviewVisits,onMount:f=>mount=f,language:{current:'sv'},window:events,
+ const context=vm.createContext({$state:v=>v,$derived:v=>v,groupPreviewVisits:presentation.groupPreviewVisits,onMount:f=>mount=f,language:{current:'sv'},window:events,Event,beforeNavigate:()=>{},
   m:new Proxy({},{get:()=>()=>''}),parseEbird:api.parseEbird,applyCatalogMatches:api.applyCatalogMatches,mediaId:api.mediaId,mediaHref:api.mediaHref,
-  invoke:async(command,args)=>{calls.push(command);if(command==='ebird_preview_available')return enabled;if(command==='preview_ebird_export'){if(fail)throw fail;return result;}if(command==='match_bird_paste_names')return args.names.map(name=>name==='Parus major'?[species]:[]);throw Error(command);},openUrl:async()=>{}});
+  invoke:async(command,args)=>{calls.push(command);if(command==='ebird_preview_available')return enabled;if(command==='preview_ebird_export'){if(fail)throw fail;return result;}if(command==='new_journal_session')return {generation:1};if(command==='review_ebird_import')return {operationId:'review-1',generation:1,changes:args.visits.map(v=>({submissionId:v.submission_id,kind:'new',fields:v.rows[0]}))};if(command==='confirm_ebird_import'){if(confirmFailure)throw Error('lost reply');return 'committed';}if(command==='ebird_import_status')return status;if(command==='cancel_ebird_import')return null;if(command==='match_bird_paste_names')return args.names.map(name=>name==='Parus major'?[species]:[]);throw Error(command);},openUrl:async()=>{}});
  const script=component.match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
  return {calls,run:s=>vm.runInContext(s,context),mount:()=>mount(),events};
@@ -65,7 +65,7 @@ function harness({enabled=true,result=fixture,fail=null}={}){
 const settle=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
 test('real preview controller loads read-only, cancellation preserves preview and no write command is used',async()=>{
  const h=harness();h.mount();await settle();await h.run('choose()');assert.equal(h.run('preview.visits.length'),2);assert.equal(h.run('preview.unmatched.length'),1);
- assert.deepEqual([...new Set(h.calls)].sort(),['ebird_preview_available','match_bird_paste_names','preview_ebird_export'].sort());
+ assert.deepEqual([...new Set(h.calls)].sort(),['ebird_preview_available','match_bird_paste_names','preview_ebird_export','new_journal_session','review_ebird_import'].sort());
  const cancel=harness({result:null});cancel.mount();await settle();cancel.run('preview={sentinel:true}');await cancel.run('choose()');assert.equal(cancel.run('preview.sentinel'),true);assert.equal(cancel.run('busy'),false);
 });
 test('disabled route cannot select files, read errors are explicit and disposed results are ignored',async()=>{
@@ -73,14 +73,14 @@ test('disabled route cannot select files, read errors are explicit and disposed 
  const failed=harness({fail:'ebird_unreadable'});failed.mount();await settle();await failed.run('choose()');assert.equal(failed.run('error'),'ebird_unreadable');assert.equal(failed.run('preview'),null);
  const late=harness();const dispose=late.mount();await settle();const pending=late.run('choose()');dispose();await pending;assert.equal(late.run('preview'),null);
 });
-test('localized markup compiles with accessible native disclosure and explicit non-persistence copy',()=>{
+test('localized markup compiles with accessible native disclosure and explicit source-ownership copy',()=>{
  assert.equal(compile(component,{generate:'client'}).warnings.length,0);
  for(const locale of ['sv','en']){
   const m=JSON.parse(read(`../messages/${locale}.json`));for(const key of [...component.matchAll(/m\.(ebird_\w+)/g)].map(m=>m[1]))assert.ok(m[key],key);
-  assert.match(m.ebird_validation_only,locale==='sv'?/Jämförelse.*stöds ännu inte/:/Comparison with previous imports is not implemented/);
+  assert.match(m.ebird_validation_only,locale==='sv'?/skrivskyddade/:/read-only/);
  }
  assert.match(component,/<details class="visit"/);assert.match(component,/role="alert"/);assert.doesNotMatch(component,/create_journal|reserve_bird|set_journal|update_.*list/);
- const backend=read('../src-tauri/src/ebird_preview.rs');assert.match(backend,/DEVELOPMENT_BUILD/);assert.match(backend,/module.command\(\)\?/);assert.doesNotMatch(backend,/DatabaseState|ready_database_path|Uuid/);
+ const backend=read('../src-tauri/src/ebird_preview.rs');assert.match(backend,/target_os = "macos"/);assert.match(backend,/module.command\(\)\?/);assert.doesNotMatch(backend,/DatabaseState|ready_database_path|Uuid/);
 });
 
 test('parsed chronology uses newest date, ascending local time, missing last and checklist tie-breaker without mutation',()=>{
@@ -96,6 +96,53 @@ test('localized calendar dates and clock times never shift with the host timezon
 });
 test('compact preview retains first three source names and counts and reports remaining birds',()=>{
  const p=api.parseEbird(fixture),visit=p.visits[0];visit.rows.push({...visit.rows[0],line:99},{...visit.rows[0],line:100});
- const compact=presentation.compactSpecies(visit);assert.equal(compact.more,1);assert.equal(compact.rows.length,3);assert.equal(presentation.sourceSpeciesName(compact.rows[0]),'Great Tit');assert.equal(compact.rows[1].fields.Count,'X');assert.equal(visit.rows.length,4);
+ const compact=presentation.compactSpecies(visit);assert.equal(compact.more,1);assert.equal(compact.rows.length,3);assert.equal(presentation.sourceSpeciesName(compact.rows[0]),'Great Tit');assert.ok(compact.rows.every(row=>row.fields.Count==='6'));assert.equal(visit.rows.length,4);
  assert.ok(component.indexOf('<ul class="rows">')<component.indexOf('<details class="source-details">'));
+});
+
+test('explicit confirm resolves a lost reply by status and never blindly reapplies',async()=>{
+ const h=harness({confirmFailure:true});h.mount();await settle();await h.run('choose()');assert.ok(h.run('comparison'));
+ assert.equal(h.calls.filter(c=>c==='confirm_ebird_import').length,0);await h.run('confirm()');assert.equal(h.run('saved'),true);assert.equal(h.calls.filter(c=>c==='confirm_ebird_import').length,1);assert.ok(h.calls.includes('ebird_import_status'));
+ const uncertain=harness({confirmFailure:true,status:'unknown'});uncertain.mount();await settle();await uncertain.run('choose()');await uncertain.run('confirm()');await uncertain.run('confirm()');assert.equal(uncertain.calls.filter(c=>c==='confirm_ebird_import').length,1);assert.equal(uncertain.run('error'),'uncertain');assert.ok(uncertain.run('preview'));
+ const cancel=harness();cancel.mount();await settle();await cancel.run('choose()');await cancel.run('cancelReview()');assert.equal(cancel.run('comparison'),null);assert.ok(!cancel.calls.includes('confirm_ebird_import'));
+});
+test('source detail has locked fields, safe media references and preserved inactive additions',()=>{
+ const detail=read('../src/lib/components/EbirdListDetail.svelte');assert.equal(compile(detail,{generate:'client'}).warnings.length,0);assert.match(detail,/ebird_source_locked/);assert.match(detail,/source.unresolved/);assert.match(detail,/mediaId\(id\)/);assert.doesNotMatch(detail,/update_journal|delete_journal|<input|<textarea/);
+ const form=read('../src/lib/components/BirdListForm.svelte');assert.match(form,/if\(list.source\)\{sourceLocked=true;return;\}/);
+});
+
+test('replacing a reviewed file invalidates its capability before parsing a new file',async()=>{
+ const h=harness();h.mount();await settle();await h.run('choose()');await h.run('choose()');
+ assert.equal(h.calls.filter(c=>c==='cancel_ebird_import').length,1);
+ assert.ok(h.calls.lastIndexOf('cancel_ebird_import')<h.calls.lastIndexOf('review_ebird_import'));
+ assert.ok(!h.calls.includes('confirm_ebird_import'));
+});
+
+test('Swedish source species sorting is case-insensitive, stable and presentation-only',()=>{
+ const names=['Örn','Ärla','Åda','Zebra','skata','Skata','albatross'];
+ const rows=names.map((name,i)=>({fields:{'Common Name':name,'Scientific Name':`Taxon ${i}`,Count:String(i+1),'Observation Details':`Comment ${i}`,'ML Catalog Numbers':String(100+i)},additions:[`Addition ${i}`]}));
+ const before=JSON.stringify(rows),sorted=presentation.sortSourceSpecies(rows,'sv',presentation.sourceSpeciesName);
+ assert.deepEqual(sorted.map(r=>r.fields['Common Name']),['albatross','skata','Skata','Zebra','Åda','Ärla','Örn']);
+ assert.equal(sorted[1],rows[4]);assert.equal(sorted[2],rows[5]);assert.equal(JSON.stringify(rows),before);
+ assert.equal(new Set(sorted).size,rows.length);for(const row of sorted)assert.ok(rows.includes(row));
+ assert.deepEqual(presentation.sortSourceSpecies(rows,'en',presentation.sourceSpeciesName).map(r=>r.fields['Common Name']),['Åda','albatross','Ärla','Örn','skata','Skata','Zebra']);
+ const visit={rows};assert.deepEqual(presentation.compactSpecies(visit,'sv').rows,sorted.slice(0,3));
+ assert.equal(JSON.stringify(rows),before);
+});
+test('all eBird species surfaces use the same locale-aware display sort and import naming',()=>{
+ assert.match(component,/compactSpecies\(visit,language.current\)/);assert.match(component,/sortSourceSpecies\(visit.rows,language.current,sourceSpeciesName\)/);
+ const detail=read('../src/lib/components/EbirdListDetail.svelte');assert.match(detail,/sortSourceSpecies\(list.source.rows,locale,sourceSpeciesName\)/);assert.match(detail,/sortSourceSpecies\(list.source.unresolved,locale,sourceSpeciesName\)/);
+ assert.match(read('../src/lib/components/BirdVisitPreview.svelte'),/list.source\?sortSourceSpecies\(list.rows,locale/);
+ assert.equal(JSON.parse(read('../messages/sv.json')).ebird_title,'Importera från eBird');assert.equal(JSON.parse(read('../messages/en.json')).ebird_title,'Import from eBird');
+});
+
+test('observation actions share a wrapping row and general source explanations are secondary',()=>{
+ const overview=read('../src/routes/observations/+page.svelte');
+ const actions=overview.match(/<div class="observation-actions">([\s\S]*?)<\/div>/)[1];
+ assert.match(actions,/href="\/observations\/new"/);assert.match(actions,/href="\/observations\/ebird-preview"/);assert.doesNotMatch(actions,/<p>/);assert.match(overview,/\.observation-actions\{[^}]*flex-wrap:wrap/);
+ const detail=read('../src/lib/components/EbirdListDetail.svelte');const source=detail.indexOf('<details class="source-details">');
+ assert.ok(detail.indexOf('m.ebird_source_place')>source);assert.ok(detail.indexOf('m.ebird_catalog_note')>source);
+ for(const key of ['m.ebird_source_locked','m.ebird_from','m.ebird_original','m.ebird_review_additions','role="alert"'])assert.ok(detail.indexOf(key)<source);
+ assert.equal(JSON.parse(read('../messages/sv.json')).ebird_source_locked,'Uppgifterna hämtas från eBird och ändras där.');
+ assert.equal(JSON.parse(read('../messages/en.json')).ebird_source_locked,'These details come from eBird and are edited there.');
 });

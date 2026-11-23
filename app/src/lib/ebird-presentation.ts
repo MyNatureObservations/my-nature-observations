@@ -25,6 +25,11 @@ export function formatSourceTime(value:string,locale:'sv'|'en'):string{
  const date=new Date('2000-01-01T00:00:00Z');date.setUTCMinutes(minutes);
  return new Intl.DateTimeFormat(locale==='sv'?'sv-SE':'en-GB',{hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'UTC'}).format(date);
 }
-export function sourceSpeciesName(row:SourceRow):string{return row.fields['Common Name']||row.fields['Scientific Name'];}
-export function compactSpecies(visit:Visit):{rows:SourceRow[];more:number}{return {rows:visit.rows.slice(0,3),more:Math.max(0,visit.rows.length-3)};}
+export function sourceSpeciesName(row:{fields:Record<string,string>}):string{return row.fields['Common Name']||row.fields['Scientific Name'];}
+// Copy before sorting: persisted source ordering and row ownership stay untouched.
+export function sortSourceSpecies<T>(rows:readonly T[],locale:'sv'|'en',name:(row:T)=>string):T[]{
+ const collator=new Intl.Collator(locale==='sv'?'sv-SE':'en-GB',{sensitivity:'accent'});
+ return rows.map((row,index)=>({row,index})).sort((a,b)=>collator.compare(name(a.row),name(b.row))||a.index-b.index).map(item=>item.row);
+}
+export function compactSpecies(visit:Visit,locale:'sv'|'en'='sv'):{rows:SourceRow[];more:number}{return {rows:sortSourceSpecies(visit.rows,locale,sourceSpeciesName).slice(0,3),more:Math.max(0,visit.rows.length-3)};}
 export function displaySourceCount(value:string,locale:'sv'|'en'):string{return /^[1-9]\d*$/.test(value)?formatBirdCount(value,locale):value;}

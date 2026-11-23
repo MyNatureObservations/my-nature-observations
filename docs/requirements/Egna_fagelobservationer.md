@@ -308,3 +308,11 @@ arkiv med länkade/olänkade listor i avstängt läge samt oförändrat val efte
 Se [Import från eBird](Import_fran_eBird.md) för godkända ägarskaps-/återimportbeslut
 och den första skrivskyddade macOS DEV-förhandsgranskningen. Den delar fågelmodul
 men är inte whole-journal Open Import och inför ingen importlagring i detta steg.
+
+
+## Framtida krav: skapa kopplad journalanteckning från observation
+
+Från en befintlig observation ska användaren kunna skapa en ny journalanteckning
+som kopplas till observationen. Detta är ett framtida krav, inte levererat i det
+nuvarande flödet. Befintlig koppling till en redan sparad journalanteckning är en
+separat funktion. Inget automatiskt skapande av journaltext införs i detta steg.
