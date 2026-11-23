@@ -130,11 +130,15 @@ ett äldre återställt resultat uppgraderas vid nästa vanliga start efter veri
 slutföring. Detta aktiverar inte eBird-importens sparande.
 
 
-## Framtida riktning: valbar källanslutning
+## Valbar källanslutning
 
-eBird-import är en valbar källanslutning inom fågelobservationer, inte en separat
-observationstyp. Fågeltypen och dess kalenderfärg är desamma oavsett källa.
-En separat aktiveringsinställning och dess livscykel återstår att utforma;
-avstängning får aldrig radera importerat innehåll. Detta inför inte någon ny
-inställning i nuvarande implementation, som fortsatt använder fågelmodulens
-befintliga aktivering. Ingen pluginplattform eller generell anslutningsmotor krävs.
+eBird är en källa inom fågelobservationer, med samma observationstyp och
+kalenderfärg. Inställningar → Moduler → Fågelobservationer → Import från eBird
+är avstängd utan sparat val. Valet lagras per installation/konto utanför
+journalen, separat för DEV och produktion. Import kräver båda reglagen.
+Fågelmodulen kan stängas av utan att ändra det sparade eBird-valet.
+
+När enbart eBird-anslutningen är avstängd finns importerade besök kvar och
+kan öppnas och länkas. Pågående bekräftade skrivningar får slutföras före
+avstängning. Tidigare granskningar och sena filresultat passerar inte en
+av/på-cykel. Journalarkiven bevarar innehållet och ändrar inte kontots val.

@@ -12,7 +12,7 @@ import {svelte} from '@sveltejs/vite-plugin-svelte';
 const root=fileURLToPath(new URL('..',import.meta.url));
 test('rendered module toggle is default-off, keyboard accessible and failure-safe',async t=>{
  const modules={
- 'module-api':`export async function invoke(command,args){window.calls??=[];window.calls.push(command);if(command==='bird_module_supported')return true;if(command==='bird_module_enabled')return window.enabled??false;if(command==='set_bird_module_enabled'){if(window.failSetting)throw Error('disk');window.enabled=args.enabled;if(window.loseResponse)throw Error('lost response');return;}throw Error(command);}`,
+ 'module-api':`export async function invoke(command,args){window.calls??=[];window.calls.push(command);if(command==='bird_module_supported')return true;if(command==='ebird_connection_enabled')return window.connectionEnabled??false;if(command==='set_ebird_connection_enabled'){window.connectionEnabled=args.enabled;return;}if(command==='bird_module_enabled')return window.enabled??false;if(command==='set_bird_module_enabled'){if(window.failSetting)throw Error('disk');window.enabled=args.enabled;if(window.loseResponse)throw Error('lost response');return;}throw Error(command);}`,
  'module-navigation':`export async function goto(path){window.destination=path;}`,
  'module-page':`export const page={url:new URL('https://mno.invalid/')};`,
  'bird-main':`import {setLocale} from '${root}/src/lib/paraglide/runtime.js';setLocale('sv',{reload:false});import {language} from '${root}/src/lib/language.svelte.ts';language.current='sv';window.setTestLanguage=locale=>language.current=locale;import {mount} from 'svelte';import Fixture from '${root}/tests/fixtures/BirdModuleSetting.svelte';mount(Fixture,{target:document.getElementById('app')});`
@@ -47,6 +47,16 @@ test('rendered module toggle is default-off, keyboard accessible and failure-saf
  assert.equal(control.name.value,'Fågelobservationer');
  assert.equal(control.properties.find(p=>p.name==='checked').value.value,'false');
  assert.equal(await evaluate('document.querySelector("#bird-module-description").textContent'),'Registrera fåglar från dina besök. Dina uppgifter finns kvar när modulen är avstängd.');
+ assert.equal(await evaluate('document.querySelectorAll(".setting-help[aria-expanded=true]").length'),0);
+ assert.equal(await evaluate('document.querySelector(".setting-help").ariaLabel'),'Om Fågelobservationer');
+ await evaluate('document.querySelector(".setting-help").focus()');
+ for(const type of ['keyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,...(type==='keyDown'?{text:'\r'}:{})});
+ await wait('document.querySelector(".setting-help").ariaExpanded==="true"');
+ assert.notEqual(await evaluate('getComputedStyle(document.activeElement).outlineStyle'),'none');
+ await click('document.querySelector(".source-setting .setting-help")');
+ await wait('document.querySelector(".source-setting .setting-help").ariaExpanded==="true"');
+ assert.equal(await evaluate('document.querySelector("#ebird-connection-dependency").textContent'),'Aktivera Fågelobservationer först.');
+ assert.equal(await evaluate('window.calls.filter(c=>c.startsWith("set_")).length'),0);
  await evaluate('document.querySelector("input").focus()');
  for(const type of ['keyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:' ',code:'Space',windowsVirtualKeyCode:32,...(type==='keyDown'?{text:' '}:{} )});
  await wait('document.querySelector("input").checked');
@@ -67,11 +77,29 @@ test('rendered module toggle is default-off, keyboard accessible and failure-saf
  await evaluate("window.setTestLanguage('en')");await wait('document.querySelector("label").textContent.includes("Bird observations")');
  assert.equal(await evaluate('document.querySelector("#bird-module-description").textContent'),'Record birds from your visits. Your data is kept when the module is turned off.');
  await send('Emulation.setDeviceMetricsOverride',{width:320,height:700,deviceScaleFactor:1,mobile:false});
+ const helpFits=()=>evaluate(`[...document.querySelectorAll('.setting-row')].every(row=>{
+  const label=row.querySelector('label').getBoundingClientRect(), help=row.querySelector('.help-text').getBoundingClientRect(), toggle=row.querySelector('input').getBoundingClientRect();
+  return Math.abs(help.left-label.left)<1 && help.top>=label.bottom && help.right>=toggle.right-1;
+ })`);
+ assert.equal(await helpFits(),true);
  assert.equal(await evaluate('document.documentElement.scrollWidth<=320'),true);
+ assert.equal(await helpFits(),true);
+ await evaluate("window.setTestLanguage('sv')");
+ await wait('document.querySelector(".setting-help").ariaLabel==="Om Fågelobservationer"');
+ assert.equal(await helpFits(),true);
  const writesBeforeCollapse=await evaluate('window.calls.filter(c=>c==="set_bird_module_enabled").length');
  await evaluate('document.querySelector("summary").focus()');
  for(const type of ['keyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,...(type==='keyDown'?{text:'\r'}:{})});
  await wait('!document.querySelector("details").open');
  assert.equal(await evaluate('window.calls.filter(c=>c==="set_bird_module_enabled").length'),writesBeforeCollapse);
  assert.equal(await evaluate('window.enabled'),false);
+ await evaluate('document.querySelector("summary").click();window.loseResponse=false');
+ const sourceSwitch='document.querySelector(".source-setting input")';
+ assert.equal(await evaluate(sourceSwitch+'.disabled'),true);
+ await click('document.querySelector("input")');await wait('!'+sourceSwitch+'.disabled');
+ assert.equal(await evaluate(sourceSwitch+'.checked'),false);
+ await click(sourceSwitch);await wait(sourceSwitch+'.checked');
+ await click('document.querySelector("input")');await wait(sourceSwitch+'.disabled');
+ assert.equal(await evaluate(sourceSwitch+'.checked'),true);
+ assert.equal(await evaluate('window.connectionEnabled'),true);
 });
