@@ -4,6 +4,7 @@
   const placeMap = getContext<PlaceMapController>(PLACE_MAP);
   let cancelMap = () => {};
   onDestroy(() => cancelMap());
+  import ShowPlaceOnMap from "$lib/components/ShowPlaceOnMap.svelte";
   import PlaceMap from "$lib/components/PlaceMap.svelte";
   import {
     createPlace,
@@ -28,6 +29,7 @@
     defaultCoordinates = null,
     onDraft = () => {},
     deferWrite = false,
+    showOnMap = false,
     draftPlace = null,
     sourcePlace = null,
     onDraftPlace = () => {},
@@ -39,6 +41,7 @@
     /** Reserved for R1E3's persisted default place. It only controls map centering. */
     defaultCoordinates?: PlaceCoordinates | null;
     deferWrite?: boolean;
+    showOnMap?: boolean;
     draftPlace?: JournalDraftPlace | null;
     sourcePlace?: JournalDraftPlace | null;
     onDraftPlace?: (place: JournalDraftPlace | null) => void;
@@ -414,6 +417,7 @@
     </button>
   {:else if link.place}
     <span class="place-read"><span aria-hidden="true">⌖</span>{link.place.name}</span>
+    {#if showOnMap && generation !== null}<ShowPlaceOnMap placeId={link.place.id} {generation} {locale} />{/if}
   {/if}
   {#if loading && !open}<span class="sr-only">{m.place_loading({}, { locale })}</span>{/if}
   {#if error && !open}<span class="inline-error" role="alert">{error}</span>{/if}

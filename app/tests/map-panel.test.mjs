@@ -10,8 +10,9 @@ function harness(reader = async () => ({ place: null }), props = {}, create = as
   let destroy;
   let closes = 0;
   const context = vm.createContext({ $state: v => v, $derived: v => v, filterPlaces: places => places, $props: () => ({ onclose() { closes++; }, ...props }),
+    groupContentPlaces: () => [], matchesPlaceFilter: () => true, sortPlaces: list => list, readPlaceContents: async () => ({entries:[],visits:[]}),
     beforeNavigate() {}, goto: async()=>{}, formatJournalDate:value=>value, readPlaceUsage:async(_gen,id)=>({placeId:id,isWeatherDefault:false,totalCount:0,entries:[]}), parsePlaceCoordinates: (lat, lon) => { if (!lat.trim() && !lon.trim()) return {latitude:null,longitude:null}; const a=Number(lat), b=Number(lon); return lat.trim() && lon.trim() && Number.isFinite(a) && Number.isFinite(b) && Math.abs(a)<=90 && Math.abs(b)<=180 ? {latitude:a,longitude:b} : null; },
-    tick: async () => {}, window: { innerWidth: 1000, innerHeight: 800 },
+    tick: async () => {}, window: { innerWidth: 1000, innerHeight: 800, addEventListener() {}, removeEventListener() {} },
     createPlace: create, mapDraftCoordinates: (lat, lon) => lat && lon ? [Number(lat), Number(lon)] : null,
     listPlaces: async () => savedPlaces,
     onMount() {}, onDestroy: f => destroy = f,
@@ -41,12 +42,13 @@ function journalHarness(id = 'entry', writer = async (_generation, _id, revision
   return { run: code => vm.runInContext(code, context), writes, request: () => request, effects };
 }
 const lake = { id: 'lake', name: 'Lake', latitude: 1, longitude: 2, revision: '1' };
-function leafletHarness(savedPlaces) {
+function leafletHarness(savedPlaces, overview = false) {
   class Element {
     parentElement = null;
     children = [];
     listeners = {};
     attributes = {};
+    getBoundingClientRect() { return this.bounds; }
     setAttribute(key, value) { this.attributes[key] = value; }
     addEventListener(name, handler) { this.listeners[name] = handler; }
     append(child) { child.parentElement = this; this.children.push(child); }
@@ -55,9 +57,12 @@ function leafletHarness(savedPlaces) {
     focus() {}
   }
   const root = new Element(), selected = [], contexts = [], points = [];
+  root.bounds = { left: 0, right: 400, top: 0, bottom: 400 };
   let popup;
   function layer(coordinates) {
     const element = new Element(); element.parentElement = root;
+    const [y, x] = coordinates.map(value => value * 100);
+    element.bounds = { left: x - 6, right: x + 6, top: y - 6, bottom: y + 6 };
     const point = { lat: coordinates[0], lng: coordinates[1] };
     const result = {
       handlers: {}, element, getElement: () => element, getLatLng: () => point,
@@ -70,12 +75,12 @@ function leafletHarness(savedPlaces) {
   const nativeMap = { closePopup() {}, getZoom: () => 12, setView() {}, mouseEventToLatLng: () => ({ lat: 6, lng: 7 }) };
   const leaflet = {
     circleMarker: pair => { const point = layer(pair); points.push(point); return point; },
-    marker: pair => layer(pair), divIcon() {},
+    marker: pair => { const point = layer(pair); points.push(point); return point; }, divIcon() {},
     DomEvent: { disableClickPropagation() {} },
     popup: () => ({ setLatLng() { return this; }, setContent(content) { popup = content; return this; }, openOn() { return this; } }),
   };
   const context = vm.createContext({ Element, $state: v => v, $effect() {}, onMount() {},
-    $props: () => ({ latitude: '', longitude: '', places: savedPlaces, onCoordinates() {}, onSelectPlace: place => selected.push(place.id), onCreateHere: (...args) => contexts.push(args) }),
+    $props: () => ({ latitude: '', longitude: '', overview, places: savedPlaces, onCoordinates() {}, onSelectPlace: place => selected.push(place.id), onCreateHere: (...args) => contexts.push(args) }),
     document: { createElement: () => new Element() },
     m: new Proxy({}, { get: () => () => '' }), nativeMap, nativeLeaflet: leaflet, root,
   });
@@ -91,6 +96,31 @@ function leafletHarness(savedPlaces) {
       context.event = event; vm.runInContext('nativeContextMenu(event)', context); return event;
     } };
 }
+test("overview keyboard activation offers distinct places at nearby and coincident hit areas", () => {
+  const harness = leafletHarness([
+    lake,
+    { ...lake, id: "ebird:L1", source: "ebird", name: "Source place" },
+    { ...lake, id: "near", longitude: 2.09, name: "Nearby personal place" },
+    { ...lake, id: "far", longitude: 2.6, name: "Farther away" },
+  ], true);
+  const overlap = harness.points[0].element;
+  assert.equal(overlap.attributes.tabindex, "0");
+  assert.equal(overlap.attributes.role, "button");
+  assert.match(overlap.attributes["aria-label"], /Source place/);
+  for (const key of ["Enter", " "]) {
+    overlap.listeners.keydown({ key, preventDefault() {}, stopPropagation() {} });
+    const choices = harness.popup();
+    assert.equal(choices.attributes.role, "group");
+    assert.deepEqual(choices.children.slice(1).map(child => child.textContent.trim()), [
+      "Lake", "Source place ·", "Nearby personal place",
+    ]);
+    choices.children[3].listeners.click({ stopPropagation() {} });
+  }
+  assert.deepEqual(harness.selected, ["near", "near"]);
+  harness.points[2].handlers.click();
+  assert.deepEqual(harness.selected, ["near", "near", "far"]);
+});
+
 test('saved marker selects by ID; coincident markers offer every place in a popup', () => {
   const single = leafletHarness([lake]); single.points[0].handlers.click();
   assert.deepEqual(single.selected, ['lake']);
@@ -178,12 +208,38 @@ test('current journal place is selected by UUID even when another place shares c
   assert.equal(journal.writes.length, 0);
   assert.equal(journal.run('link.place.id'), 'lake');
 });
+test("clearing the overview pin or selection keeps browsing state and drops draft coordinates", async () => {
+  const map = harness(undefined, {}, undefined, [lake]);
+  await map.run("loadCenter()");
+  map.run('query="Lake"; sort="latitude"; filter="personal"; mark(0, 18)');
+  await map.run("clearMapSelection()");
+  assert.equal(map.run("latitude"), "");
+  assert.equal(map.run("longitude"), "");
+  await map.run("startCreate()");
+  assert.equal(map.run("latitude"), "");
+  assert.equal(map.run("longitude"), "");
+  map.run("resetForm(); pick(places[0])");
+  assert.equal(map.run("selected.id"), lake.id);
+  await map.run("clearMapSelection()");
+  assert.equal(map.run("selected"), null);
+  assert.equal(map.run("latitude"), "");
+  assert.equal(map.run("longitude"), "");
+  assert.equal(map.run("query"), "Lake");
+  assert.equal(map.run("sort"), "latitude");
+  assert.equal(map.run("filter"), "personal");
+  assert.equal(map.run("places[0].id"), lake.id);
+  assert.equal(map.closes(), 0);
+});
+
 test('context menu is positioned at the point and creation action is not duplicated', async () => {
   const map = harness();
   await map.run('contextPoint(0, 0, {x: 450, y: 320})');
   assert.equal(map.run('menuX'), 450); assert.equal(map.run('menuY'), 320);
   assert.equal(map.run('latitude'), '0');
-  assert.match(source, /latitude && longitude && !menu && !form/);
+  const creation = source.slice(source.indexOf('<div class="place-creation">'), source.indexOf('{#if selected && !eligible'));
+  assert.match(creation, /latitude && longitude && !menu[\s\S]*class="create-place-here"/);
+  assert.match(creation, /class="new-place"/);
+  assert.doesNotMatch(source.slice(source.indexOf('<header inert='), source.indexOf('</header>')), /place_new/);
   assert.match(source, /class="context-menu"[\s\S]*role="menu"/);
   assert.match(source, /onpointerdown/);
   assert.match(source, /height: min\(30vh,240px\)[\s\S]*overflow-y: auto/);
@@ -267,10 +323,11 @@ test('missing default and read failures permit world view', async () => {
   }
 });
 test('late response from a closed panel cannot change a reopened panel', async () => {
-  let resolve;
-  const old = harness(() => new Promise(r => resolve = r));
+  let resolve, entered;
+  const requestStarted = new Promise(start => entered = start);
+  const old = harness(() => new Promise(r => { resolve = r; entered(); }));
   const pending = old.run('loadCenter()');
-  for (let i = 0; i < 8; i++) await Promise.resolve();
+  await requestStarted;
   old.destroy();
   const current = harness(); await current.run('loadCenter()');
   resolve({ place: { latitude: 50, longitude: 10 } }); await pending;
@@ -281,6 +338,8 @@ test('navigation uses existing top toggle, focus restoration and a layout-stable
   const navigation = read('AppNavigation'); compile(navigation, { generate: 'client' });
   assert.match(navigation, /onclick=\{\(\) => togglePanel\("top"\)\}/);
   assert.match(navigation, /placeMap.request[\s\S]*PlaceMapPanel/);
+  assert.equal(navigation.match(/<PlaceMapPanel\b/g).length, 1);
+  assert.doesNotMatch(navigation, /href="\/places"/);
   const controller = readFileSync(new URL('../src/lib/place-map.svelte.ts', import.meta.url), 'utf8');
   assert.match(controller, /returnFocus.focus\(\)/);
   assert.match(source, /event.key === "Escape"/);
@@ -451,7 +510,10 @@ test('selection actions precede register management and journal unlink is a sepa
  assert.match(primary,/class="primary"[\s\S]*onclick=\{confirm\}/);assert.match(primary,/onclick=\{close\}/);
  assert.doesNotMatch(primary,/startEdit|erasePlace|onclick=\{remove\}/);
  const manage=source.slice(source.indexOf('aria-label={m.place_manage_heading'),source.indexOf('{#if discardOpen}'));
- assert.match(manage,/place_new/);assert.match(manage,/place_registry_edit/);assert.match(manage,/place_registry_delete/);
+ assert.match(manage,/place_new/);
+ assert.match(manage,/@render placeActions\(\)/);
+ const actions=source.slice(source.indexOf('{#snippet placeActions()}'),source.indexOf('{#snippet history'));
+ assert.match(actions,/place_registry_edit/);assert.match(actions,/place_registry_delete/);
  const link=source.slice(source.indexOf('aria-label={m.place_journal_link_heading'),source.indexOf('</aside>'));
  assert.match(link,/onclick=\{remove\}/);assert.doesNotMatch(link,/onclick=\{confirm\}/);
  assert.match(source,/flex-wrap: wrap/);assert.match(source,/overflow-wrap: anywhere/);
@@ -544,9 +606,10 @@ async function mountedMap(props = {}) {
  const nativeMap={
   on(names,fn){for(const name of names.split(' '))(mapHandlers[name]??=[]).push(fn);return this;},
   getContainer:()=>element,getSize:()=>dimensions,getZoom:()=>zoom,getCenter:()=>center,
+  fitBounds(){return this.setView([61,19],5);},
   getBoundsZoom(bounds){assert.deepEqual(bounds,{south:-85.0511287798,west:-180,north:85.0511287798,east:180});return Math.max(mapOptions.minZoom,Math.floor(Math.log2(Math.min(dimensions.x,dimensions.y)/256)*10)/10);},
   setView(point,next){emitMap('movestart');emitMap('zoomstart');center={lat:point[0],lng:point[1]};zoom=next;views.push({point:[...point],zoom});emitMap('moveend');emitMap('zoomend');return this;},
-  getZoomScale:(to,from)=>2**(to-from),getPixelBounds:()=>viewBounds??{min:{x:0,y:0},max:{x:256,y:256}},invalidateSize(options){assert.deepEqual({...options},{pan:false});},
+  getZoomScale:(to,from)=>2**(to-from),getPixelBounds:()=>viewBounds??{min:{x:0,y:0},max:{x:256,y:256}},invalidateSize(options){assert.deepEqual({...options},{pan:props.overview ?? false});},
   remove(){nativeMap.removed=true;},
  };
  const fakeLeaflet={
@@ -558,7 +621,7 @@ async function mountedMap(props = {}) {
  const c=vm.createContext({$state:v=>v,$effect(){},$props:()=>({latitude:'',longitude:'',onCoordinates:(...args)=>published.push(args),...props}),
   onMount:fn=>mount=fn,ResizeObserver:class{constructor(fn){resize=fn;}observe(){}disconnect(){resize=null;}},
   requestAnimationFrame:fn=>{frames.set(++frameId,fn);return frameId;},cancelAnimationFrame:id=>frames.delete(id),fakeLeaflet,
-  m:new Proxy({},{get:()=>()=>''}),mapDraftCoordinates:(lat,lon)=>{if(!lat.trim()||!lon.trim())return null;const a=Number(lat),b=Number(lon);return Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a)<=90&&Math.abs(b)<=180?[a,b]:null;},groupMappedPlaces:()=>[],
+  m:new Proxy({},{get:()=>()=>''}),mapDraftCoordinates:(lat,lon)=>{if(!lat.trim()||!lon.trim())return null;const a=Number(lat),b=Number(lon);return Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a)<=90&&Math.abs(b)<=180?[a,b]:null;},groupMappedPlaces:places=>places.map(place=>[place]),
  });
  const script=read('PlaceMap').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^  import .*;\n/gm,'').replace('await import("leaflet")','await Promise.resolve(fakeLeaflet)');
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,c);
@@ -593,6 +656,31 @@ test('world fitting waits for real dimensions, contains the whole world in narro
   h.resize(width/2,height/2);h.flush();assert.equal(h.views.length,2);assert.ok(256*2**h.map.getZoom()<=Math.min(width/2,height/2)+.001);h.destroy();
  }
 });
+test("a place opened from a detail view wins over overview fit on mount and resize", async () => {
+ const point={latitude:59,longitude:18};
+ const props={overview:true,places:[{...lake,...point},{...lake,id:"second",latitude:67,longitude:23}]};
+ const selected=await mountedMap({...props,focusCenter:point});
+ // Marker rendering is exercised by the Leaflet geometry tests separately.
+ selected.run("savedLayer=null");
+ selected.flush();
+ selected.resize(340,350);selected.flush();
+ assert.deepEqual({...selected.map.getCenter()},{lat:59,lng:18});
+ assert.equal(selected.map.getZoom(),12);
+ selected.resize(900,500);selected.flush();
+ assert.deepEqual(selected.views,[]);
+ assert.equal(selected.map.getZoom(),12);
+ selected.destroy();
+
+ const overview=await mountedMap(props);
+ overview.run("savedLayer=null");
+ overview.resize(900,500);overview.flush();
+ assert.equal(overview.map.getZoom(),5);
+ overview.run("focusCenter={latitude:59,longitude:18};focusSelectedPlace()");
+ assert.deepEqual({...overview.map.getCenter()},{lat:59,lng:18});
+ assert.equal(overview.map.getZoom(),12);
+ overview.destroy();
+});
+
 test('resizing preserves user pan and zoom, explicit selection and local marker coordinates',async()=>{
  const h=await mountedMap();h.resize(900,500);h.flush();h.userView([20,30],4);const count=h.views.length;
  h.resize(500,300);h.flush();assert.equal(h.views.length,count);assert.deepEqual([h.map.getCenter().lat,h.map.getCenter().lng,h.map.getZoom()],[20,30,4]);

@@ -117,7 +117,7 @@
           {:else}
             <div class="entry-date">{formattedDate}</div>
           {/if}
-          <EntryPlace entryId={editorEntryId} {generation} editing={isEditing} locale={language.current} onDraft={(dirty, busy) => { placeDirty = dirty; placeBusy = busy; }} />
+          <EntryPlace showOnMap entryId={editorEntryId} {generation} editing={isEditing} locale={language.current} onDraft={(dirty, busy) => { placeDirty = dirty; placeBusy = busy; }} />
           {@render weather()}
           {#if options}
             <div class="entry-options-slot">{@render options()}</div>

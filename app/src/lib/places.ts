@@ -26,8 +26,8 @@ export type JournalPlace = {
 
 export type PlaceCoordinates = { latitude: number; longitude: number };
 
-export function groupMappedPlaces(places: Place[]): Place[][] {
-  const groups = new Map<string, Place[]>();
+export function groupMappedPlaces<T extends Place>(places: T[]): T[][] {
+  const groups = new Map<string, T[]>();
   for (const place of places) {
     if (place.latitude === null || place.longitude === null || !mapDraftCoordinates(String(place.latitude), String(place.longitude))) continue;
     const key = `${place.latitude},${place.longitude}`;
@@ -69,7 +69,7 @@ export function mapStartCoordinates(
   return journal ?? defaultPlace;
 }
 
-export function filterPlaces(places: Place[], query: string, locale: "sv" | "en"): Place[] {
+export function filterPlaces<T extends Place>(places: T[], query: string, locale: "sv" | "en"): T[] {
   const needle = query.trim().toLocaleLowerCase(locale === "sv" ? "sv-SE" : "en");
   if (!needle) return places;
   return places.filter((place) =>

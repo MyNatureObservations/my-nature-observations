@@ -11,11 +11,12 @@
  import EntryOptions from "$lib/components/EntryOptions.svelte";
  import BirdAttribution from "$lib/components/BirdAttribution.svelte";
  import * as m from "$lib/paraglide/messages.js";
- let {list,origin,locale,standalone=false,links,preferences,preferencesSaved=true,editHref=null,onDelete=null,actionsDisabled=false,onPreferencesChange}:{list:BirdList;origin:string;standalone?:boolean;links?:Snippet;locale:"sv"|"en";preferences:BirdNamePreferences;preferencesSaved?:boolean;editHref?:string|null;onDelete?:(()=>void)|null;actionsDisabled?:boolean;onPreferencesChange:(p:BirdNamePreferences)=>void}=$props();
+ let {list,origin,locale,standalone=false,links,mapAction,preferences,preferencesSaved=true,editHref=null,onDelete=null,actionsDisabled=false,onPreferencesChange}:{list:BirdList;origin:string;standalone?:boolean;links?:Snippet;mapAction?:Snippet;locale:"sv"|"en";preferences:BirdNamePreferences;preferencesSaved?:boolean;editHref?:string|null;onDelete?:(()=>void)|null;actionsDisabled?:boolean;onPreferencesChange:(p:BirdNamePreferences)=>void}=$props();
 </script>
 <header><a href={origin}>← {standalone?m.bird_overview({}, {locale}):m.bird_back_entry({}, {locale})}</a><span class="section-label">{m.bird_lists({}, {locale})}</span></header>
 <h1>{list.place.name}</h1>
 <div class="metadata"><time datetime={list.visitDate}>{formatBirdDate(list.visitDate,locale)}</time>{#if list.visitStart||list.visitEnd}<span>{list.visitStart??"…"}–{list.visitEnd??"…"}</span>{/if}<BirdVisitWeather records={list.weather??[]} context={visitContext(list.visitDate,list.place,list.visitStart??"",list.visitEnd??"")} {locale} editHref={actionsDisabled?null:editHref}/>{#if editHref||onDelete}<div class="list-options"><EntryOptions {locale}>{#snippet children(close)}{#if editHref&&!actionsDisabled}<a href={editHref} onclick={close}>{m.journal_edit({}, {locale})}</a>{/if}{#if onDelete}<button type="button" disabled={actionsDisabled} onclick={()=>{close();onDelete?.();}}>{m.bird_delete({}, {locale})}</button>{/if}{/snippet}</EntryOptions></div>{/if}</div>
+{@render mapAction?.()}
 <p class="visit-context">{m.bird_visit_context({}, {locale})}</p>
 <PhotoScope {locale} version={`${list.id}:${list.editToken}`} load={async()=>({items:observationPhotos([list],locale),incomplete:false})}>
 <ul class="species-cards" aria-label={m.bird_species({}, {locale})}>

@@ -82,9 +82,29 @@ test('shared saved-place fields retain labels, decimal inputs and contained visi
   const panel=read('../src/lib/components/PlaceMapPanel.svelte'); compile(panel,{generate:'client'});
   for(const key of ['place_name','place_latitude','place_longitude']) assert.match(panel,new RegExp(`<label>\\{m\\.${key}[\\s\\S]*?<input`));
   assert.equal((panel.match(/inputmode="decimal"/g)||[]).length,2);
-  assert.match(panel,/input \{[^}]*appearance: none;[^}]*box-sizing: border-box;[^}]*min-width: 0;[^}]*border-radius: 6px/);
-  assert.match(panel,/input:focus, input:focus-visible \{ outline: 2px solid #788e7b; outline-offset: -2px;/);
-  assert.match(panel,/form, label \{ min-width: 0;/);
+  const rules = parse(panel, { modern: true }).css.children
+    .filter(rule => rule.type === 'Rule')
+    .map(rule => ({
+      selectors: rule.prelude.children.map(selector => panel.slice(selector.start, selector.end)),
+      declarations: Object.fromEntries(rule.block.children
+        .filter(node => node.type === 'Declaration')
+        .map(node => [node.property, node.value])),
+    }));
+  const input = rules.find(rule => rule.selectors.includes('input')).declarations;
+  const sidebar = rules.find(rule => rule.selectors.includes('aside')).declarations;
+  const resolveSidebarValue = value => value?.replace(/var\((--[\w-]+)\)/g, (_, name) => sidebar[name] ?? '');
+  assert.equal(input.appearance, 'none');
+  assert.equal(input['box-sizing'], 'border-box');
+  assert.equal(input['min-width'], '0');
+  assert.match(resolveSidebarValue(input['border-radius']), /^[1-9]\d*(?:\.\d+)?px$/);
+
+  const focus = rules.find(rule => rule.selectors.some(selector =>
+    /\binput\b[^{}]*:focus-visible/.test(selector)) && rule.declarations['box-shadow']);
+  assert.ok(focus, 'keyboard focus must add a visible inset line to the rounded input');
+  assert.match(resolveSidebarValue(focus.declarations['box-shadow']),
+    /^inset\s+0\s+0\s+0\s+2px\s+#[0-9a-f]{6}$/i);
+  assert.ok(rules.some(rule => rule.selectors.includes('form') && rule.selectors.includes('label')
+    && rule.declarations['min-width'] === '0'));
 });
 test('macOS bundle declares both manually localized languages without overriding identities', () => {
   const plist=read('../src-tauri/Info.plist'); assert.match(plist,/<key>CFBundleLocalizations<\/key>/);

@@ -444,6 +444,57 @@ pub(crate) struct PlaceUsage {
     pub entries: Vec<PlaceUsageEntry>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct JournalPlaceEntry {
+    place: Place,
+    entry: PlaceUsageEntry,
+}
+
+fn journal_place_entries(db: &Connection) -> Result<Vec<JournalPlaceEntry>, String> {
+    let mut statement = db
+        .prepare(
+            "SELECT p.id,p.name,p.latitude,p.longitude,p.revision,j.id,j.entry_date,j.title
+         FROM main.journal_places l
+         JOIN main.places p ON p.id=l.place_id
+         JOIN main.journal_entries j ON j.id=l.entry_id
+         ORDER BY j.entry_date DESC,j.created_at DESC,j.id DESC",
+        )
+        .map_err(|_| "place_usage_read_failed")?;
+    statement
+        .query_map([], |row| {
+            Ok(JournalPlaceEntry {
+                place: Place {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    latitude: row.get(2)?,
+                    longitude: row.get(3)?,
+                    revision: row.get::<_, i64>(4)?.to_string(),
+                },
+                entry: PlaceUsageEntry {
+                    id: row.get(5)?,
+                    entry_date: row.get(6)?,
+                    title: row.get(7)?,
+                },
+            })
+        })
+        .map_err(|_| "place_usage_read_failed")?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "place_usage_read_failed".into())
+}
+
+#[tauri::command]
+pub(crate) fn read_journal_place_entries(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::database_state::DatabaseState>,
+    generation: u32,
+) -> Result<crate::database_state::Snapshot<Vec<JournalPlaceEntry>>, String> {
+    let operation = state.operation(Some(generation))?;
+    let db = crate::database::open_database(&app)?;
+    require_schema3(&db)?;
+    Ok(operation.snapshot(journal_place_entries(&db)?))
+}
+
 pub(crate) fn read_place_usage_with(
     state: &crate::database_state::DatabaseState,
     generation: u32,

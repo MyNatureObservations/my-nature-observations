@@ -756,3 +756,26 @@ fn place_usage_preserves_long_titles_and_all_references_and_checks_identity() {
     );
     assert_eq!(std::fs::read(&path).unwrap(), before);
 }
+
+#[test]
+fn overview_reads_only_saved_places_with_journal_content() {
+    let (_dir, path, state) = fixture();
+    let first = create(&state, &path, "Same name", Some(59.0), Some(18.0));
+    let second = create(&state, &path, "Same name", None, None);
+    create(&state, &path, "Unused", Some(59.0), Some(18.0));
+    assert!(
+        journal_place_entries(&open(&path).unwrap())
+            .unwrap()
+            .is_empty()
+    );
+
+    set(&state, &path, "entry-one", 0, Some(&first.id));
+    set(&state, &path, "entry-two", 0, Some(&second.id));
+    let rows = journal_place_entries(&open(&path).unwrap()).unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].place, first);
+    assert_eq!(rows[0].entry.id, "entry-one");
+    assert_eq!(rows[1].place, second);
+    assert_eq!(rows[1].entry.id, "entry-two");
+    assert_eq!(rows[1].place.latitude, None);
+}

@@ -4,7 +4,7 @@
  import {mediaHref,mediaId} from '$lib/ebird-preview';
  import {openUrl} from '@tauri-apps/plugin-opener';
  import * as m from '$lib/paraglide/messages.js';
- let {list,origin,locale,links}:{list:BirdList;origin:string;locale:'sv'|'en';links?:import('svelte').Snippet}=$props();
+ let {list,origin,locale,links,mapAction}:{list:BirdList;origin:string;locale:'sv'|'en';links?:import('svelte').Snippet;mapAction?:import('svelte').Snippet}=$props();
  let failed=$state(false);
  async function external(url:string){try{await openUrl(url);}catch{failed=true;}}
 </script>
@@ -20,6 +20,7 @@
  <p class="source-label">{m.ebird_from({}, {locale})}</p>
  <h1>{list.place.name}</h1>
  <p class="metadata">{formatSourceDate(list.visitDate,locale)}{#if list.source.fields.Time}{' · '}{formatSourceTime(list.source.fields.Time,locale)}{/if}</p>
+ {@render mapAction?.()}
  {#if /^S[1-9]\d*$/.test(list.source.submissionId)}<button type="button" onclick={()=>external(`https://ebird.org/checklist/${list.source!.submissionId}`)}>{m.ebird_original({}, {locale})} ↗</button>{/if}
  {#if failed}<p role="alert">{m.ebird_link_failed({}, {locale})}</p>{/if}
  <ul>{#each sortSourceSpecies(list.source.rows,locale,sourceSpeciesName) as row}<li>{@render rowContent(row)}</li>{/each}</ul>
