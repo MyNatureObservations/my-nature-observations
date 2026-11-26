@@ -156,3 +156,30 @@ till en appövergripande designöversyn. Gå igenom rundning, placering och
 synlighet för tangentbordsfokus i hela appen. Tillbakalänken i en
 observationsdetalj är ett exempel att ta med. Den designöversynen ligger
 utanför platsöversiktens checkpoint.
+
+### Bilder på platsen
+
+Bildsamlingen öppnas på begäran för en egen plats. Den visar lagrade
+förhandsbilder för platsens anteckningar och manuella fågelbesök, även
+fristående besök när fågelmodulen är aktiverad. Macaulay Library-länkarna
+i eBird-detaljerna finns kvar. Bildvisning från Macaulay Library är en
+uppföljning som kräver bekräftad visningsmetod och tillförlitlig fotografkredit.
+
+**macOS DEV.** Användaren bekräftade att bildsamlingen fungerar i appen.
+
+**Automatiska kontroller.** 93 fokuserade frontendtester passerade. De
+täcker bland annat exakt plats-ID, fristående besök, modulavstängning och
+dubbletter från flera journalkopplingar. Svelte-kontrollen rapporterade
+inga fel eller varningar.
+
+**Chrome med syntetiska data.** Tom och liten samling samt en blandad
+samling med nio bilder kontrollerades. Den blandade samlingen verifierades
+på svenska och engelska vid 340 och 900 pixlars fönsterbredd. Kontrollen
+omfattade navigering genom hela samlingen, bildtexter, länkmål och
+återställt tangentbordsfokus efter Escape.
+
+Nästa lilla eBird-uppföljning gäller artkorten. Visa **Media ↗** vid arter
+med importerade Macaulay-referenser. En ensam referens öppnar originalet
+i webbläsaren. Flera referenser öppnar ett val med länkar till respektive
+original. Det här ändrar inte den lokala bildsamlingen eller befintliga
+Macaulay-länkar och förutsätter ingen inbäddad medievisning.

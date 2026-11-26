@@ -1,7 +1,7 @@
 import type {BirdList} from "$lib/birds";
 import {groupBirdVisits,speciesLabel} from "$lib/birds";
 import {formatBirdDate,capitalizeCommonName} from "$lib/bird-names";
-export type GalleryPhoto={key:string;src:string|null;alt:string;caption:string;description:string;width?:number;height?:number};
+export type GalleryPhoto={key:string;src:string|null;alt:string;caption:string;description:string;width?:number;height?:number;parentHref?:string;parentKind?:"journal"|"observation"};
 export const PHOTO_OPEN_EVENT="mno:photo-open";
 export function observationPhotos(lists:BirdList[],locale:"sv"|"en"):GalleryPhoto[]{
  const seen=new Set<string>();const output:GalleryPhoto[]=[];

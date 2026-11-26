@@ -2,6 +2,7 @@
   import { onMount, onDestroy, tick } from "svelte";
   import { beforeNavigate, goto } from "$app/navigation";
   import { invoke } from "@tauri-apps/api/core";
+  import PlacePhotos from "$lib/components/PlacePhotos.svelte";
   import PlaceMap from "$lib/components/PlaceMap.svelte";
   import { readWeatherDefaultPlace, listPlaces, createPlace, updatePlace, deletePlace, readPlaceUsage, type PlaceUsage, parsePlaceCoordinates, filterPlaces, mapDraftCoordinates, type Place, type PlaceCoordinates } from "$lib/places";
   import type { MapRequest, PlaceMapController } from "$lib/place-map.svelte";
@@ -21,6 +22,7 @@
   let journalEntries = $state<JournalPlaceEntry[]>([]);
   let visits = $state<BirdList[]>([]);
   let contentsFailed = $state(false);
+  let contentsReady = $state(false);
   let contentsRevision = 0;
   let contentHeading = $state<HTMLHeadingElement>();
   const overview = $derived(request.mode === "orientation");
@@ -170,6 +172,7 @@
       journalEntries = contents.entries;
       visits = contents.visits;
       contentsFailed = false;
+      contentsReady = true;
       if (selected?.source && !contents.visits.some(visit => visit.place.id === selected?.id)) {
         selected = null;
       }
@@ -507,6 +510,13 @@
               </details>
             {/if}
           </section>
+          {#if !selectedContent.source && generation !== null}
+            <PlacePhotos place={selectedContent} {generation} {locale} />
+          {/if}
+        {/key}
+      {:else if selected && !selected.source && generation !== null && contentsReady && !contentsFailed}
+        {#key selected.id}
+          <PlacePhotos place={{ ...selected, entries: [], visits: [] }} {generation} {locale} />
         {/key}
       {/if}
     {/if}
