@@ -115,6 +115,9 @@ pub fn run() {
                 &app.path().config_dir()?,
                 &app.config().identifier,
             )));
+            app.manage(ebird_app::ConnectionPreference::load(
+                bird_module::preference_path(&app.path().config_dir()?, &app.config().identifier),
+            ));
             #[cfg(target_os = "linux")]
             for window in &linux_windows {
                 // The runtime does not carry WindowConfig::data_directory into
@@ -205,6 +208,9 @@ pub fn run() {
             place_registry::set_journal_place,
             place_registry::read_weather_default_place,
             place_registry::set_weather_default_place,
+            ebird_app::ebird_connection_enabled,
+            ebird_app::set_ebird_connection_enabled,
+            ebird_app::ebird_import_epoch,
             ebird_app::review_ebird_import,
             ebird_app::confirm_ebird_import,
             ebird_app::ebird_import_status,

@@ -216,3 +216,26 @@ formatting, plus later focused presentation suites (latest: 105 passed). No full
 suite was repeated for this review. Svelte, changed documentation links, personal
 fixture exclusion and whitespace were checked before checkpointing. Personal
 CSV files, test profiles and archives are outside this commit and remain intact.
+
+
+## DEV-acceptans för valbar källanslutning
+
+Användaren godkände källanslutningens funktion i macOS DEV.
+
+I en separat visuell macOS DEV-kontroll godkände användaren den slutliga
+hjälplayouten och textradbrytningen. Hjälptexten börjar vid etikettens vänstra
+kant, går över hela raden under reglaget och behåller eBird-inställningens indrag.
+Checklistan nedan finns kvar för omprov.
+
+Använd samma isolerade DEV-profil och startkommando ovan. Kompilera i18n först.
+Med fågelmodulen på och anslutningen av, kontrollera att tidigare importerade
+besök och länkar finns kvar men att importlänken och direktrutten inte kan
+användas för import. Slå på anslutningen, granska en fil utan att bekräfta
+och stäng sedan av anslutningen via Inställningar. Slå på den igen och
+kontrollera att en ny granskning krävs. Starta om samma profil och kontrollera
+att båda reglagens val består. Stäng av fågelmodulen, kontrollera att
+källreglaget är inaktivt och att eBird-valet finns kvar vid återaktivering.
+
+Använd separata engångsmål enligt arkivproceduren om du provar journalbyte.
+Kontrollera att både innehåll och det delade DEV-valet består. Återställ aldrig
+över källprofilen. Tidigare arkivacceptans avser importflödet före detta tillägg.

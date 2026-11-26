@@ -57,7 +57,7 @@ function harness({enabled=true,result=fixture,fail=null,confirmFailure=false,sta
  let mount;const calls=[],events=new EventTarget();
  const context=vm.createContext({$state:v=>v,$derived:v=>v,groupPreviewVisits:presentation.groupPreviewVisits,onMount:f=>mount=f,language:{current:'sv'},window:events,Event,beforeNavigate:()=>{},
   m:new Proxy({},{get:()=>()=>''}),parseEbird:api.parseEbird,applyCatalogMatches:api.applyCatalogMatches,mediaId:api.mediaId,mediaHref:api.mediaHref,
-  invoke:async(command,args)=>{calls.push(command);if(command==='ebird_preview_available')return enabled;if(command==='preview_ebird_export'){if(fail)throw fail;return result;}if(command==='new_journal_session')return {generation:1};if(command==='review_ebird_import')return {operationId:'review-1',generation:1,changes:args.visits.map(v=>({submissionId:v.submission_id,kind:'new',fields:v.rows[0]}))};if(command==='confirm_ebird_import'){if(confirmFailure)throw Error('lost reply');return 'committed';}if(command==='ebird_import_status')return status;if(command==='cancel_ebird_import')return null;if(command==='match_bird_paste_names')return args.names.map(name=>name==='Parus major'?[species]:[]);throw Error(command);},openUrl:async()=>{}});
+  invoke:async(command,args)=>{calls.push(command);if(command==='ebird_preview_available')return enabled;if(command==='ebird_import_epoch')return 1;if(command==='preview_ebird_export'){if(fail)throw fail;return result;}if(command==='new_journal_session')return {generation:1};if(command==='review_ebird_import')return {operationId:'review-1',generation:1,changes:args.visits.map(v=>({submissionId:v.submission_id,kind:'new',fields:v.rows[0]}))};if(command==='confirm_ebird_import'){if(confirmFailure)throw Error('lost reply');return 'committed';}if(command==='ebird_import_status')return status;if(command==='cancel_ebird_import')return null;if(command==='match_bird_paste_names')return args.names.map(name=>name==='Parus major'?[species]:[]);throw Error(command);},openUrl:async()=>{}});
  const script=component.match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');
  vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
  return {calls,run:s=>vm.runInContext(s,context),mount:()=>mount(),events};
@@ -65,7 +65,7 @@ function harness({enabled=true,result=fixture,fail=null,confirmFailure=false,sta
 const settle=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
 test('real preview controller loads read-only, cancellation preserves preview and no write command is used',async()=>{
  const h=harness();h.mount();await settle();await h.run('choose()');assert.equal(h.run('preview.visits.length'),2);assert.equal(h.run('preview.unmatched.length'),1);
- assert.deepEqual([...new Set(h.calls)].sort(),['ebird_preview_available','match_bird_paste_names','preview_ebird_export','new_journal_session','review_ebird_import'].sort());
+ assert.deepEqual([...new Set(h.calls)].sort(),['ebird_preview_available','match_bird_paste_names','ebird_import_epoch','preview_ebird_export','new_journal_session','review_ebird_import'].sort());
  const cancel=harness({result:null});cancel.mount();await settle();cancel.run('preview={sentinel:true}');await cancel.run('choose()');assert.equal(cancel.run('preview.sentinel'),true);assert.equal(cancel.run('busy'),false);
 });
 test('disabled route cannot select files, read errors are explicit and disposed results are ignored',async()=>{
@@ -80,7 +80,7 @@ test('localized markup compiles with accessible native disclosure and explicit s
   assert.match(m.ebird_validation_only,locale==='sv'?/skrivskyddade/:/read-only/);
  }
  assert.match(component,/<details class="visit"/);assert.match(component,/role="alert"/);assert.doesNotMatch(component,/create_journal|reserve_bird|set_journal|update_.*list/);
- const backend=read('../src-tauri/src/ebird_preview.rs');assert.match(backend,/target_os = "macos"/);assert.match(backend,/module.command\(\)\?/);assert.doesNotMatch(backend,/DatabaseState|ready_database_path|Uuid/);
+ const backend=read('../src-tauri/src/ebird_preview.rs');assert.match(backend,/connection.0.command\(\)\?/);assert.match(backend,/slots.check_epoch\(epoch\)\?/);assert.match(backend,/module.command\(\)\?/);assert.doesNotMatch(backend,/DatabaseState|ready_database_path|Uuid/);
 });
 
 test('parsed chronology uses newest date, ascending local time, missing last and checklist tie-breaker without mutation',()=>{

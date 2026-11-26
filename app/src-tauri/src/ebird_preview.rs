@@ -2,18 +2,15 @@
 use std::io::Read;
 use tauri::Manager;
 const LIMIT: u64 = 16 * 1024 * 1024;
-fn allowed(macos: bool, _development: bool, enabled: bool) -> bool {
-    macos && enabled
-}
 #[tauri::command]
 pub(crate) fn ebird_preview_available(
     module: tauri::State<'_, crate::bird_module::BirdModule>,
+    connection: tauri::State<'_, crate::ebird_app::ConnectionPreference>,
 ) -> bool {
-    allowed(
-        cfg!(target_os = "macos"),
-        crate::environment::DEVELOPMENT_BUILD,
-        module.enabled(),
-    )
+    let Ok(_connection) = connection.0.command() else {
+        return false;
+    };
+    module.command().is_ok()
 }
 fn read_csv(path: &std::path::Path) -> Result<String, String> {
     let file = std::fs::File::open(path).map_err(|_| "ebird_unreadable")?;
@@ -33,16 +30,17 @@ fn read_csv(path: &std::path::Path) -> Result<String, String> {
 pub(crate) async fn preview_ebird_export(
     app: tauri::AppHandle,
     locale: String,
+    epoch: u32,
 ) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use tauri_plugin_dialog::DialogExt;
         let module = app.state::<crate::bird_module::BirdModule>();
-        if !allowed(
-            cfg!(target_os = "macos"),
-            crate::environment::DEVELOPMENT_BUILD,
-            module.enabled(),
-        ) {
-            return Err("ebird_preview_unavailable".into());
+        let connection = app.state::<crate::ebird_app::ConnectionPreference>();
+        let slots = app.state::<crate::ebird_app::ImportState>();
+        {
+            let _connection = connection.0.command()?;
+            let _bird = module.command()?;
+            slots.check_epoch(epoch)?;
         }
         let path = app
             .dialog()
@@ -57,7 +55,9 @@ pub(crate) async fn preview_ebird_export(
         let Some(path) = path else {
             return Ok(None);
         };
+        let _connection = connection.0.command()?;
         let _permit = module.command()?;
+        slots.check_epoch(epoch)?;
         let path = path.into_path().map_err(|_| "ebird_unreadable")?;
         read_csv(&path).map(Some)
     })
@@ -67,16 +67,6 @@ pub(crate) async fn preview_ebird_export(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn preview_requires_macos_and_enabled_module() {
-        for macos in [false, true] {
-            for dev in [false, true] {
-                for enabled in [false, true] {
-                    assert_eq!(allowed(macos, dev, enabled), macos && enabled);
-                }
-            }
-        }
-    }
     #[test]
     fn selected_file_is_unchanged_and_utf8_errors_are_explicit() {
         let dir = tempfile::tempdir().unwrap();

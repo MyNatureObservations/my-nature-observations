@@ -30,7 +30,9 @@
  async function choose(){
   if(!available||busy)return;busy=true;error='';const ticket=++serial;
   try{
-   const text=await invoke<string|null>('preview_ebird_export',{locale:language.current});if(disposed||ticket!==serial||text===null)return;
+   const epoch=await invoke<number>('ebird_import_epoch');
+   if(disposed||ticket!==serial)return;
+   const text=await invoke<string|null>('preview_ebird_export',{locale:language.current,epoch});if(disposed||ticket!==serial||text===null)return;
    if(comparison&&!attempted)await invoke('cancel_ebird_import',{operationId:comparison.operationId});
    comparison=null;attempted=false;saved=false;preview=null;
    let result=parseEbird(text);
@@ -41,7 +43,7 @@
    }
    if(!await invoke<boolean>('ebird_preview_available'))throw 'ebird_preview_unavailable';
    let reviewed:Comparison|null=null;
-   if(!result.unsupported&&!result.issues.length){const session=await invoke<{generation:number}>('new_journal_session');reviewed=await invoke<Comparison>('review_ebird_import',{generation:session.generation,visits:result.visits.map(visit=>({submission_id:visit.id,rows:visit.rows.map(row=>row.fields)}))});}
+   if(!result.unsupported&&!result.issues.length){const session=await invoke<{generation:number}>('new_journal_session');reviewed=await invoke<Comparison>('review_ebird_import',{generation:session.generation,epoch,visits:result.visits.map(visit=>({submission_id:visit.id,rows:visit.rows.map(row=>row.fields)}))});}
    if(!disposed&&ticket===serial){preview=result;selected=null;comparison=reviewed;attempted=false;saved=false;}
    else if(reviewed)void invoke('cancel_ebird_import',{operationId:reviewed.operationId}).catch(()=>{});
   }catch(cause){if(!disposed&&ticket===serial){error=String(cause);preview=null;}}

@@ -185,6 +185,8 @@ fn confirmed_import_reopens_and_survives_both_archive_paths() {
         status(&state, &module, &slots, 1, &review.operation_id).unwrap(),
         "committed"
     );
+    let connection = ConnectionPreference::load(root.path().join("bird-module-v1.json"));
+    assert!(!connection.0.enabled());
     let flag = AtomicBool::new(false);
     let mut db =
         Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
@@ -219,4 +221,67 @@ fn confirmed_import_reopens_and_survives_both_archive_paths() {
     let db = crate::database::open_existing(imported.path()).unwrap();
     assert_eq!(store::records(&db).unwrap(), expected);
     assert_eq!(imported.proof().sha256, proof.sha256);
+    assert!(!connection.0.enabled());
+}
+
+#[test]
+fn connection_defaults_off_and_is_isolated_from_bird_and_production_preferences() {
+    let root = tempfile::tempdir().unwrap();
+    let dev = crate::bird_module::preference_path(root.path(), "dev");
+    let production = crate::bird_module::preference_path(root.path(), "production");
+    let bird = BirdModule::load(dev.clone());
+    let connection = ConnectionPreference::load(dev.clone());
+    let slots = ImportState::default();
+    assert!(connection.0.command().is_err());
+    bird.set(true, || Ok(())).unwrap();
+    assert!(connection.0.command().is_err());
+    connection.0.set(true, || slots.invalidate()).unwrap();
+    assert!(ConnectionPreference::load(dev.clone()).0.enabled());
+    assert!(!ConnectionPreference::load(production).0.enabled());
+    bird.set(false, || slots.invalidate()).unwrap();
+    assert!(bird.command().is_err());
+    assert!(connection.0.enabled());
+    bird.set(true, || slots.invalidate()).unwrap();
+    assert!(ConnectionPreference::load(dev).0.enabled());
+}
+
+#[test]
+fn disable_waits_for_admitted_commit_and_reenable_rejects_old_review_and_picker() {
+    let (root, state, path) = fixture();
+    let module = crate::bird_module::test_module(true);
+    let connection = ConnectionPreference::load(root.path().join("bird-module-v1.json"));
+    let slots = ImportState::default();
+    connection.0.set(true, || slots.invalidate()).unwrap();
+    let epoch = slots.1.load(Ordering::Relaxed);
+    let review = prepare(&state, &module, &slots, 1, vec![input("S100")]).unwrap();
+    let unused = prepare(&state, &module, &slots, 1, vec![input("S101")]).unwrap();
+    let search = SearchState::default();
+    std::thread::scope(|scope| {
+        let (admitted, started) = std::sync::mpsc::channel();
+        let permit = connection.0.command().unwrap();
+        let (setting, reviews) = (&connection, &slots);
+        let disable = scope.spawn(move || {
+            admitted.send(()).unwrap();
+            setting.0.set(false, || reviews.invalidate()).unwrap();
+        });
+        started.recv().unwrap();
+        confirm(&state, &module, &search, &slots, 1, &review.operation_id).unwrap();
+        assert!(slots.check_epoch(epoch).is_ok());
+        drop(permit);
+        disable.join().unwrap();
+    });
+    assert!(connection.0.command().is_err());
+    let saved = std::fs::read(&path).unwrap();
+    assert_eq!(
+        store::records(&crate::database::open_existing(&path).unwrap())
+            .unwrap()
+            .iter()
+            .filter(|record| matches!(record, Record::Visit { .. }))
+            .count(),
+        1
+    );
+    connection.0.set(true, || slots.invalidate()).unwrap();
+    assert!(slots.check_epoch(epoch).is_err());
+    assert!(confirm(&state, &module, &search, &slots, 1, &unused.operation_id).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), saved);
 }

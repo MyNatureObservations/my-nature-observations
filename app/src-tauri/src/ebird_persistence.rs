@@ -327,15 +327,8 @@ fn import_checked(
     visits: &[InputVisit],
     before_commit: impl FnOnce(&Connection) -> Result<()>,
 ) -> Result<()> {
-    import_bound(
-        state,
-        search,
-        module,
-        generation,
-        visits,
-        None,
-        before_commit,
-    )
+    let _module = module.command()?;
+    import_bound(state, search, generation, visits, None, before_commit)
 }
 pub(crate) fn fingerprint(db: &Connection) -> Result<String> {
     use sha2::{Digest, Sha256};
@@ -347,13 +340,11 @@ pub(crate) fn fingerprint(db: &Connection) -> Result<String> {
 pub(crate) fn import_bound(
     state: &DatabaseState,
     search: &SearchState,
-    module: &crate::bird_module::BirdModule,
     generation: u32,
     visits: &[InputVisit],
     expected: Option<&str>,
     before_commit: impl FnOnce(&Connection) -> Result<()>,
 ) -> Result<()> {
-    let _module = module.command()?;
     search.with_write(||{
   let path=state.ready_database_path()?;let _operation=state.operation(Some(generation))?;
   let mut db=database::open_existing(&path)?;let tx=db.transaction().map_err(sql)?;

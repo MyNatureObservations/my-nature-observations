@@ -9,7 +9,10 @@ use rusqlite::Connection;
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
-    sync::{Mutex, atomic::AtomicBool},
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, AtomicU32, Ordering},
+    },
     time::{Duration, Instant},
 };
 type Result<T> = std::result::Result<T, String>;
@@ -36,11 +39,59 @@ struct Review {
     after: Option<String>,
 }
 #[derive(Default)]
-pub(crate) struct ImportState(Mutex<BTreeMap<String, Review>>);
+pub(crate) struct ImportState(Mutex<BTreeMap<String, Review>>, AtomicU32);
+pub(crate) struct ConnectionPreference(pub(crate) BirdModule);
+impl ConnectionPreference {
+    pub(crate) fn load(bird_path: std::path::PathBuf) -> Self {
+        Self(BirdModule::load(
+            bird_path.with_file_name("ebird-connection-v1.json"),
+        ))
+    }
+}
+#[tauri::command]
+pub(crate) fn ebird_connection_enabled(connection: tauri::State<'_, ConnectionPreference>) -> bool {
+    cfg!(target_os = "macos") && connection.0.enabled()
+}
+#[tauri::command]
+pub(crate) async fn set_ebird_connection_enabled(
+    app: tauri::AppHandle,
+    enabled: bool,
+) -> Result<()> {
+    use tauri::Manager;
+    if !cfg!(target_os = "macos") {
+        return Err("bird_platform_unsupported".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<ConnectionPreference>()
+            .0
+            .set(enabled, || app.state::<ImportState>().invalidate())
+    })
+    .await
+    .map_err(|_| "ebird_connection_preference_failed".to_owned())?
+}
+#[tauri::command]
+pub(crate) fn ebird_import_epoch(
+    module: tauri::State<'_, BirdModule>,
+    connection: tauri::State<'_, ConnectionPreference>,
+    slots: tauri::State<'_, ImportState>,
+) -> Result<u32> {
+    let _connection = connection.0.command()?;
+    let _bird = module.command()?;
+    Ok(slots.1.load(Ordering::Relaxed))
+}
 impl ImportState {
+    pub(crate) fn check_epoch(&self, epoch: u32) -> Result<()> {
+        if self.1.load(Ordering::Relaxed) == epoch {
+            Ok(())
+        } else {
+            Err("ebird_review_stale".into())
+        }
+    }
+
     pub(crate) fn invalidate(&self) -> Result<()> {
         let mut slots = self.0.lock().map_err(|_| "ebird_review_failed")?;
-        slots.retain(|_, r| r.status != "ready");
+        slots.clear();
+        self.1.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 }
@@ -134,6 +185,7 @@ fn compare(db: &Connection, input: &[InputVisit]) -> Result<Vec<Change>> {
     }
     Ok(changes)
 }
+#[cfg(all(test, target_os = "macos"))]
 pub(crate) fn prepare(
     state: &DatabaseState,
     module: &BirdModule,
@@ -142,6 +194,14 @@ pub(crate) fn prepare(
     input: Vec<InputVisit>,
 ) -> Result<Comparison> {
     let _module = module.command()?;
+    prepare_admitted(state, slots, generation, input)
+}
+fn prepare_admitted(
+    state: &DatabaseState,
+    slots: &ImportState,
+    generation: u32,
+    input: Vec<InputVisit>,
+) -> Result<Comparison> {
     validate(&input)?;
     let path = state.ready_database_path()?;
     let _operation = state.operation(Some(generation))?;
@@ -184,9 +244,7 @@ pub(crate) fn confirm(
     generation: u32,
     id: &str,
 ) -> Result<String> {
-    {
-        let _module = module.command()?;
-    }
+    let _module = module.command()?;
     let (input, before) = {
         let mut reviews = slots.0.lock().map_err(|_| "ebird_review_failed")?;
         let review = reviews.get_mut(id).ok_or("ebird_review_expired")?;
@@ -200,18 +258,10 @@ pub(crate) fn confirm(
         (review.input.clone(), review.before.clone())
     };
     let mut after = None;
-    let result = store::import_bound(
-        state,
-        search,
-        module,
-        generation,
-        &input,
-        Some(&before),
-        |db| {
-            after = Some(store::fingerprint(db)?);
-            Ok(())
-        },
-    );
+    let result = store::import_bound(state, search, generation, &input, Some(&before), |db| {
+        after = Some(store::fingerprint(db)?);
+        Ok(())
+    });
     let mut reviews = slots.0.lock().map_err(|_| "ebird_check_status")?;
     if let Some(review) = reviews.get_mut(id) {
         review.after = after;
@@ -260,8 +310,13 @@ pub(crate) fn review_ebird_import(
     slots: tauri::State<'_, ImportState>,
     generation: u32,
     visits: Vec<InputVisit>,
+    connection: tauri::State<'_, ConnectionPreference>,
+    epoch: u32,
 ) -> Result<Comparison> {
-    prepare(&state, &module, &slots, generation, visits)
+    let _connection = connection.0.command()?;
+    let _bird = module.command()?;
+    slots.check_epoch(epoch)?;
+    prepare_admitted(&state, &slots, generation, visits)
 }
 #[tauri::command]
 pub(crate) fn confirm_ebird_import(
@@ -271,7 +326,9 @@ pub(crate) fn confirm_ebird_import(
     slots: tauri::State<'_, ImportState>,
     generation: u32,
     operation_id: String,
+    connection: tauri::State<'_, ConnectionPreference>,
 ) -> Result<String> {
+    let _connection = connection.0.command()?;
     confirm(&state, &module, &search, &slots, generation, &operation_id)
 }
 #[tauri::command]
@@ -281,7 +338,9 @@ pub(crate) fn ebird_import_status(
     slots: tauri::State<'_, ImportState>,
     generation: u32,
     operation_id: String,
+    connection: tauri::State<'_, ConnectionPreference>,
 ) -> Result<String> {
+    let _connection = connection.0.command()?;
     status(&state, &module, &slots, generation, &operation_id)
 }
 #[tauri::command]
@@ -289,7 +348,9 @@ pub(crate) fn cancel_ebird_import(
     module: tauri::State<'_, BirdModule>,
     slots: tauri::State<'_, ImportState>,
     operation_id: String,
+    connection: tauri::State<'_, ConnectionPreference>,
 ) -> Result<()> {
+    let _connection = connection.0.command()?;
     let _module = module.command()?;
     let mut slots = slots.0.lock().map_err(|_| "ebird_review_failed")?;
     if slots

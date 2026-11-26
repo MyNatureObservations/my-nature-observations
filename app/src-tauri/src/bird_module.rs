@@ -56,7 +56,7 @@ impl BirdModule {
         }
         self.operation()
     }
-    fn set(
+    pub(crate) fn set(
         &self,
         enabled: bool,
         invalidate: impl FnOnce() -> Result<(), String>,
