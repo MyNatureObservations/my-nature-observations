@@ -112,6 +112,23 @@ export function groupDiaryEntries(entries:ReadingEntry[], observations:BirdList[
   return [...dates.values()].sort((a,b)=>compare(b.date,a.date));
 }
 
+export function placeDiaryVisits(group: ReturnType<typeof groupDiaryEntries>[number]) {
+  const inline = new Map<string, BirdList[]>();
+  const standalone: BirdList[] = [];
+  // First visible same-day entry owns the summary. Other entries keep their links.
+  for (const visit of group.visits) {
+    const owner = group.entries.find(entry => visit.journalEntryIds?.includes(entry.id));
+    if (!owner) {
+      standalone.push(visit);
+      continue;
+    }
+    const visits = inline.get(owner.id) ?? [];
+    visits.push(visit);
+    inline.set(owner.id, visits);
+  }
+  return { inline, standalone };
+}
+
 export function journalEntryAnchor(id: string): string {
   return `journal-entry-${id}`;
 }

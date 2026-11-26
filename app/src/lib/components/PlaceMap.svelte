@@ -16,6 +16,7 @@
     onCreateHere,
     focusCenter = null,
     selectedPlaceId = null,
+    keepCenterOnResize = false,
     onSelectPlace,
   }: {
     latitude: string;
@@ -28,6 +29,7 @@
     onCreateHere?: (latitude: number, longitude: number, screen?: { x: number; y: number }) => void;
     focusCenter?: PlaceCoordinates | null;
     selectedPlaceId?: string | null;
+    keepCenterOnResize?: boolean;
     onSelectPlace?: (place: Place) => void;
   } = $props();
 
@@ -117,7 +119,7 @@
   }
   function updateViewSize() {
     if (!map || !leaflet || disposed) return;
-    map.invalidateSize({ pan: false });
+    map.invalidateSize({ pan: keepCenterOnResize });
     const size = map.getSize();
     if (size.x <= 0 || size.y <= 0) return;
     if (!cameraReady) {

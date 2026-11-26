@@ -10,7 +10,7 @@ use tauri::State;
 
 #[derive(Serialize)]
 pub struct SavedJournalEntry {
-    id: String,
+    pub(crate) id: String,
 }
 
 #[tauri::command]
@@ -104,7 +104,7 @@ fn validate_document(content_json: &str) -> Result<(), String> {
 }
 
 // Deliberately narrower than validation: uncertain/future content is not empty.
-fn is_definitely_empty_journal_json(content: &str) -> bool {
+pub(crate) fn is_definitely_empty_journal_json(content: &str) -> bool {
     fn keys(value: &serde_json::Map<String, serde_json::Value>, allowed: &[&str]) -> bool {
         value.keys().all(|key| allowed.contains(&key.as_str()))
     }
@@ -246,7 +246,7 @@ fn is_definitely_empty_journal_json(content: &str) -> bool {
     serde_json::from_str::<serde_json::Value>(content).is_ok_and(|value| empty(&value, &["doc"], 0))
 }
 
-fn save_journal_entry_with_connection(
+pub(crate) fn save_journal_entry_with_connection(
     connection: &Connection,
     target: EntryTarget,
     entry_date: String,

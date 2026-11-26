@@ -419,6 +419,7 @@
   "place_choose": "Välj plats",
   "place_panel_title": "Plats",
   "place_search": "Sök bland sparade platser",
+  "place_my_places": "Mina platser",
   "place_saved": "Sparade platser",
   "place_no_matches": "Inga sparade platser hittades.",
   "place_new": "Ny plats",
@@ -785,5 +786,13 @@
   "ebird_review_additions": "Tillägg att granska",
   "ebird_review_reason": "Källraden har ändrats eller saknas. Dina tillägg finns kvar på den tidigare raden och har inte kopplats om.",
   "ebird_own_addition": "Ditt tillägg i MNO",
-  "ebird_source_locked": "Uppgifterna hämtas från eBird och ändras där."
+  "ebird_source_locked": "Uppgifterna hämtas från eBird och ändras där.",
+  "observation_create_journal": "Skapa journalanteckning",
+  "observation_back": "Tillbaka till observationen",
+  "observation_journal_unavailable": "Det går inte att öppna ett journalutkast för observationen.",
+  "observation_journal_source_place": "Källplats i eBird: {place}",
+  "observation_save_source_place": "Lägg till eBird-platsen bland mina platser",
+  "observation_create_place": "Skapa ny plats",
+  "observation_journal_stale": "Observationen har ändrats eller redan kopplats. Gå tillbaka till observationen och kontrollera journallänkarna.",
+  "observation_source_location_label": "Plats från eBird"
 }

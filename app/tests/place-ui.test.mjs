@@ -144,7 +144,7 @@ test("Leaflet map is locally bundled and coordinates remain usable without tiles
   assert.match(source, /noWrap: true/, "the tile layer does not repeat the world around the fitted view");
   assert.match(source, /size.x <= 0 \|\| size.y <= 0/, "world zoom waits for a measurable map");
   assert.doesNotMatch(source, /map\.fitWorld\(|map\.fitBounds\(/, "a second fit cannot zoom the initial world back out");
-  assert.match(source, /map\.invalidateSize\(\{ pan: false \}\)/, "Leaflet updates after the map element actually resizes");
+  assert.match(source, /map\.invalidateSize\(\{ pan: keepCenterOnResize \}\)/, "Leaflet updates after the map element actually resizes");
   assert.match(source, /resizeObserver\?\.disconnect\(\)/, "size observation ends with the map");
   assert.doesNotMatch(source, /center:\s*\[62,\s*15\]/, "there is no country-specific fallback");
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -159,7 +159,7 @@ test("place dialog keeps its header fixed and scrolls only its responsive conten
   assert.match(source, /\.panel-content\{min-height:0;overflow:auto/);
   assert.match(source, /\.actions\{position:sticky/);
   assert.match(source, /defaultCenter=\{defaultCoordinates\}/);
-  assert.match(source, /class:map-mode=\{mode === "new"\}/);
+  assert.match(source, /class:map-mode=\{!deferWrite && mode === "new"\}/);
   assert.match(source, /\.panel\.map-mode \{ width: 95vw; height: 95vh/);
   assert.match(source, /grid-template-rows: minmax\(180px, 1fr\) auto auto auto/, "the map row receives remaining height");
   assert.match(source, /\.panel\.map-mode \.form :global\(\.map\) \{ flex: 1 1 auto; height: 100%/, "the Leaflet element fills its grid row");
@@ -209,11 +209,12 @@ test('registry adapters bind update revision and generation without journal writ
  await assert.rejects(stale.delete(7,'p'),e=>e==='journal_generation_conflict');
 });
 
-function readonlyPlaceHarness(reader) {
+function readonlyPlaceHarness(reader, props = {}) {
  const calls=[],effects=[];
  const forbidden=()=>{calls.push('forbidden');throw new Error('Read-only place must not write or open a map');};
- const c=vm.createContext({$props:()=>({entryId:'entry-one',generation:3,editing:false,locale:'sv'}),$state:v=>v,$derived:{by:f=>f()},$effect:f=>effects.push(f),
+ const c=vm.createContext({$props:()=>({entryId:'entry-one',generation:3,editing:false,locale:'sv',...props}),$state:v=>v,$derived:{by:f=>f()},$effect:f=>effects.push(f),
   getContext:()=>({open:forbidden}),PLACE_MAP:'mno:place-map',onDestroy(){},tick:async()=>{},untrack:f=>f(),
+  crypto:globalThis.crypto,parsePlaceCoordinates:placesHarness().parse,
   filterPlaces:p=>p,createPlace:forbidden,listPlaces:forbidden,setJournalPlace:forbidden,
   readJournalPlace:async(...args)=>{calls.push(args);return reader(...args);},
   m:new Proxy({},{get:(_,key)=>()=>key}),
@@ -259,4 +260,34 @@ test('place usage adapter reads with generation recheck and never invokes a muta
  assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{command:'read_place_usage',args:{generation:7,placeId:'p'}},{command:'new_journal_session'}]);
  const stale=placesHarness(async command=>({generation:command==='read_place_usage'?7:8,data}));
  await assert.rejects(stale.usage(7,'p'),e=>e==='journal_generation_conflict');
+});
+
+
+test("linked draft reuses the place form for a reviewed source copy and a blank new place", async () => {
+ const choices=[];
+ const h=readonlyPlaceHarness(()=>{throw Error("draft must not read a saved link");},{entryId:null,editing:true,deferWrite:true,onDraftPlace:place=>choices.push(place)});
+ h.run('startNew({name:"Source lake", latitude:0, longitude:18})');
+ assert.equal(h.run("name"),"Source lake");
+ assert.equal(h.run("latitude"),"0");
+ assert.equal(h.run("longitude"),"18");
+ assert.equal(choices.length,0);
+ h.run('name="My lake"');
+ await h.run("saveNew()");
+ assert.equal(choices[0].name,"My lake");
+ assert.equal(choices[0].latitude,0);
+ assert.equal(choices[0].longitude,18);
+ assert.equal(choices[0].create,true);
+ h.run("startNew()");
+ assert.equal(h.run("name"),"");
+ assert.equal(h.run("latitude"),"");
+ h.run('name="Other place"');
+ await h.run("saveNew()");
+ assert.equal(choices[1].name,"Other place");
+ assert.equal(choices[1].latitude,null);
+ assert.notEqual(choices[0].id,choices[1].id);
+ await h.run('selectPlace({id:"existing",name:"Saved place"})');
+ assert.equal(choices[2].id,"existing");
+ await h.run("removeLink()");
+ assert.equal(choices[3],null);
+ assert.deepEqual(h.calls,[]);
 });

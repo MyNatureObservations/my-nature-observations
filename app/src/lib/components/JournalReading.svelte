@@ -11,7 +11,7 @@
   import WeatherTile from "$lib/components/WeatherTile.svelte";
   import { createWeatherReader, type WeatherView } from "$lib/weather";
   import JournalContent from "$lib/components/JournalContent.svelte";
-  import { groupDiaryEntries, visibleJournalEntries, journalEntryAnchor, journalDateAnchor, formatJournalDate, type ReadingEntry } from "$lib/journal-reading";
+  import { groupDiaryEntries, visibleJournalEntries, journalEntryAnchor, journalDateAnchor, formatJournalDate, placeDiaryVisits, type ReadingEntry } from "$lib/journal-reading";
   import * as m from "$lib/paraglide/messages.js";
 
   let { entries, isLoading, errorMessage, locale, generation = null, onEntryDeleted, observations = [] }: {
@@ -66,7 +66,7 @@
 
   function openEntryFromClick(event: MouseEvent) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-    if (!(event.target instanceof Element) || event.target.closest("a, button, input, select, textarea, label, summary, .mno-photograph, .entry-metadata, .entry-options")) return;
+    if (!(event.target instanceof Element) || event.target.closest("a, button, input, select, textarea, label, summary, .mno-photograph, .entry-metadata, .entry-options, .inline-observation")) return;
     const article = event.currentTarget as HTMLElement;
     const selection = window.getSelection();
     if (selection && !selection.isCollapsed && selection.containsNode(article, true)) return;
@@ -99,9 +99,11 @@
   <p class="message">{m.journal_empty({}, { locale })}</p>
 {:else}
   {#each groups as group (group.date)}
+    {@const placed = placeDiaryVisits(group)}
     <section id={journalDateAnchor(group.date)} class="journal-day" aria-label={formatJournalDate(group.date, locale)}>
       <h2 class="entry-date"><time datetime={group.date}>{formatJournalDate(group.date, locale)}</time></h2>
       {#each group.entries as entry (entry.id)}
+        {@const linkedVisits = placed.inline.get(entry.id) ?? []}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions (The native entry link provides keyboard navigation without wrapping interactive content.) -->
         <article id={journalEntryAnchor(entry.id)} aria-label={entry.title || formatJournalDate(group.date, locale)} onclick={openEntryFromClick}>
           {#if entry.editable === true}
@@ -132,11 +134,17 @@
           {/if}
           <JournalPhotoScope entryId={entry.id} {generation} contentJson={entry.contentJson} {locale}>
           <JournalContent contentJson={entry.contentJson} entryId={entry.id} documentVersion={entry.documentVersion ?? 1} {generation} {locale} editable={entry.editable === true} />
-          <BirdJournalLists entryId={entry.id} {generation} {locale} journalDate={entry.entryDate} compactReferences/>
+          {#each linkedVisits as visit (visit.id)}
+            <div id={`observation-${visit.id}`} class="inline-observation">
+              <span class="observation-type">{m.observation_visit_label({}, {locale})}</span>
+              <BirdVisitPreview list={visit} {locale} journalDate={group.date} href={birdHref(entry.id,visit.id)}/>
+            </div>
+          {/each}
+          <BirdJournalLists entryId={entry.id} {generation} {locale} journalDate={entry.entryDate} compactReferences hiddenVisitIds={linkedVisits.map(visit=>visit.id)}/>
           </JournalPhotoScope>
         </article>
       {/each}
-      {#each group.visits as visit (visit.id)}
+      {#each placed.standalone as visit (visit.id)}
         <article id={`observation-${visit.id}`} class="diary-observation" aria-label={m.observation_visit_label({}, {locale})}>
           <span class="observation-type">{m.observation_visit_label({}, {locale})}</span>
           <BirdVisitPreview list={visit} {locale} journalDate={group.date} href={birdHref(null,visit.id)}/>
@@ -148,6 +156,7 @@
 
 <style>
   .observation-type{font:500 13px/1.5 system-ui,sans-serif;color:#345f80;letter-spacing:.25px}.diary-observation{margin-top:28px;}
+  .inline-observation { margin-top: 8px; }
   .journal-day { scroll-margin-top: 64px; }
   .journal-day + .journal-day { margin-top: 72px; }
   .entry-date {

@@ -14,6 +14,7 @@
     readJournalPlace,
     setJournalPlace,
     type JournalPlace,
+    type JournalDraftPlace,
     type Place,
     type PlaceCoordinates,
   } from "$lib/places";
@@ -26,6 +27,10 @@
     locale = "sv",
     defaultCoordinates = null,
     onDraft = () => {},
+    deferWrite = false,
+    draftPlace = null,
+    sourcePlace = null,
+    onDraftPlace = () => {},
   }: {
     entryId: string | null;
     generation: number | null;
@@ -33,6 +38,10 @@
     locale?: "sv" | "en";
     /** Reserved for R1E3's persisted default place. It only controls map centering. */
     defaultCoordinates?: PlaceCoordinates | null;
+    deferWrite?: boolean;
+    draftPlace?: JournalDraftPlace | null;
+    sourcePlace?: JournalDraftPlace | null;
+    onDraftPlace?: (place: JournalDraftPlace | null) => void;
     onDraft?: (dirty: boolean, busy: boolean) => void;
   } = $props();
 
@@ -72,7 +81,7 @@
       : null,
   );
 
-  $effect(() => onDraft(dirty || pending !== null, busy));
+  $effect(() => onDraft(dirty || pending !== null || (deferWrite && open), busy));
 
   $effect(() => {
     const id = entryId;
@@ -134,7 +143,7 @@
 
   async function showPicker() {
     if (!editing || generation === null) return;
-    if (placeMap) {
+    if (placeMap && !deferWrite) {
       const id = entryId, currentGeneration = generation;
       cancelMap = placeMap.open({ mode: "journal", generation: currentGeneration, center: journalCoordinates, selectedId: pendingPlace?.id ?? link.place?.id, currentId: link.place?.id,
         remove: link.place || pending ? async () => {
@@ -152,21 +161,32 @@
     mode = "list";
     query = "";
     activeIndex = -1;
-    selectedId = pending?.kind === "link" ? pending.placeId : link.place?.id ?? null;
+    selectedId = deferWrite ? draftPlace?.id ?? null : pending?.kind === "link" ? pending.placeId : link.place?.id ?? null;
     error = "";
     await tick();
     panel?.querySelector<HTMLInputElement>("input")?.focus();
     void loadPlaces();
   }
 
-  function startNew() {
+  function startNew(prefill: JournalDraftPlace | null = null) {
     mode = "new";
     selectedId = null;
-    name = "";
-    latitude = "";
-    longitude = "";
+    name = prefill?.name ?? "";
+    latitude = prefill?.latitude?.toString() ?? "";
+    longitude = prefill?.longitude?.toString() ?? "";
     dirty = false;
     error = "";
+    if (deferWrite) void tick().then(() => panel?.querySelector<HTMLInputElement>("[data-place-name]")?.focus());
+  }
+
+  async function backToPlaces() {
+    mode = "list";
+    dirty = false;
+    error = "";
+    if (deferWrite) {
+      await tick();
+      panel?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+    }
   }
 
   function setCoordinates(lat: number, lon: number) {
@@ -178,6 +198,11 @@
 
   async function selectPlace(place: Place) {
     if (busy) return false;
+    if (deferWrite) {
+      onDraftPlace(place);
+      closePicker(true);
+      return true;
+    }
     selectedId = place.id;
     const intent = { kind: "link", placeId: place.id } as const;
     pending = intent;
@@ -212,8 +237,19 @@
   async function saveNew() {
     const trimmedName = name.trim();
     const coordinates = parsePlaceCoordinates(latitude, longitude);
-    if (!trimmedName) { error = m.place_name_required({}, { locale }); return; }
-    if (!coordinates) { error = m.place_coordinates_invalid({}, { locale }); return; }
+    if (!trimmedName || !coordinates) {
+      error = !trimmedName ? m.place_name_required({}, { locale }) : m.place_coordinates_invalid({}, { locale });
+      if (deferWrite) {
+        await tick();
+        panel?.querySelector<HTMLElement>("#place-picker-error")?.focus();
+      }
+      return;
+    }
+    if (deferWrite) {
+      onDraftPlace({ id: crypto.randomUUID(), name: trimmedName, ...coordinates, create: true });
+      closePicker(true);
+      return;
+    }
     const intent = { kind: "create", name: trimmedName, ...coordinates } as const;
     if (!entryId || generation === null) {
       pending = intent;
@@ -297,6 +333,11 @@
 
   async function removeLink() {
     if (busy) return false;
+    if (deferWrite) {
+      onDraftPlace(null);
+      closePicker(true);
+      return true;
+    }
     if (!entryId || generation === null) {
       pending = null;
       pendingPlace = null;
@@ -369,7 +410,7 @@
   {#if editing}
     <button bind:this={trigger} class="place-trigger" type="button" onclick={showPicker} disabled={generation === null || busy || loading} aria-haspopup="dialog" aria-expanded={placeMap?.request?.mode === "journal" || open}>
       <span aria-hidden="true">⌖</span>
-      {pendingPlace?.name ?? link.place?.name ?? m.place_choose({}, { locale })}
+      {draftPlace?.name ?? pendingPlace?.name ?? link.place?.name ?? m.place_choose({}, { locale })}
     </button>
   {:else if link.place}
     <span class="place-read"><span aria-hidden="true">⌖</span>{link.place.name}</span>
@@ -381,37 +422,72 @@
 
 {#if open}
   <div class="overlay" role="button" tabindex="-1" aria-label={m.place_close({}, { locale })} onclick={(event) => event.target === event.currentTarget && closePicker()} onkeydown={(event) => event.key === "Escape" && closePicker()}>
-    <div bind:this={panel} class="panel" class:map-mode={mode === "new"} role="dialog" aria-modal="true" aria-labelledby="place-title">
+    <div bind:this={panel} class="panel" class:linked-picker={deferWrite} class:map-mode={!deferWrite && mode === "new"} role="dialog" aria-modal="true" aria-labelledby="place-title">
       <header><h2 id="place-title">{m.place_panel_title({}, { locale })}</h2><button type="button" class="close" onclick={() => closePicker()} aria-label={m.place_close({}, { locale })}>×</button></header>
       <div class="panel-content">
-        {#if error}<p class="error" role="alert">{error}</p>{/if}
+        {#if error}<p id="place-picker-error" class="error" role="alert" tabindex="-1">{error}</p>{/if}
         {#if mode === "list"}
+        {#snippet savedPlaces()}
         <label class="search-label">{m.place_search({}, { locale })}<input type="search" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="place-results" aria-activedescendant={activeIndex >= 0 && filteredPlaces[activeIndex] ? `place-option-${filteredPlaces[activeIndex].id}` : undefined} bind:value={query} oninput={() => { activeIndex = -1; error = ""; }} onkeydown={handleSearchKeydown} /></label>
         <div id="place-results" class="place-list" role="listbox" aria-label={m.place_saved({}, { locale })} aria-busy={busy}>
           {#each filteredPlaces as place, index (place.id)}
-            <button id={`place-option-${place.id}`} type="button" role="option" aria-selected={link.place?.id === place.id} class:active={activeIndex === index} disabled={busy} onmousemove={() => activeIndex = index} onclick={() => selectPlace(place)}>
+            <button id={`place-option-${place.id}`} type="button" role="option" aria-selected={(deferWrite ? draftPlace?.id : link.place?.id) === place.id} class:active={activeIndex === index} disabled={busy} onmousemove={() => activeIndex = index} onclick={() => selectPlace(place)}>
               <span class="place-result"><strong>{place.name}</strong><small>{coordinates(place)}</small></span>
-              {#if link.place?.id === place.id}<span class="check" aria-label={m.place_current({}, { locale })}>✓</span>{/if}
+              {#if (deferWrite ? draftPlace?.id : link.place?.id) === place.id}<span class="check" aria-label={m.place_current({}, { locale })}>✓</span>{/if}
             </button>
           {:else}
             <p class="empty">{m.place_no_matches({}, { locale })}</p>
           {/each}
         </div>
-        <div class="actions split"><button type="button" onclick={startNew} disabled={busy}>{m.place_new({}, { locale })}</button><button type="button" onclick={() => closePicker()} disabled={busy}>{m.place_cancel({}, { locale })}</button></div>
-        {#if link.place}<button class="remove" type="button" onclick={removeLink} disabled={busy}>{m.place_remove({}, { locale })}</button>{/if}
+        {/snippet}
+        {#if deferWrite}
+          <section class="my-places" aria-labelledby="my-places-label">
+            <h3 id="my-places-label">{m.place_my_places({}, {locale})}</h3>
+            {@render savedPlaces()}
+            <div class="draft-place-actions">
+              <button type="button" onclick={() => startNew()} disabled={busy}>{m.observation_create_place({}, {locale})}</button>
+              {#if draftPlace}<button type="button" class="remove-draft-place" onclick={removeLink} disabled={busy}>{m.place_remove({}, {locale})}</button>{/if}
+            </div>
+          </section>
+          {#if sourcePlace}
+            <section class="source-location" aria-labelledby="ebird-location-label">
+              <h3 id="ebird-location-label">{m.observation_source_location_label({}, {locale})}</h3>
+              <p>{sourcePlace.name}</p>
+              <button type="button" onclick={() => startNew(sourcePlace)} disabled={busy}>{m.observation_save_source_place({}, {locale})}</button>
+            </section>
+          {/if}
         {:else}
+          {@render savedPlaces()}
+          <div class="actions split"><button type="button" onclick={() => startNew()} disabled={busy}>{m.place_new({}, {locale})}</button><button type="button" onclick={() => closePicker()} disabled={busy}>{m.place_cancel({}, {locale})}</button></div>
+          {#if link.place}<button class="remove" type="button" onclick={removeLink} disabled={busy}>{m.place_remove({}, {locale})}</button>{/if}
+        {/if}
+        {:else}
+          {#snippet reviewMap()}
+            <PlaceMap {latitude} {longitude} {places} {locale} journalCenter={journalCoordinates} defaultCenter={defaultCoordinates} keepCenterOnResize={deferWrite} onCoordinates={setCoordinates} />
+          {/snippet}
           <div class="form">
-          <PlaceMap {latitude} {longitude} {places} {locale} journalCenter={journalCoordinates} defaultCenter={defaultCoordinates} onCoordinates={setCoordinates} />
-          <label>{m.place_name({}, { locale })}<input bind:value={name} maxlength="512" oninput={() => dirty = true} /></label>
+          {#if !deferWrite}{@render reviewMap()}{/if}
+          <label>{m.place_name({}, { locale })}<input data-place-name bind:value={name} maxlength="512" oninput={() => dirty = true} /></label>
           <div class="coordinates">
             <label>{m.place_latitude({}, { locale })}<input inputmode="decimal" bind:value={latitude} oninput={() => dirty = true} /></label>
             <label>{m.place_longitude({}, { locale })}<input inputmode="decimal" bind:value={longitude} oninput={() => dirty = true} /></label>
           </div>
+          {#if deferWrite}{@render reviewMap()}{/if}
           <p>{m.place_coordinates_optional({}, { locale })}</p>
           </div>
-          <div class="actions"><button type="button" onclick={() => { mode = "list"; dirty = false; error = ""; }}>{m.place_back({}, { locale })}</button><button class="primary" type="button" onclick={saveNew} disabled={busy}>{m.place_save_use({}, { locale })}</button></div>
+          {#if !deferWrite}
+          <div class="actions"><button type="button" onclick={backToPlaces}>{m.place_back({}, { locale })}</button><button class="primary" type="button" onclick={saveNew} disabled={busy}>{m.place_save_use({}, { locale })}</button></div>
+          {/if}
         {/if}
       </div>
+      {#if deferWrite && mode === "list"}
+        <footer class="picker-footer"><button type="button" onclick={() => closePicker()} disabled={busy}>{m.place_cancel({}, {locale})}</button></footer>
+      {:else if deferWrite}
+        <footer class="picker-footer review-footer">
+          <button type="button" onclick={backToPlaces}>{m.place_back({}, {locale})}</button>
+          <button class="primary" type="button" onclick={saveNew} disabled={busy}>{m.place_save_use({}, {locale})}</button>
+        </footer>
+      {/if}
     </div>
   </div>
 {/if}
@@ -447,4 +523,72 @@
   .panel.map-mode .actions { flex: 0 0 auto; margin-top: 4px; }
   @media (max-width: 650px) { .panel.map-mode .form { display: flex; flex-direction: column; min-height: 360px; } .panel.map-mode .coordinates { display: grid; } .panel.map-mode .form :global(.map-shell) { flex: 1 1 auto; min-height: 180px; } }
   @media (max-height: 560px) { .panel.map-mode .form { min-height: 280px; } .panel.map-mode .form :global(.map-shell), .panel.map-mode .form :global(.map) { min-height: 160px; } }
+  .panel.linked-picker {
+    box-sizing: border-box;
+    width: min(560px, calc(100vw - 32px));
+    height: auto;
+    max-height: min(80vh, calc(100vh - 32px));
+    padding: clamp(16px, 4vw, 24px);
+    border-radius: 12px;
+    background: #faf9f6;
+    color: #343530;
+    font: 13px/1.5 system-ui, sans-serif;
+  }
+  .linked-picker .panel-content { overflow: auto; padding: 0 4px 4px; }
+  .linked-picker .form { padding-top: 8px; }
+  .linked-picker .form label { min-width: 0; }
+  .linked-picker .form input { box-sizing: border-box; border-radius: 8px; }
+  .linked-picker .form .coordinates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .linked-picker .form :global(.map-shell) { flex: none; margin-top: 8px; }
+  .linked-picker .form :global(.map) {
+    height: clamp(140px, 34vh, 260px);
+    min-height: 0;
+  }
+  .linked-picker .error:focus { outline: 2px solid #788e7b; outline-offset: 1px; }
+  .my-places { margin-block: 14px 8px; }
+  .my-places h3, .source-location h3 {
+    margin: 0 0 6px;
+    font: 500 13px/1.5 system-ui, sans-serif;
+    color: var(--accent, #435b47);
+  }
+  .panel.linked-picker .search-label { margin-top: 0; }
+  .linked-picker .place-result { min-width: 0; overflow-wrap: anywhere; }
+  .linked-picker .place-result strong { font-weight: 550; }
+  .linked-picker .place-list button { padding: 8px 10px; border-bottom-color: #e2e3dc; }
+  .linked-picker .place-list button:last-of-type { border-bottom: 0; }
+  .panel.linked-picker .search-label { margin-bottom: 8px; }
+  .linked-picker .search-label input { box-sizing: border-box; border-radius: 8px; }
+  .linked-picker .place-list {
+    max-height: min(32vh, 300px);
+    border-top: 1px solid #cccec7;
+    border-radius: 8px;
+  }
+  .linked-picker .place-list button:is(:hover, .active, [aria-selected="true"]) {
+    background: #eef1eb;
+    outline: none;
+  }
+  .linked-picker .place-list button:focus-visible {
+    outline: 2px solid #788e7b;
+    outline-offset: -2px;
+  }
+  .linked-picker .source-location {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid #e2e1da;
+    border-radius: 8px;
+    background: #f3f2ed;
+  }
+  .source-location p { margin: 0 0 6px; overflow-wrap: anywhere; }
+  .draft-place-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; }
+  .source-location button, .draft-place-actions button {
+    border: 0; padding: 6px 0; min-height: 36px; max-width: 100%; background: transparent;
+    color: var(--accent, #435b47); font: 13px/1.4 system-ui, sans-serif; text-align: left;
+    white-space: normal; overflow-wrap: anywhere; text-decoration: underline; cursor: pointer;
+  }
+  .draft-place-actions .remove-draft-place { color: #8b4b47; }
+  .picker-footer { flex: 0 0 auto; display: flex; justify-content: flex-end; margin: 10px 0 0; padding-top: 10px; border-top: 1px solid #e2e1da; }
+  .picker-footer button { min-height: 44px; border: 1px solid #d3d4ce; border-radius: 6px; padding: 8px 14px; background: transparent; color: var(--accent, #435b47); }
+  .review-footer { justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .review-footer .primary { background: #607763; color: white; border-color: #607763; }
+  .linked-picker :is(button,input):focus-visible { outline: 2px solid #788e7b; outline-offset: 2px; }
 </style>

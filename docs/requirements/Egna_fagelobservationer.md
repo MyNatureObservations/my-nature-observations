@@ -310,9 +310,61 @@ och den första skrivskyddade macOS DEV-förhandsgranskningen. Den delar fågelm
 men är inte whole-journal Open Import och inför ingen importlagring i detta steg.
 
 
-## Framtida krav: skapa kopplad journalanteckning från observation
+## Skapa kopplad journalanteckning från observation
 
-Från en befintlig observation ska användaren kunna skapa en ny journalanteckning
-som kopplas till observationen. Detta är ett framtida krav, inte levererat i det
-nuvarande flödet. Befintlig koppling till en redan sparad journalanteckning är en
-separat funktion. Inget automatiskt skapande av journaltext införs i detta steg.
+Från en manuell observation eller ett tidigare importerat eBird-besök öppnar
+**Skapa journalanteckning** ett tomt utkast. Besökets lokala datum och en
+tillgänglig MNO-plats föreslås och kan ändras. En eBird-källplats visas som
+referens när det inte finns någon MNO-plats att föreslå. Ingen plats skapas eller
+associeras automatiskt med eBird. Fågelmodulen måste vara på. Redan importerade
+besök stöder flödet även när eBird-anslutningen är av.
+
+Den ordinarie journalredigerarens första sparning skapar posten, vald
+journalplatslänk och observationslänk i samma transaktion. En granskad ny plats,
+med egna uppgifter eller utifrån källplatsen, skapas först i samma sparning. Att gå tillbaka använder
+journalredigerarens vanliga skydd för osparade ändringar. Befintlig koppling
+till en redan sparad journalanteckning är en separat funktion.
+
+**Användarens macOS DEV-godkännande.** Användaren godkände flödet funktionellt.
+Tidigare DEV-återkoppling bekräftade eBird-besök med importen avstängd, avbrott,
+kortanteckningens layout och den engelska kontrollen. Användaren godkände
+också den reviderade platsväljaren visuellt och därefter den separata
+granskningsdialogen **Spara och använd plats**.
+
+**Separata Chrome-kontroller.** Platsväljaren kontrollerades på svenska och
+engelska vid 320 och 900 pixlars bredd, med korta och långa listor, långt
+eBird-källnamn och fokus på sökfält respektive resultatrad. Dialogen
+kontrollerades både vid direktöppning i bred vy och vid ändring smal–bred–smal
+med dialogen öppen. Granskningsformuläret kontrollerades på båda språken
+via både en förifylld eBird-plats och **Skapa ny plats** vid 900 × 800 och
+340 × 380 pixlar, inklusive storleksändring med öppen Leaflet-karta.
+Kontrollen omfattade fokus, rullning, sidfot, kartnål, kartreglage och
+källangivelse. Kartplattornas nätanrop blockerades i det isolerade provet.
+
+Prova med syntetiska besök:
+
+1. Öppna ett manuellt besök, kontrollera föreslaget datum och plats, ändra båda,
+   skriv text och spara. Öppna från båda håll efter omstart.
+2. Öppna ett importerat besök med eBird-anslutningen av. Kontrollera den visade
+   källplatsen, välj en MNO-plats och spara. Kontrollera båda länkriktningarna
+   efter omstart och att eBird-källuppgifterna är oförändrade.
+3. Öppna ett nytt utkast och gå tillbaka både före och efter en ändring.
+   Bekräfta att kasta ändringarna när frågan visas. Utkastet ska återgå till
+   samma observation utan ny anteckning. Prova även med fågelmodulen av.
+
+Automatiska syntetiska testfall täcker ogiltig plats, saknat besök, inaktiv
+fågelmodul och inaktuell journalgeneration. Vid osäkert svar provar redigeraren
+om den ursprungliga begäran med samma post-ID innan nyare text sparas som en
+vanlig uppdatering. Testerna täcker både förlorade svar efter genomförd
+sparning och en begäran som aldrig skrev till databasen. Databastestet
+kontrollerar även att den nyare texten, den enda anteckningen, den avsedda
+kopplingen och den nya platsen finns kvar efter återöppning, samt att en
+uttryckligen borttagen koppling inte återställs av ett försenat omförsök.
+
+
+Skapa journalanteckning visas under **Journallänkar** först när länkarna har
+lästs in och besöket saknar länkar. Befintliga anteckningar kan länkas även om
+besöket redan har en länk. I **Fortsätt** visas ett besök med en synlig
+journallänk på samma dag intill den första sådana anteckningen. Övriga länkade
+anteckningar behåller sin klickbara referens. Besök utan en synlig länk på samma
+dag ligger kvar som egna besök på observationsdatumet.

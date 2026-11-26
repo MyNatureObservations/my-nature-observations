@@ -76,7 +76,7 @@ test("Continue and All entries open the same journal at the latest experience da
   const home = source("../src/routes/+page.svelte");
   const newEntry = source("../src/routes/journal/new/+page.svelte");
   assert.match(home, /href="\/journal\?latest=true" class="journal-card"/);
-  assert.match(newEntry, /href="\/journal\?latest=true" class="back-link">\s*← \{m\.journal_all_entries\(/);
+  assert.match(newEntry, /const cancelHref = visitId [^;]+ : "\/journal\?latest=true"/);
   assert.match(home, /href="\/journal\/new" class="journal-card"/);
   assert.doesNotMatch(home, /Visa journalens läsvy|journal-reading-test-link/);
   assert.equal(compile(home, { filename: "+page.svelte", generate: "client" }).warnings.length, 0);
@@ -167,4 +167,33 @@ test("journal change refresh removes an entry that has become definitely empty",
   await h.flush();
   assert.equal(h.run("entries.length"), 0);
   h.dispose();
+});
+
+
+test("observation journal draft uses local date and only suggests a registered MNO place", async () => {
+  const editorRoute = source("../src/routes/journal/new/+page.svelte");
+  const script = editorRoute.match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^  import .*;\n/gm, "");
+  for (const imported of [false, true]) {
+    let initialization;
+    const calls = [];
+    const context = vm.createContext({
+      page: {url: new URL("https://example.invalid/journal/new?observation=visit&generation=7")},
+      birdHref: (_entry, visit) => `/observations/${visit}`,
+      $state: value => value,
+      onMount: callback => { initialization = callback; },
+      makeBirdReader: () => async (_command, args) => {
+        calls.push(args);
+        return {generation: 7, data: {visitDate: "2026-11-23", place: {id: imported ? "ebird:L100" : "p1", name: "Lake"}, source: imported ? {} : null}};
+      },
+    });
+    const run = code => vm.runInContext(code, context);
+    run(transpile(script, ts.ModuleKind.None));
+    initialization();
+    for (let i=0;i<8;i++) await Promise.resolve();
+    assert.equal(calls[0].generation, 7);
+    assert.equal(run("entryDate"), "2026-11-23");
+    assert.equal(run("draftPlace?.id ?? null"), imported ? null : "p1");
+    assert.equal(run("cancelHref"), "/observations/visit");
+  }
+  assert.match(editorRoute, /observation_journal_source_place/);
 });

@@ -141,8 +141,8 @@ test('observation actions share a wrapping row and general source explanations a
  const actions=overview.match(/<div class="observation-actions">([\s\S]*?)<\/div>/)[1];
  assert.match(actions,/href="\/observations\/new"/);assert.match(actions,/href="\/observations\/ebird-preview"/);assert.doesNotMatch(actions,/<p>/);assert.match(overview,/\.observation-actions\{[^}]*flex-wrap:wrap/);
  const detail=read('../src/lib/components/EbirdListDetail.svelte');const source=detail.indexOf('<details class="source-details">');
- assert.ok(detail.indexOf('m.ebird_source_place')>source);assert.ok(detail.indexOf('m.ebird_catalog_note')>source);
- for(const key of ['m.ebird_source_locked','m.ebird_from','m.ebird_original','m.ebird_review_additions','role="alert"'])assert.ok(detail.indexOf(key)<source);
+ assert.ok(detail.indexOf('m.ebird_source_place')>source);assert.ok(detail.indexOf('m.ebird_catalog_note')>source);assert.ok(detail.indexOf('m.ebird_source_locked')>source);
+ for(const key of ['m.ebird_from','m.ebird_original','m.ebird_review_additions','role="alert"'])assert.ok(detail.indexOf(key)<source);
  assert.equal(JSON.parse(read('../messages/sv.json')).ebird_source_locked,'Uppgifterna hämtas från eBird och ändras där.');
  assert.equal(JSON.parse(read('../messages/en.json')).ebird_source_locked,'These details come from eBird and are edited there.');
 });

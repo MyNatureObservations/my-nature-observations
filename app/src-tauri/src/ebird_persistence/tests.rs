@@ -35,7 +35,7 @@ fn synthetic_validation_keeps_x_and_rejects_invalid_source() {
     }
 }
 
-fn input(id: &str) -> InputVisit {
+pub(crate) fn input(id: &str) -> InputVisit {
     InputVisit {
         submission_id: id.into(),
         rows: vec![

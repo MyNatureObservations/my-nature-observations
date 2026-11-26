@@ -16,6 +16,7 @@
  let available=$state<boolean|null>(null),list=$state<BirdList|null>(null),failed=$state(false),generation=$state<number|null>(null);
  let deleteDialog=$state(false),deleting=$state(false),deleteAttempted=$state(false),deleted=$state(false),deleteError=$state("");
  let returnDestination=$state("/journal?latest=true");let disposed=false;
+ const createJournalHref=$derived(generation===null?undefined:`/journal/new?${new URLSearchParams({observation:listId,generation:String(generation),...(entryId?{fromEntry:entryId}:{})})}`);
  const origin=$derived(entryId?entryHref(entryId):"/observations");
  function setPreferences(p:BirdNamePreferences){preferences=p;preferencesSaved=saveBirdNamePreferences(p);}
  onMount(()=>{
@@ -75,10 +76,10 @@
  {:else if failed}<a href={origin}>← {entryId?m.bird_back_entry({}, {locale:language.current}):m.bird_overview({}, {locale:language.current})}</a><p role="alert">{m.bird_load_failed({}, {locale:language.current})}</p>
  {:else if list}
   {#if list.source}<EbirdListDetail {list} {origin} locale={language.current}>
-   {#snippet links()}{#if generation!==null}<BirdJournalLinks {listId} {generation} locale={language.current} disabled={linksRefreshing||linksRefreshFailed} onchanged={linksChanged} onbusy={busy=>linkBusy=busy}/>{/if}{/snippet}
+   {#snippet links()}{#if generation!==null}<BirdJournalLinks {listId} {generation} {createJournalHref} locale={language.current} disabled={linksRefreshing||linksRefreshFailed} onchanged={linksChanged} onbusy={busy=>linkBusy=busy}/>{/if}{/snippet}
   </EbirdListDetail>{:else}
   <BirdListDetail {list} {origin} standalone={!entryId} editHref={`${birdHref(entryId,list.id)}/edit`} onDelete={requestDeletion} actionsDisabled={deleting||deleteAttempted||linkBusy||linksRefreshing||linksRefreshFailed} locale={language.current} {preferences} {preferencesSaved} onPreferencesChange={setPreferences}>
-   {#snippet links()}{#if generation!==null}<BirdJournalLinks {listId} {generation} locale={language.current} disabled={deleting||deleteAttempted||linksRefreshing||linksRefreshFailed} onchanged={linksChanged} onbusy={busy=>linkBusy=busy}/>{/if}{/snippet}
+   {#snippet links()}{#if generation!==null}<BirdJournalLinks {listId} {generation} {createJournalHref} locale={language.current} disabled={deleting||deleteAttempted||linksRefreshing||linksRefreshFailed} onchanged={linksChanged} onbusy={busy=>linkBusy=busy}/>{/if}{/snippet}
   </BirdListDetail>{/if}
   {#if linksRefreshFailed}<p role="alert">{m.bird_link_refresh_failed({}, {locale:language.current})}</p>{/if}
   {#if deleteError}<p role="alert">{deleted?m.bird_deleted_navigation_failed({}, {locale:language.current}):m.bird_delete_failed({}, {locale:language.current})}</p>

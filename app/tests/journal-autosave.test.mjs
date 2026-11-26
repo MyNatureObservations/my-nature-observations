@@ -1052,3 +1052,123 @@ test("failed deletion keeps the saved entry detail available", async () => {
   assert.equal(h.run("canDeleteEntry()"), true);
   h.cleanup();
 });
+
+test("observation autosave retries one linked draft, then saves rapid edits normally", async () => {
+  const visited = [];
+  const linkedDraft = {visitId: "synthetic-visit", generation: 1, placeId: "suggested", placeChanged: false};
+  const h = await harness({isNew: true, linkedDraft, onGoto: async url => visited.push(url)});
+  h.run('entryDate = "2026-11-29"; linkedDraft.placeId = "changed-place"');
+  h.edit("A note from the visit");
+  await h.tick();
+  assert.equal(h.writes[0].command, "save_observation_journal");
+  assert.equal(h.writes[0].draft.placeId, "changed-place");
+  assert.equal(h.writes[0].draft.entryDate, "2026-11-29");
+  assert.equal(h.writes[0].draft.visitId, "synthetic-visit");
+  assert.equal(h.canLeave(), false);
+  h.edit("Second sentence");
+  await rejectWrite(h, 0);
+  await h.tick(2000);
+  assert.deepEqual(h.writes[1].draft, h.writes[0].draft);
+  await h.succeed(1);
+  await h.tick();
+  assert.equal(h.writes[2].command, "save_journal_entry");
+  assert.equal(h.writes[2].id, h.writes[0].draft.entryId);
+  assert.equal(h.writes[2].contentJson, '{"text":"Second sentence"}');
+  await h.succeed(2);
+  assert.equal(h.canLeave(), true);
+  await h.run("finishEditing()");
+  assert.deepEqual(visited, [`/journal/entries/${h.writes[0].draft.entryId}`]);
+  h.cleanup();
+});
+
+test("discarding an observation draft returns without creating an entry or link", async () => {
+  const visited = [];
+  const h = await harness({isNew: true, linkedDraft: {visitId: "synthetic-visit", generation: 1, placeId: null}, onGoto: async url => visited.push(url)});
+  h.run('pendingNavigationUrl = "/observations/synthetic-visit"');
+  await h.run("leaveWithoutSaving()");
+  await h.tick();
+  assert.equal(h.writes.length, 0);
+  assert.deepEqual(visited, ["/observations/synthetic-visit"]);
+  h.cleanup();
+});
+
+
+for (const initiallyCommitted of [true, false]) {
+  test(`linked first save with ${initiallyCommitted ? "all replies lost after commit" : "no database write"} confirms its original payload and saves newer text`, async () => {
+    const linkedDraft = {visitId: "visit", visitDate: "2026-10-17", visitPlaceId: "ebird:source",
+      generation: 1, placeId: "new-place", newPlace: {name:"Reviewed place",latitude:0,longitude:18}, placeChanged: true};
+    const metadataLocked = [];
+    const h = await harness({isNew:true, linkedDraft, onLinkedWriting:value=>metadataLocked.push(value)});
+    try {
+      h.edit("Original text");
+      await h.tick();
+      const first = structuredClone(h.writes[0].draft);
+      let committed = initiallyCommitted ? first : null;
+      await failAllAttempts(h);
+      assert.equal(h.run("entryId"), null);
+      assert.equal(h.canLeave(), false);
+      assert.equal(metadataLocked.at(-1), true);
+
+      h.edit("Later text");
+      // An edit to the live place object cannot mutate the original wire payload.
+      linkedDraft.newPlace.name = "Different live value";
+      const retry = h.run("retrySave()");
+      const retried = structuredClone(h.writes[3].draft);
+      assert.deepEqual(retried, first);
+      if (committed) assert.deepEqual(retried, committed);
+      else committed = retried;
+      assert.equal(committed.newPlace.name, "Reviewed place");
+
+      h.edit("Latest text");
+      await h.succeed(3);
+      await retry;
+      assert.equal(h.text(), "Latest text");
+      assert.equal(h.pending(), true);
+      assert.equal(h.canLeave(), false);
+      assert.equal(metadataLocked.at(-1), false);
+      await h.tick();
+      assert.equal(h.writes[4].command, "save_journal_entry");
+      assert.equal(h.writes[4].id, first.entryId);
+      assert.equal(h.writes[4].contentJson, '{"text":"Latest text"}');
+      await h.succeed(4);
+      assert.equal(h.run("saveError"), false);
+      assert.equal(h.canLeave(), true);
+    } finally {
+      h.cleanup();
+    }
+  });
+}
+
+test("an uncertain linked save with a removed link rejects the replay and retains the live text", async () => {
+  const h = await harness({isNew:true, linkedDraft:{visitId:"visit",generation:1,placeId:null}});
+  try {
+    h.edit("Original text");
+    await h.tick();
+    await failAllAttempts(h);
+    h.edit("Keep these changes");
+    const retry = h.run("retrySave()");
+    h.writes[3].reject("journal_entry_already_exists");
+    await retry;
+    await h.tick();
+    assert.equal(h.writes.length, 4);
+    assert.equal(h.run("observationConflict"), true);
+    assert.equal(h.canLeave(), false);
+    assert.equal(h.text(), "Keep these changes");
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("stale visit rejects autosave without repeating it or dropping draft text", async () => {
+  const h = await harness({isNew:true, linkedDraft:{visitId:"visit",generation:1,placeId:null}});
+  h.edit("Keep the draft");
+  await h.tick();
+  h.writes[0].reject("journal_observation_stale");
+  await h.flush();
+  await h.tick();
+  assert.equal(h.writes.length,1);
+  assert.equal(h.run("observationConflict"),true);
+  assert.equal(h.run("entryId"),null);
+  assert.equal(h.text(),"Keep the draft");
+  h.cleanup();
+});

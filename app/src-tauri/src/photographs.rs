@@ -359,12 +359,25 @@ pub(crate) fn save(
     assets: &[Asset],
     create_entry: bool,
 ) -> Result<(), String> {
+    let tx = db.transaction().map_err(|e| e.to_string())?;
+    save_in_transaction(&tx, entry_id, entry_date, title, json, assets, create_entry)?;
+    tx.commit().map_err(|e| e.to_string())
+}
+
+pub(crate) fn save_in_transaction(
+    tx: &rusqlite::Transaction<'_>,
+    entry_id: &str,
+    entry_date: &str,
+    title: &str,
+    json: &str,
+    assets: &[Asset],
+    create_entry: bool,
+) -> Result<(), String> {
     use rusqlite::OptionalExtension;
     if entry_id.is_empty() {
         return Err("photograph_entry_id".into());
     }
     validate_document(json)?;
-    let tx = db.transaction().map_err(|e| e.to_string())?;
     let previous: Option<(i64, String)> = tx
         .query_row(
             "SELECT document_version,content_json FROM journal_entries WHERE id=?1",
@@ -382,7 +395,7 @@ pub(crate) fn save(
     if let Some((version, original)) = previous {
         let valid = match version {
             1 => crate::backup::restore::document_is_editable(&original),
-            2 => validate_references(&tx, entry_id, &original).is_ok(),
+            2 => validate_references(tx, entry_id, &original).is_ok(),
             _ => false,
         };
         if !valid {
@@ -398,10 +411,10 @@ pub(crate) fn save(
         if asset.entry_id != entry_id {
             return Err("photograph_asset_owner".into());
         }
-        asset.insert(&tx)?;
+        asset.insert(tx)?;
     }
-    validate_references(&tx, entry_id, json)?;
-    tx.commit().map_err(|e| e.to_string())
+    validate_references(tx, entry_id, json)?;
+    Ok(())
 }
 
 #[tauri::command]

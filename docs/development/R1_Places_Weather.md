@@ -115,3 +115,11 @@ R2 ändrar inte databasschema, innehållsbevis eller arkiv-/Recovery-kontrakt.
 Paketerad WebKit/OSM-policyverifiering återstår enligt kartnoten; detta är en
 operativ osäkerhet, inte ett konstaterat fel. Denna not beskriver färdig
 implementation och verifiering, inte att R2 redan är integrerat i `main`.
+
+## Follow-up: places with saved content
+
+Explore a map that shows every MNO place with a saved journal entry or
+observation, and improve how users find and manage those places. Keep this
+separate from creating a journal entry from an observation. An eBird source
+location can be shown as a reference without creating or associating an
+MNO place.

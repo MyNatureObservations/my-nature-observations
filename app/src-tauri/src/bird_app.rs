@@ -113,6 +113,7 @@ pub(crate) struct ListView {
     edit_token: String,
     id: String,
     visit_date: String,
+    journal_entry_ids: Vec<String>,
     visit_start: Option<String>,
     visit_end: Option<String>,
     place: crate::place_registry::Place,
@@ -906,6 +907,7 @@ fn read_view(
         edit_token,
         id: list.id,
         visit_date: list.visit_date,
+        journal_entry_ids: list.journal_entries,
         visit_start: list.visit_start,
         visit_end: list.visit_end,
         place,
@@ -1237,19 +1239,31 @@ pub(crate) fn set_journal_bird_link(
     let _module_permit = module.command()?;
     #[cfg(target_os = "macos")]
     {
-        if !available(&state) {
-            return Err("bird_schema_unsupported".into());
-        }
-        if read_ebird_view(&state, generation, None, &id)?.is_some() {
-            return set_ebird_link(&state, &search, generation, &id, &entry_id, linked);
-        }
-        crate::bird_observations::set_link(&state, &search, generation, &id, &entry_id, linked)
+        set_link_for_visit(&state, &search, generation, &id, &entry_id, linked)
     }
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (state, search, generation, entry_id, id, linked);
         Err("bird_platform_unsupported".into())
     }
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn set_link_for_visit(
+    state: &DatabaseState,
+    search: &SearchState,
+    generation: u32,
+    id: &str,
+    entry_id: &str,
+    linked: bool,
+) -> Result<(), String> {
+    if !available(state) {
+        return Err("bird_schema_unsupported".into());
+    }
+    if read_ebird_view(state, generation, None, id)?.is_some() {
+        return set_ebird_link(state, search, generation, id, entry_id, linked);
+    }
+    crate::bird_observations::set_link(state, search, generation, id, entry_id, linked)
 }
 
 #[cfg(all(test, target_os = "macos"))]
@@ -1551,14 +1565,14 @@ mod overview_tests {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct JournalTarget {
-    id: String,
+    pub(crate) id: String,
     entry_date: String,
     title: String,
     preview: String,
-    linked: bool,
+    pub(crate) linked: bool,
 }
 #[cfg(target_os = "macos")]
-fn journal_targets(
+pub(crate) fn journal_targets(
     state: &DatabaseState,
     generation: u32,
     id: &str,
@@ -1864,6 +1878,13 @@ fn ebird_view_from_records(
         edit_token: String::new(),
         id: id.into(),
         visit_date: fields["Date"].clone(),
+        journal_entry_ids: all
+            .iter()
+            .filter_map(|record| match record {
+                Record::Link { entry_id, visit_id } if visit_id == id => Some(entry_id.clone()),
+                _ => None,
+            })
+            .collect(),
         visit_start: start,
         visit_end: None,
         place,
