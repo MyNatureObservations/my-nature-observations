@@ -4,6 +4,7 @@ mod ebird_app;
 mod ebird_persistence;
 mod ebird_preview;
 mod environment;
+mod observation_journal;
 mod photographs;
 mod startup_error;
 // Shared backup primitives; some verification APIs are reserved for later steps.
@@ -183,6 +184,7 @@ pub fn run() {
             journal_history::journal_history_overview,
             journal_history::journal_history_entries,
             journal::save_journal_entry,
+            observation_journal::save_observation_journal,
             journal::delete_journal_entry,
             photographs::prepare_journal_photograph,
             photographs::select_journal_photograph,

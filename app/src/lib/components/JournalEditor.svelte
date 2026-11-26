@@ -29,7 +29,13 @@
     placeBusy = false,
     onSessionChange,
     metadata,
+    linkedDraft = null,
+    linkedBackHref,
+    onLinkedWriting,
   }: {
+    linkedBackHref?: string;
+    linkedDraft?: { visitId: string; visitDate: string; visitPlaceId: string; generation: number; placeId: string | null; newPlace?: {name: string; latitude: number | null; longitude: number | null} | null; placeChanged: boolean } | null;
+    onLinkedWriting?: (writing: boolean) => void;
     metadata?: Snippet<[Snippet, Snippet | undefined]>;
     entryDate: string;
     isNew?: boolean;
@@ -59,6 +65,23 @@
   let documentProtected = $state(false);
   let documentVersion = 1;
   let draftEntryId: string | null = null;
+  type LinkedFirstSave = {
+    generation: number;
+    draft: {
+      entryId: string;
+      visitId: string;
+      visitDate: string;
+      visitPlaceId: string;
+      placeId: string | null;
+      newPlace: {name: string; latitude: number | null; longitude: number | null} | null;
+      entryDate: string;
+      title: string;
+      contentJson: string;
+      documentVersion: number;
+      assets: PhotographAsset[];
+    };
+  };
+  let firstLinkedSave = $state.raw<LinkedFirstSave | null>(null);
   let photoBusy = $state(false);
   let photoDraft = $state(false);
   let focusPhotoDraft: (() => void) | undefined;
@@ -85,6 +108,7 @@
     photoPosition = capturePhotoPosition(targetEditor.state);
     photoBusy = true; photoError = "";
     try {
+      if (linkedDraft && !entryId && isSaving) return;
       // Finish an earlier first save before assigning a stable owner to the asset.
       if (currentSave) await currentSave;
       if (!current()) return;
@@ -141,8 +165,9 @@
   let deleteFailed = $state(false);
   let savedEntryDate = $state("");
   let hasPendingChanges = $derived(
-    generationConflict || hasUnsavedChanges ||
-      (savedEntryDate !== "" && entryDate !== savedEntryDate),
+    generationConflict || firstLinkedSave !== null || hasUnsavedChanges ||
+      (savedEntryDate !== "" && entryDate !== savedEntryDate) ||
+      (!!linkedDraft?.placeChanged && !entryId),
   );
 
   function mountLeaveDialog(dialog: HTMLDialogElement) {
@@ -219,6 +244,7 @@
 
   let saveMessage = $state("");
   let saveError = $state(false);
+  let observationConflict = $state(false);
   let isRetrying = $state(false);
   let saveMessageTimer: ReturnType<typeof setTimeout> | undefined;
   let isSaveMessageFading = $state(false);
@@ -351,7 +377,12 @@ for (const block of blocks) {
 
         if (disposed || !editor) return;
         const entry = snapshot.data;
+        if (linkedDraft && snapshot.generation !== linkedDraft.generation) {
+          generationConflict = true;
+          throw "journal_generation_conflict";
+        }
         sessionGeneration = snapshot.generation;
+        if (linkedDraft) savedEntryDate = entryDate;
 
         if (journalEntryId && !entry) {
           throw new Error(
@@ -492,6 +523,13 @@ for (const block of blocks) {
     }
   });
 
+  $effect(() => {
+    // A confirmed place draft can release an autosave paused while editing place details.
+    if (linkedDraft && !entryId && !placeDirty && !placeBusy) {
+      untrack(() => { if (!isSaving && !saveError) scheduleAutosave(); });
+    }
+  });
+
   function scheduleAutosave() {
     clearTimeout(autosaveTimer);
 
@@ -502,7 +540,8 @@ for (const block of blocks) {
       isSaveMessageFading = false;
     }
 
-    if (documentProtected || generationConflict || isLeavingWithoutSaving || !isEditing || !hasPendingChanges) return;
+    if (documentProtected || generationConflict || observationConflict || isLeavingWithoutSaving || !isEditing || !hasPendingChanges) return;
+    if (linkedDraft && !entryId && (placeDirty || placeBusy)) return;
     // Restart the timer whenever the user makes another change.
     autosaveTimer = setTimeout(() => {
       void saveEntry();
@@ -510,7 +549,7 @@ for (const block of blocks) {
   }
 
   async function saveEntry(): Promise<boolean> {
-    if (!editor || documentProtected || generationConflict || sessionGeneration === null || isLeavingWithoutSaving) return false;
+    if (!editor || documentProtected || generationConflict || observationConflict || sessionGeneration === null || isLeavingWithoutSaving) return false;
 
     // Reserve a place in the queue before waiting for earlier saves.
     // This prevents concurrent writes and duplicate IDs for new entries.
@@ -521,11 +560,13 @@ for (const block of blocks) {
         await previousSave;
       }
 
-      if (!editor || documentProtected || generationConflict || sessionGeneration === null || isLeavingWithoutSaving) return false;
+      if (!editor || documentProtected || generationConflict || observationConflict || sessionGeneration === null || isLeavingWithoutSaving) return false;
+
+      if (linkedDraft && !entryId && (placeDirty || placeBusy)) return false;
 
       // Check AFTER the queue wait: a previous first write may have returned an ID.
       // True means finishing is safe, not that an empty entry was written.
-      if (!entryId && isDefinitelyEmptyJournalDocument(editor.getJSON())) {
+      if (!entryId && !firstLinkedSave && isDefinitelyEmptyJournalDocument(editor.getJSON())) {
         updateUnsavedChanges(editor);
         return true;
       }
@@ -552,20 +593,45 @@ for (const block of blocks) {
   async function performSave(): Promise<boolean> {
     if (!editor || documentProtected || sessionGeneration === null) return false;
     const generationToSave = sessionGeneration;
+    const pendingAssets = [...preparedPhotographs.values()].filter(asset => !storedPhotographs.has(asset.asset_id));
+    const currentContent = JSON.stringify(editor.getJSON());
+    const currentTitle = generateTitle();
 
-    // Capture the exact content and date being saved.
-    // The user may continue editing while the database is writing.
-    const contentJson = JSON.stringify(editor.getJSON());
-    const dateToSave = entryDate;
-    const titleToSave = generateTitle();
-    const versionToSave = documentVersion;
+    if (!entryId && linkedDraft && !firstLinkedSave) {
+      // Keep the first request across retry batches. The backend can confirm an
+      // existing creation only by comparing it with the original payload.
+      firstLinkedSave = {
+        generation: generationToSave,
+        draft: {
+          entryId: draftEntryId ??= crypto.randomUUID(),
+          visitId: linkedDraft.visitId,
+          visitDate: linkedDraft.visitDate,
+          visitPlaceId: linkedDraft.visitPlaceId,
+          placeId: linkedDraft.placeId,
+          newPlace: linkedDraft.newPlace ? { ...linkedDraft.newPlace } : null,
+          entryDate,
+          title: currentTitle,
+          contentJson: currentContent,
+          documentVersion,
+          assets: pendingAssets.map(asset => ({ ...asset })),
+        },
+      };
+    }
+    const linkedToSave = firstLinkedSave;
+    const contentJson = linkedToSave?.draft.contentJson ?? currentContent;
+    const dateToSave = linkedToSave?.draft.entryDate ?? entryDate;
+    const titleToSave = linkedToSave?.draft.title ?? currentTitle;
+    const versionToSave = linkedToSave?.draft.documentVersion ?? documentVersion;
     const ownerToSave = entryId ?? draftEntryId ?? (versionToSave === 2 ? crypto.randomUUID() : null);
-    const assetsToSave = [...preparedPhotographs.values()].filter(asset => !storedPhotographs.has(asset.asset_id));
+    const assetsToSave = linkedToSave?.draft.assets ?? pendingAssets;
 
     // Three attempts in total, with increasing delays.
     const retryDelays = [0, 2000, 5000];
 
     isSaving = true;
+    if (linkedToSave) {
+      onLinkedWriting?.(true);
+    }
     isRetrying = false;
     clearTimeout(saveMessageTimer);
     saveMessage = "";
@@ -586,7 +652,9 @@ for (const block of blocks) {
         if (!editor || documentProtected || generationConflict || isLeavingWithoutSaving) return false;
 
         try {
-          const result = versionToSave === 2
+          const result = linkedToSave
+            ? await invoke<{ id: string }>("save_observation_journal", linkedToSave)
+            : versionToSave === 2
             ? await invoke("save_journal_with_photographs", { entryId: ownerToSave, entryDate: dateToSave, title: titleToSave, contentJson, assets: assetsToSave, generation: generationToSave, createEntry: entryId === null }).then(() => ({ id: ownerToSave! }))
             : await invoke<{ id: string }>("save_journal_entry", {
                 id: entryId, newEntryId: entryId ? null : draftEntryId, entryDate: dateToSave, title: titleToSave, contentJson, generation: generationToSave,
@@ -594,6 +662,7 @@ for (const block of blocks) {
           if (versionToSave === 2) assetsToSave.forEach(asset => storedPhotographs.add(asset.asset_id));
 
           entryId = result.id;
+          firstLinkedSave = null;
           savedContentJson = contentJson;
           savedEntryDate = dateToSave;
           savedTitle = titleToSave;
@@ -623,6 +692,12 @@ for (const block of blocks) {
 
           return true;
         } catch (error) {
+          if (linkedToSave && ["bird_list_missing", "journal_observation_already_linked", "journal_observation_stale", "journal_entry_already_exists"].includes(String(error))) {
+            observationConflict = true;
+            saveError = true;
+            clearTimeout(autosaveTimer);
+            return false;
+          }
           if (String(error) === "journal_document_incompatible") {
             documentProtected = true;
             editor?.setEditable(false);
@@ -650,6 +725,11 @@ for (const block of blocks) {
       return false;
     } finally {
       isSaving = false;
+      if (linkedToSave) {
+        // The original place is part of the uncertain write. Keep metadata
+        // controls locked until creation is confirmed or definitively rejected.
+        onLinkedWriting?.(firstLinkedSave !== null && !observationConflict && !generationConflict && !documentProtected);
+      }
       isRetrying = false;
     }
   }
@@ -664,6 +744,7 @@ for (const block of blocks) {
   async function finishEditing() {
     if (photoDraft) { focusPhotoDraft?.(); return; }
     if (!editor || weatherBusy || placeBusy || photoBusy) return;
+    if (linkedDraft && !entryId && placeDirty) { placeWarning = true; return; }
     if (weatherDirty && !isNew) { weatherWarning = true; return; }
     // A new journal must first be saved to obtain the ID required by the place link.
     if (placeDirty && entryId) { placeWarning = true; return; }
@@ -702,6 +783,7 @@ for (const block of blocks) {
     editor.setEditable(false);
     onEditingChange?.(false);
     if (!entryId) {
+      if (linkedDraft && linkedBackHref) await goto(linkedBackHref);
       // An empty new document is finished without a row or a saved notification.
       saveError = false;
       return;
@@ -921,9 +1003,10 @@ for (const block of blocks) {
         <strong>{m.journal_save_failed_title({}, { locale: language.current })}</strong>
         <p>{generationConflict
           ? m.journal_generation_conflict({}, { locale: language.current })
+          : observationConflict ? m.observation_journal_stale({}, { locale: language.current })
           : m.journal_save_failed_description({}, { locale: language.current })}</p>
       </div>
-      <button type="button" onclick={retrySave} disabled={isSaving || generationConflict || documentProtected}>
+      <button type="button" onclick={retrySave} disabled={isSaving || generationConflict || observationConflict || documentProtected}>
         {m.journal_save_retry({}, { locale: language.current })}
       </button>
     </div>
@@ -1020,11 +1103,11 @@ for (const block of blocks) {
 
   .journal-entry :global(.tiptap) {
     outline: none;
-    min-height: 200px;
     border-radius: 6px;
   }
 
   .journal-entry :global(.tiptap[contenteditable="true"]) {
+    min-height: 200px;
     padding: 10px;
     margin: -10px;
     background: rgba(120, 142, 123, 0.035);

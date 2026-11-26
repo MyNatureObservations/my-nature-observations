@@ -9,6 +9,8 @@ export type Place = {
   revision: string;
 };
 
+export type JournalDraftPlace = Pick<Place, "id" | "name" | "latitude" | "longitude"> & { create?: boolean };
+
 export type PlaceSnapshot = {
   id: string;
   name: string;

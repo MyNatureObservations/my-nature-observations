@@ -571,10 +571,10 @@ test('hour and minute typing keeps partial values invalid, colon advances, and c
 });
 
 function journalLinksHarness({reject=false,refreshReject=false}={}){
- const mounts=[],calls=[],events=[];let changed=0;let data=[{id:'a',entryDate:'2026-11-13',title:'A',preview:'',linked:true},{id:'b',entryDate:'2026-11-12',title:'',preview:'Useful text',linked:false}];
- const context=vm.createContext({$effect:()=>{},$props:()=>({listId:'visit',generation:7,locale:'sv',onchanged:async()=>{changed++;if(refreshReject)throw Error('refresh');},onbusy:()=>{}}),$state:v=>v,onMount:fn=>mounts.push(fn),makeBirdReader:()=>async()=>({generation:7,data:JSON.parse(JSON.stringify(data))}),setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('stale');data=data.map(e=>e.id===args[1]?{...e,linked:args[3]}:e);},window:{dispatchEvent:e=>events.push(e.type)},Event});
+ const mounts=[],calls=[],events=[],listeners=new Map();let changed=0;let data=[{id:'a',entryDate:'2026-11-13',title:'A',preview:'',linked:true},{id:'b',entryDate:'2026-11-12',title:'',preview:'Useful text',linked:false}];
+ const context=vm.createContext({$effect:()=>{},$props:()=>({listId:'visit',generation:7,locale:'sv',onchanged:async()=>{changed++;if(refreshReject)throw Error('refresh');},onbusy:()=>{}}),$state:v=>v,onMount:fn=>mounts.push(fn),makeBirdReader:()=>async()=>({generation:7,data:JSON.parse(JSON.stringify(data))}),setBirdLink:async(...args)=>{calls.push(args);if(reject)throw Error('stale');data=data.map(e=>e.id===args[1]?{...e,linked:args[3]}:e);},window:{dispatchEvent:e=>events.push(e.type),addEventListener:(type,fn)=>listeners.set(type,fn),removeEventListener:type=>listeners.delete(type)},Event});
  const script=source('../src/lib/components/BirdJournalLinks.svelte').match(/<script lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;\n/gm,'');vm.runInContext(ts.transpileModule(script,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText,context);
- return {run:s=>vm.runInContext(s,context),mount:()=>mounts[0](),calls,events,changed:()=>changed};
+ return {run:s=>vm.runInContext(s,context),mount:()=>mounts[0](),calls,events,changed:()=>changed,externalUnlink:()=>{data=data.map(e=>({...e,linked:false}));listeners.get("mno:journal-changed")?.();}};
 }
 test('detail links choose an exact entry, prevent duplicates and unlink only that entry',async()=>{
  const h=journalLinksHarness();h.mount();await settle();h.run('choosing=true;cancelChoice()');assert.equal(h.calls.length,0);assert.equal(h.run('choosing'),false);
@@ -918,4 +918,34 @@ test('pending or uncertain form operations prevent completing module disable',as
  const h=formHarness();const cleanup=h.mount();await Promise.resolve();
  for(const flag of ['busy','photoPending','saveUncertain']){h.run(`${flag}=true`);assert.equal(await h.disable(),false);h.run(`${flag}=false`);}
  assert.equal(await h.disable(),true);assert.equal(h.calls.length,0);cleanup();
+});
+
+
+test("journal links shows Create only after a successful load with no links in either language", async () => {
+ const section=source('../src/lib/components/BirdJournalLinks.svelte');
+ const href='/journal/new?observation=visit&generation=7';
+ const linked={id:'a',entryDate:'2026-11-13',title:'Existing entry',preview:'',linked:true};
+ for (const locale of ['sv','en']) {
+  for (const state of ['loading','failed','linked','unlinked']) {
+   const text=section
+    .replace('loading=$state(true)',`loading=$state(${state==='loading'})`)
+    .replace('failed=$state(false)',`failed=$state(${state==='failed'})`)
+    .replace('entries=$state<BirdJournalEntry[]>([])',`entries=$state<BirdJournalEntry[]>(${JSON.stringify([{...linked,linked:state==='linked'}])})`);
+   const component=(await import(journalLinksUrl(text))).default;
+   const html=render(component,{props:{listId:'visit',generation:7,locale,createJournalHref:href,onchanged:async()=>{}}}).body;
+   assert.equal(html.includes('href="/journal/new?observation=visit'),state==='unlinked');
+   assert.ok(html.includes(locale==='sv'?'Koppla till journalanteckning':'Link to journal entry'));
+   if(state==='linked')assert.ok(html.includes('/journal/entries/a'));
+  }
+ }
+});
+
+
+test("journal-side unlink refreshes a mounted observation link section", async () => {
+ const h=journalLinksHarness();
+ h.mount(); await settle();
+ assert.equal(h.run("entries.some(e=>e.linked)"),true);
+ h.externalUnlink(); await settle();
+ assert.equal(h.run("entries.some(e=>e.linked)"),false);
+ assert.equal(h.run("loading"),false);
 });

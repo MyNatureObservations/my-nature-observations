@@ -1,5 +1,7 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import { onMount, type Snippet } from "svelte";
+  import { makeBirdReader, birdHref, type BirdList } from "$lib/birds";
+  import type { JournalDraftPlace } from "$lib/places";
   import JournalEditor from "$lib/components/JournalEditor.svelte";
   import DatePicker from "$lib/components/DatePicker.svelte";
   import EntryPlace from "$lib/components/EntryPlace.svelte";
@@ -32,6 +34,37 @@
     ].join("-");
   }
 
+  const visitId = page.url.searchParams.get("observation");
+  const visitGeneration = Number(page.url.searchParams.get("generation"));
+  const cancelHref = visitId ? birdHref(page.url.searchParams.get("fromEntry"), visitId) : "/journal?latest=true";
+  let visit = $state<BirdList | null>(null);
+  let linkedLoadFailed = $state(false);
+  let draftPlace = $state<JournalDraftPlace | null>(null);
+  let suggestedPlaceId = $state<string | null>(null);
+  let writing = $state(false);
+  onMount(() => {
+    if (!visitId) return;
+    let active = true;
+    void (async () => {
+      try {
+        if (!Number.isInteger(visitGeneration) || visitGeneration < 1) throw Error();
+        const snapshot = await makeBirdReader()<BirdList>("read_journal_bird_list", {
+          entryId: null, id: visitId, generation: visitGeneration,
+        });
+        if (!active) return;
+        entryDate = snapshot.data.visitDate;
+        // The current eBird view projects a source-only place. Manual visits resolve
+        // their MNO place from the register in Rust.
+        draftPlace = snapshot.data.source ? null : snapshot.data.place;
+        suggestedPlaceId = draftPlace?.id ?? null;
+        visit = snapshot.data;
+      } catch {
+        if (active) linkedLoadFailed = true;
+      }
+    })();
+    return () => { active = false; };
+  });
+
   let entryDate = $state(getInitialEntryDate());
   let entryId = $state<string | null>(null);
   let generation = $state<number | null>(null);
@@ -48,8 +81,8 @@
 <main class="journal">
   <div class="journal-content">
     <header class="journal-header">
-      <a href="/journal?latest=true" class="back-link">
-        ← {m.journal_all_entries({}, { locale: language.current })}
+      <a href={entryId ? "/journal?latest=true" : cancelHref} class="back-link">
+        ← {visitId && !entryId ? m.observation_back({}, { locale: language.current }) : m.journal_all_entries({}, { locale: language.current })}
       </a>
 
       <span class="section-label">
@@ -58,14 +91,30 @@
     </header>
 
     <section class="journal-entry">
+      {#if linkedLoadFailed}
+        <p role="alert">{m.observation_journal_unavailable({}, {locale: language.current})}</p>
+      {:else if visitId && !visit}
+        <p role="status">{m.bird_loading({}, {locale: language.current})}</p>
+      {:else}
       {#snippet metadata(weather: Snippet)}
       <div class="entry-metadata">
-        <DatePicker bind:value={entryDate} />
-        <EntryPlace {entryId} {generation} editing={true} locale={language.current} onDraft={(dirty, busy) => { placeDirty = dirty; placeBusy = busy; }} />
-        {@render weather()}
+        <fieldset disabled={writing} class:linked-metadata={!!visit}>
+          <DatePicker bind:value={entryDate} />
+          <EntryPlace {entryId} {generation} editing={true} locale={language.current}
+            deferWrite={!!visit && !entryId}
+            draftPlace={entryId ? null : draftPlace}
+            sourcePlace={visit?.source ? visit.place : null}
+            onDraftPlace={(value) => draftPlace = value}
+            onDraft={(dirty, busy) => { placeDirty = dirty; placeBusy = busy; }} />
+          {@render weather()}
+        </fieldset>
+        {#if visit?.source}
+          <p>{m.observation_journal_source_place({place: visit.place.name}, {locale: language.current})}</p>
+        {/if}
       </div>
       {/snippet}
-      <JournalEditor {metadata} {entryDate} isNew={true} {placeDirty} {placeBusy} onSessionChange={(session) => { entryId = session.entryId; generation = session.generation; }} />
+      <JournalEditor {metadata} {entryDate} isNew={true} {placeDirty} {placeBusy} linkedDraft={visit ? {visitId: visit.id, visitDate: visit.visitDate, visitPlaceId: visit.place.id, generation: visitGeneration, placeId: draftPlace?.id ?? null, newPlace: draftPlace?.create ? {name:draftPlace.name,latitude:draftPlace.latitude,longitude:draftPlace.longitude} : null, placeChanged: (draftPlace?.id ?? null) !== suggestedPlaceId} : null} linkedBackHref={cancelHref} onLinkedWriting={(value) => writing = value} onSessionChange={(session) => { entryId = session.entryId; generation = session.generation; }} />
+      {/if}
     </section>
 
     <footer class="journal-footer">
@@ -143,6 +192,9 @@
     margin-bottom: 20px;
   }
 
+  fieldset:not(.linked-metadata) { display: contents; }
+  fieldset { min-width: 0; border: 0; padding: 0; margin: 0; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .entry-metadata p { margin: 0; font: 13px system-ui, sans-serif; color: var(--text-muted, #686d63); }
   .entry-metadata :global(.date-picker) { margin-bottom: 0; }
 
   @media (max-width: 600px) {

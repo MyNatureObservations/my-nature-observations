@@ -713,3 +713,27 @@ test('combined reading uses a compact journal-context reference without duplicat
  assert.match(result,/observation-reference/);assert.match(result,/href="\/journal\/entries\/original\/birds\/linked"/);assert.match(result,/Testgläntan/);assert.match(result,/20 november 2026/);assert.doesNotMatch(result,/species-preview|bird-photo-thumbnails/);
  assert.match(source('../src/lib/components/JournalReading.svelte'),/journalDate=\{entry.entryDate\} compactReferences/);
 });
+
+
+test("a one-sentence entry owns one same-day full summary while other visit dates remain separate",()=>{
+ const date='2026-11-19';
+ const entries=[entry('first',date),entry('second',date),entry('different','2026-11-18')];
+ const visits=[
+  {...observation('shared',date),journalEntryIds:['second','first']},
+  {...observation('other-date','2026-11-20'),journalEntryIds:['different']},
+  observation('standalone',date),
+ ];
+ const group=reading.groupDiaryEntries(entries,visits).find(group=>group.date===date);
+ const placed=reading.placeDiaryVisits(group);
+ assert.deepEqual([...placed.inline.keys()],['first']);
+ assert.deepEqual(placed.standalone.map(v=>v.id),['standalone']);
+ for(const locale of ['sv','en']){
+  const result=show({entries,observations:visits,locale});
+  const first=result.slice(result.indexOf('id="journal-entry-first"'),result.indexOf('id="journal-entry-second"'));
+  assert.match(first,/class="inline-observation(?: |")/);
+  assert.match(first,/href="\/journal\/entries\/first\/birds\/shared"/);
+  assert.equal((result.match(/id="observation-shared"/g)||[]).length,1);
+  assert.match(result,/href="\/observations\/other-date"/);
+  assert.match(result,/href="\/observations\/standalone"/);
+ }
+});

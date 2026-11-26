@@ -34,10 +34,12 @@
     if(!await approveBirdDisable()){error="busy";return;}
     const match=page.url.pathname.match(/^\/journal\/entries\/([^/]+)\/birds(?:\/|$)/);
     // Navigation runs existing leave-page safeguards before committing the choice.
-    if(match||page.url.pathname.startsWith("/observations")){
+    const linkedDraft=page.url.pathname==="/journal/new" && page.url.searchParams.has("observation");
+    if(match||linkedDraft||page.url.pathname.startsWith("/observations")){
      let destination="/";
      if(match)try{const session=await invoke<{generation:number}>("new_journal_session");const response=await invoke<{data:{id:string}|null}>("get_journal_entry",{id:decodeURIComponent(match[1]),generation:session.generation});if(response.data)destination=`/journal/entries/${match[1]}`;}catch{}
      await goto(destination);
+     if(linkedDraft && page.url.pathname==="/journal/new")return;
     }
    }
    if(next&&(page.url.pathname.startsWith("/observations")||/\/birds(?:\/|$)/.test(page.url.pathname)))await goto("/");

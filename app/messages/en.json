@@ -419,6 +419,7 @@
   "place_choose": "Choose place",
   "place_panel_title": "Place",
   "place_search": "Search saved places",
+  "place_my_places": "My places",
   "place_saved": "Saved places",
   "place_no_matches": "No saved places found.",
   "place_new": "New place",
@@ -785,5 +786,13 @@
   "ebird_review_additions": "Additions to review",
   "ebird_review_reason": "The source row changed or is absent. Your additions remain on the earlier row and have not been reassigned.",
   "ebird_own_addition": "Your addition in MNO",
-  "ebird_source_locked": "These details come from eBird and are edited there."
+  "ebird_source_locked": "These details come from eBird and are edited there.",
+  "observation_create_journal": "Create journal entry",
+  "observation_back": "Back to observation",
+  "observation_journal_unavailable": "Could not open a journal draft for this observation.",
+  "observation_journal_source_place": "eBird source location: {place}",
+  "observation_save_source_place": "Add eBird location to my places",
+  "observation_create_place": "Create new place",
+  "observation_journal_stale": "The observation changed or already has a journal link. Return to the observation and check its journal links.",
+  "observation_source_location_label": "Location from eBird"
 }

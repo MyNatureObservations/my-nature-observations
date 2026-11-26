@@ -31,6 +31,7 @@ const registerClose = new Function('TauriEvent', `${closeEventClass}; return asy
 
 export async function harness({
   isNew = false,
+  linkedDraft = null,
   journalEntryId = null,
   entryDate = "2026-10-17",
   initialText = "A",
@@ -43,6 +44,7 @@ export async function harness({
   documentVersion = 1,
   initialJson = null,
   onGoto = async () => {},
+  onLinkedWriting,
   photoInvoke = null,
   realState = null,
   browserGlobals = {},
@@ -66,9 +68,9 @@ export async function harness({
   const timers = new Map();
   const writes = [];
   const context = vm.createContext({
-    $props: () => ({ entryDate, isNew, journalEntryId, startInEditMode, returnToJournal, onEditingChange: value => editingChanges.push(value) }),
+    $props: () => ({ entryDate, isNew, linkedDraft, journalEntryId, startInEditMode, returnToJournal, onLinkedWriting, onEditingChange: value => editingChanges.push(value) }),
     goto: onGoto,
-    $state: (value) => value,
+    $state: Object.assign((value) => value, { raw: (value) => value }),
     $effect: () => {},
     untrack: (callback) => callback(),
     tick: async () => {},
@@ -122,13 +124,13 @@ export async function harness({
           id: journalEntryId ?? "entry", entryDate, contentJson: initialJson ?? JSON.stringify(document), editable, documentVersion,
         } });
       }
-      assert.ok(["save_journal_entry", "save_journal_with_photographs"].includes(command));
-      return new Promise((resolve, reject) => writes.push({ ...args, id: command === "save_journal_with_photographs" ? args.entryId : args.id, command, resolve, reject }));
+      assert.ok(["save_journal_entry", "save_journal_with_photographs", "save_observation_journal"].includes(command));
+      return new Promise((resolve, reject) => writes.push({ ...args, ...(args.draft ?? {}), id: args.draft?.entryId ?? ( command === "save_journal_with_photographs" ? args.entryId : args.id), command, resolve, reject }));
     },
   });
   const run = (code) => vm.runInContext(code, context);
   Object.defineProperty(context, "hasPendingChanges", {
-    get: () => run('generationConflict || hasUnsavedChanges || (savedEntryDate !== "" && entryDate !== savedEntryDate)'),
+    get: () => run('generationConflict || firstLinkedSave !== null || hasUnsavedChanges || (savedEntryDate !== "" && entryDate !== savedEntryDate) || (!!linkedDraft?.placeChanged && !entryId)'),
   });
   run(emptyScript);
   run(readerScript);

@@ -829,7 +829,7 @@ pub(super) fn validate_database(db: &Connection, cancel: &AtomicBool) -> Result<
     }
     validation
 }
-fn valid_date(s: &str) -> bool {
+pub(crate) fn valid_date(s: &str) -> bool {
     let Ok(format) = time::format_description::parse_borrowed::<2>("[year]-[month]-[day]") else {
         return false;
     };

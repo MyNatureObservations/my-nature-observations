@@ -271,8 +271,6 @@ pub(crate) fn create_with(
     latitude: Option<f64>,
     longitude: Option<f64>,
 ) -> Result<crate::database_state::Snapshot<Place>, String> {
-    validate_name(&name)?;
-    validate_coordinates(latitude, longitude)?;
     let operation = state.operation(Some(generation))?;
     let mut db = open()?;
     require_schema3(&db)?;
@@ -280,14 +278,27 @@ pub(crate) fn create_with(
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|_| "place_write_failed")?;
     let id = uuid::Uuid::new_v4().to_string();
+    let place = create_in_transaction(&tx, &id, &name, latitude, longitude)?;
+    tx.commit().map_err(|_| "place_write_failed")?;
+    Ok(operation.snapshot(place))
+}
+
+pub(crate) fn create_in_transaction(
+    tx: &rusqlite::Transaction<'_>,
+    id: &str,
+    name: &str,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+) -> Result<Place, String> {
+    validate_id(id)?;
+    validate_name(name)?;
+    validate_coordinates(latitude, longitude)?;
     tx.execute(
         "INSERT INTO main.places(id,name,latitude,longitude,revision) VALUES (?1,?2,?3,?4,1)",
         params![id, name, latitude, longitude],
     )
     .map_err(|_| "place_write_failed")?;
-    let place = read_place(&tx, &id)?;
-    tx.commit().map_err(|_| "place_write_failed")?;
-    Ok(operation.snapshot(place))
+    read_place(tx, id)
 }
 
 pub(crate) fn list_with(
