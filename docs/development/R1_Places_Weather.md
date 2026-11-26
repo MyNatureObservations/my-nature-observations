@@ -116,10 +116,43 @@ Paketerad WebKit/OSM-policyverifiering återstår enligt kartnoten; detta är en
 operativ osäkerhet, inte ett konstaterat fel. Denna not beskriver färdig
 implementation och verifiering, inte att R2 redan är integrerat i `main`.
 
-## Follow-up: places with saved content
+## Platsöversikt med sparat innehåll
 
-Explore a map that shows every MNO place with a saved journal entry or
-observation, and improve how users find and manage those places. Keep this
-separate from creating a journal entry from an observation. An eBird source
-location can be shown as a reference without creating or associating an
-MNO place.
+Kartan i toppfältet samlar sparade egna platser och eBird-källplatser.
+Platsens identitet styr vilka journalanteckningar och observationer som
+visas. Överlappande markörer kan väljas var för sig, och platser utan
+koordinater kan väljas i listan. **Visa på kartan** öppnar samma översikt
+från sparade journalanteckningar och observationer. Allmän platshantering,
+dubbletter och hantering av kopplingar till eBird-källplatser ligger kvar
+som separata uppföljningar.
+
+### Bekräftad macOS DEV
+
+Användaren gav positiv återkoppling på väljaren för närliggande markörer
+och godkände sortering, filtrering och bläddring i platshistoriken.
+Användaren godkände även den lokala zoomen vid **Visa på kartan**, placeringen av
+**Ny plats** i vänsterpanelen och att observationsraderna visar endast datum.
+Platsradens markering godkändes, fokusindikatorerna ryms enligt användarens
+kontroll och både **Ta bort markering** och **Avmarkera plats** fungerar.
+
+### Separata automatiserade kontroller
+
+Syntetiska Chrome-prov på svenska och engelska vid 340 och 900 pixlars bredd
+täckte översikten, sortering och filter, tangentbordsval av överlappande
+markörer, långa historiker, detaljingångar, zoom efter storleksändring,
+platsåtgärder, rensning och fokus vid rullkanter. Det senaste Chrome-provet
+kontrollerade rundade fokusramar vid tabbning framåt och bakåt, inklusive en
+flerradig journallänk. Detta var ett webbläsarprov.
+
+16 fokuserade Rust-tester för platsregistret passerade. 221 fokuserade
+frontendtester passerade efter zoomrättningen. Efter de efterföljande
+rensnings- och presentationsändringarna passerade 80 fokuserade frontendtester,
+Svelte-kontrollen och `git diff --check`.
+
+### Uppföljning – tangentbordsfokus i hela appen
+
+Användaren sköt upp återstående arbete med visuellt konsekventa fokusramar
+till en appövergripande designöversyn. Gå igenom rundning, placering och
+synlighet för tangentbordsfokus i hela appen. Tillbakalänken i en
+observationsdetalj är ett exempel att ta med. Den designöversynen ligger
+utanför platsöversiktens checkpoint.

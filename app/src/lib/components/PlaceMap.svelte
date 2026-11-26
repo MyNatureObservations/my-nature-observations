@@ -5,6 +5,8 @@
   import { groupMappedPlaces, mapDraftCoordinates, type Place, type PlaceCoordinates } from "$lib/places";
   import * as m from "$lib/paraglide/messages.js";
 
+  type MapPlace = Place & { source?: "ebird" };
+
   let {
     latitude,
     longitude,
@@ -13,6 +15,8 @@
     defaultCenter = null,
     locale = "sv",
     onCoordinates,
+    overview = false,
+    fitKey = "all",
     onCreateHere,
     focusCenter = null,
     selectedPlaceId = null,
@@ -21,11 +25,13 @@
   }: {
     latitude: string;
     longitude: string;
-    places?: Place[];
+    places?: MapPlace[];
     journalCenter?: PlaceCoordinates | null;
     defaultCenter?: PlaceCoordinates | null;
     locale?: "sv" | "en";
-    onCoordinates: (latitude: number, longitude: number) => void;
+    onCoordinates?: (latitude: number, longitude: number) => void;
+    overview?: boolean;
+    fitKey?: string;
     onCreateHere?: (latitude: number, longitude: number, screen?: { x: number; y: number }) => void;
     focusCenter?: PlaceCoordinates | null;
     selectedPlaceId?: string | null;
@@ -117,16 +123,37 @@
       tileLayer.addTo(map);
     } finally { reloading = false; refreshTileStatus(); }
   }
+  let lastFitKey: string | undefined;
+  function fitOverview() {
+    if (!map || !overview) return false;
+    const locations = groupMappedPlaces(places).map(([place]): [number, number] => [place.latitude!, place.longitude!]);
+    if (locations.length) {
+      map.fitBounds(locations, { padding: [24, 24], maxZoom: 12, animate: false });
+    }
+    return locations.length > 0;
+  }
+  $effect(() => {
+    const key = fitKey;
+    if (overview && cameraReady && lastFitKey !== key) {
+      lastFitKey = key;
+      fitOverview();
+    }
+  });
+
   function updateViewSize() {
     if (!map || !leaflet || disposed) return;
-    map.invalidateSize({ pan: keepCenterOnResize });
+    map.invalidateSize({ pan: keepCenterOnResize || overview });
     const size = map.getSize();
     if (size.x <= 0 || size.y <= 0) return;
     if (!cameraReady) {
       const point = initialCoordinates();
       cameraReady = true;
-      worldUntouched = point === null;
-      if (point) moveToPlace(point);
+      lastFitKey = fitKey;
+      // Opening on a known place starts locally. The overview fits only when
+      // there is no explicit selection, or when the user changes the filter.
+      const fitted = !usablePoint(focusCenter) && fitOverview();
+      worldUntouched = point === null && !fitted;
+      if (!fitted && point) moveToPlace(point);
       updateMarker();
       updateSavedPlaces();
     }
@@ -144,14 +171,47 @@
   let initializedCoordinates = false;
   const contextTargets = new WeakMap<Element, () => Leaflet.LatLng>();
 
-  function showSavedChoices(group: Place[], point: Leaflet.LatLng) {
+  const mapMarkers: { element: Element; group: MapPlace[] }[] = [];
+  function activateMarker(element: Element, group: MapPlace[], point: Leaflet.LatLng) {
+    if (!overview) { showSavedChoices(group, point); return; }
+    // Measure the rendered hit areas at activation time. Coordinates alone
+    // cannot tell whether two markers overlap after panning or zooming.
+    const target = element.getBoundingClientRect();
+    const viewport = mapElement.getBoundingClientRect();
+    const nearby = mapMarkers.filter(marker => {
+      const box = marker.element.getBoundingClientRect();
+      return box.right > viewport.left && box.left < viewport.right &&
+        box.bottom > viewport.top && box.top < viewport.bottom &&
+        box.left < target.right && box.right > target.left &&
+        box.top < target.bottom && box.bottom > target.top;
+    }).flatMap(marker => marker.group);
+    showSavedChoices(nearby.length ? nearby : group, point, element);
+  }
+
+  function showSavedChoices(group: MapPlace[], point: Leaflet.LatLng, trigger?: Element) {
     if (!leaflet || !map || !onSelectPlace) return;
     if (group.length === 1) { map.closePopup(); onSelectPlace(group[0]); return; }
     const choices = document.createElement("div");
+    if (overview) {
+      choices.className = "mno-overlapping-places";
+      choices.setAttribute("role", "group");
+      choices.setAttribute("aria-label", m.places_nearby({}, { locale }));
+      const label = document.createElement("p");
+      label.textContent = m.places_nearby({}, { locale });
+      choices.append(label);
+      choices.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        map?.closePopup();
+        if (trigger instanceof HTMLElement || trigger instanceof SVGElement) trigger.focus();
+      });
+    }
     for (const place of group) {
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = `${place.id === selectedPlaceId ? "✓ " : ""}${place.name}`;
+      const source = place.source === "ebird" ? ` · ${m.observation_source_location_label({}, { locale })}` : "";
+      button.textContent = `${place.id === selectedPlaceId ? "✓ " : ""}${place.name}${source}`;
       button.setAttribute("aria-pressed", String(place.id === selectedPlaceId));
       button.addEventListener("click", (event) => { event.stopPropagation(); map?.closePopup(); onSelectPlace?.(place); });
       choices.append(button);
@@ -182,7 +242,7 @@
 
   function publish(point: Leaflet.LatLng) {
     worldUntouched = false;
-    onCoordinates(Number(point.lat.toFixed(6)), Number(point.lng.toFixed(6)));
+    onCoordinates?.(Number(point.lat.toFixed(6)), Number(point.lng.toFixed(6)));
   }
 
   function updateMarker() {
@@ -228,27 +288,42 @@
   function updateSavedPlaces() {
     if (!leaflet || !map || !savedLayer) return;
     savedLayer.clearLayers();
+    mapMarkers.length = 0;
     for (const group of groupMappedPlaces(places)) {
       const place = group[0];
-      const point = leaflet.circleMarker([place.latitude!, place.longitude!], {
+      const coordinates: [number, number] = [place.latitude!, place.longitude!];
+      const hasSource = group.some(member => member.source === "ebird");
+      const hasPersonal = group.some(member => !member.source);
+      const point = (hasSource ? leaflet.marker(coordinates, {
+        keyboard: false,
+        bubblingMouseEvents: false,
+        icon: leaflet.divIcon({
+          className: "mno-source-marker",
+          html: hasPersonal ? '<span class="personal-dot"></span><span class="source-diamond"></span>' : '<span class="source-diamond"></span>',
+          iconSize: hasPersonal ? [28, 16] : [16, 16],
+        }),
+      }) : leaflet.circleMarker(coordinates, {
         radius: group.some(place => place.id === selectedPlaceId) ? 8 : 6,
         bubblingMouseEvents: false,
         color: "#607763",
         weight: 2,
         fillColor: "#f8f7f3",
         fillOpacity: 0.9,
-      }).addTo(savedLayer);
+      })).addTo(savedLayer);
       const label = document.createElement("span");
-      label.textContent = `${group.map(place => place.name).join(" · ")} · ${place.latitude}, ${place.longitude}`;
+      label.textContent = `${group.map(place => place.source ? `${place.name} (${m.observation_source_location_label({}, { locale })})` : place.name).join(" · ")} · ${place.latitude}, ${place.longitude}`;
       point.bindTooltip(label);
-      point.on("click", () => showSavedChoices(group, point.getLatLng()));
       const element = point.getElement();
+      point.on("click", () => element
+        ? activateMarker(element, group, point.getLatLng())
+        : showSavedChoices(group, point.getLatLng()));
       if (element) {
         contextTargets.set(element, () => point.getLatLng());
+        if (overview) mapMarkers.push({ element, group });
         element.setAttribute("tabindex", "0");
         element.setAttribute("role", "button");
         element.setAttribute("aria-label", label.textContent);
-        element.addEventListener("keydown", (event) => { const key = (event as KeyboardEvent).key; if (key === "Enter" || key === " ") { event.preventDefault(); event.stopPropagation(); showSavedChoices(group, point.getLatLng()); } });
+        element.addEventListener("keydown", (event) => { const key = (event as KeyboardEvent).key; if (key === "Enter" || key === " ") { event.preventDefault(); event.stopPropagation(); activateMarker(element, group, point.getLatLng()); } });
       }
     }
   }
@@ -291,7 +366,7 @@
       map.getContainer().setAttribute("aria-label", m.place_map_label({}, { locale }));
       map.on("movestart zoomstart", () => { if (!movingCamera) worldUntouched = false; });
       map.on("moveend zoomend", refreshTileStatus);
-      map.on("click", (event: Leaflet.LeafletMouseEvent) => publish(event.latlng));
+      if (onCoordinates) map.on("click", (event: Leaflet.LeafletMouseEvent) => publish(event.latlng));
       mapElement.addEventListener("contextmenu", nativeContextMenu, true);
       savedLayer = loaded.layerGroup().addTo(map);
 
@@ -342,9 +417,17 @@
     </div>
   {/if}
 </div>
-<p class="map-help">{m.place_map_help({}, { locale })}</p>
+<p class="map-help">{overview ? m.places_map_help({}, { locale }) : m.place_map_help({}, { locale })}</p>
 
 <style>
+  :global(.mno-source-marker) { display: flex; align-items: center; justify-content: center; gap: 4px; }
+  :global(.mno-source-marker span) { width: 10px; height: 10px; background: #faf9f6; border: 2px solid; }
+  :global(.mno-source-marker .source-diamond) { color: #376b9b; transform: rotate(45deg); }
+  :global(.mno-source-marker .personal-dot) { color: #607763; border-radius: 50%; }
+  :global(.mno-overlapping-places) { max-height: min(28vh, 180px); overflow-y: auto; }
+  :global(.mno-overlapping-places p) { margin: 0 0 6px; color: #343530; }
+  :global(.mno-overlapping-places button:focus-visible) { outline: 2px solid #435b47; outline-offset: -2px; }
+  :global(.leaflet-interactive[role="button"]:focus-visible) { outline: 2px solid #435b47; outline-offset: 3px; }
   .map-shell { position: relative; margin-top: 14px; }
   .map { height: clamp(280px, 55vh, 560px); min-height: 190px; border: 1px solid #cccec7; border-radius: 10px; background: #e9ebe5; overflow: hidden; }
   .tile-warning { position: absolute; left: 10px; bottom: 22px; z-index: 500; max-width: calc(100% - 20px); margin: 0; padding: 6px 9px; border-radius: 6px; background: rgba(248,247,243,.92); color: #696d65; font: 11px system-ui,sans-serif; }

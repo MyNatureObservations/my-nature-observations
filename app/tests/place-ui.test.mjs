@@ -143,8 +143,9 @@ test("Leaflet map is locally bundled and coordinates remain usable without tiles
   assert.match(source, /map\.getBoundsZoom\(world\)/, "the entire initial world fits inside the measured map viewport");
   assert.match(source, /noWrap: true/, "the tile layer does not repeat the world around the fitted view");
   assert.match(source, /size.x <= 0 \|\| size.y <= 0/, "world zoom waits for a measurable map");
-  assert.doesNotMatch(source, /map\.fitWorld\(|map\.fitBounds\(/, "a second fit cannot zoom the initial world back out");
-  assert.match(source, /map\.invalidateSize\(\{ pan: keepCenterOnResize \}\)/, "Leaflet updates after the map element actually resizes");
+  assert.match(source, /if \(locations.length\) \{\s+map\.fitBounds\(locations,/);
+  assert.doesNotMatch(source, /map\.fitWorld\(/, "a second fit cannot zoom the initial world back out");
+  assert.match(source, /map\.invalidateSize\(\{ pan: keepCenterOnResize \|\| overview \}\)/, "Leaflet updates after the map element actually resizes");
   assert.match(source, /resizeObserver\?\.disconnect\(\)/, "size observation ends with the map");
   assert.doesNotMatch(source, /center:\s*\[62,\s*15\]/, "there is no country-specific fallback");
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -290,4 +291,48 @@ test("linked draft reuses the place form for a reviewed source copy and a blank 
  await h.run("removeLink()");
  assert.equal(choices[3],null);
  assert.deepEqual(h.calls,[]);
+});
+
+test("places overview groups by saved identity, keeping source and personal places separate", async () => {
+  const compileModule = source => {
+    const js = ts.transpileModule(source, {
+      compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext },
+    }).outputText;
+    return `data:text/javascript;base64,${Buffer.from(js).toString("base64")}`;
+  };
+  const placesModule = compileModule(readFileSync(placesPath, "utf8").replace(/^import .*;\n/gm, ""));
+  const source = readFileSync(new URL("../src/lib/places-overview.ts", import.meta.url), "utf8")
+    .replace(/^import .*from "(?:@tauri-apps\/api\/core|\$lib\/journal-data)";\n/gm, "")
+    .replace("$lib/places", placesModule);
+  const { groupContentPlaces, matchesPlaceFilter, sortPlaces } = await import(compileModule(source));
+  const place = (id, name, latitude = 59, longitude = 18) => ({ id, name, latitude, longitude, revision: "1" });
+  const shared = place("shared", "Ängen");
+  const journalOnly = place("journal", "Sjö");
+  const noCoordinates = place("no-coordinates", "Ön", null, null);
+  const observationOnly = place("bird", "Åsen");
+  const sourcePlace = place("ebird:L1", "Ängen");
+  const entry = id => ({ id, title: id, entryDate: "2026-11-26" });
+  const visit = (id, place, visitDate, source) => ({ id, place, visitDate, source });
+  const journal = [shared, shared, journalOnly, noCoordinates].map((place, i) => ({ place, entry: entry(`entry-${i}`) }));
+  const visits = [
+    visit("manual-one", shared, "2026-11-26"),
+    visit("manual-two", observationOnly, "2026-11-26"),
+    visit("source-old", { ...sourcePlace, name: "Old name" }, "2026-10-26", {}),
+    visit("source-new", sourcePlace, "2026-11-26", {}),
+  ];
+  const groups = groupContentPlaces(journal, visits, "sv");
+  assert.deepEqual(groups.map(group => group.id), ["journal", "bird", "ebird:L1", "shared", "no-coordinates"]);
+  assert.deepEqual(groups.map(group => [group.entries.length, group.visits.length]), [[1,0], [0,1], [0,2], [2,1], [1,0]]);
+  assert.equal(groups.find(group => group.id === "ebird:L1").name, "Ängen");
+  assert.equal(groups.find(group => group.id === "ebird:L1").source, "ebird");
+  assert.equal(groups.find(group => group.id === "no-coordinates").latitude, null);
+  assert.equal(groupContentPlaces(journal, [], "en").length, 3);
+  assert.deepEqual(groupContentPlaces([], [], "en"), []);
+  assert.deepEqual(groups.filter(place => matchesPlaceFilter(place, "ebird")).map(place => place.id), ["ebird:L1"]);
+  assert.equal(groups.filter(place => matchesPlaceFilter(place, "personal")).length, 4);
+  const more = [place("south", "Öster", -35, 18), place("north", "A winter place", 66, 18), ...groups];
+  assert.deepEqual(sortPlaces(more, "latitude", "sv").map(place => place.id),
+    ["south", "journal", "bird", "ebird:L1", "shared", "north", "no-coordinates"]);
+  assert.deepEqual(sortPlaces(more, "name", "sv").map(place => place.id),
+    ["north", "journal", "bird", "ebird:L1", "shared", "no-coordinates", "south"]);
 });

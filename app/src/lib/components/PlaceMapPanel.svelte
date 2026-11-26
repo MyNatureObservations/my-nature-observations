@@ -5,6 +5,8 @@
   import PlaceMap from "$lib/components/PlaceMap.svelte";
   import { readWeatherDefaultPlace, listPlaces, createPlace, updatePlace, deletePlace, readPlaceUsage, type PlaceUsage, parsePlaceCoordinates, filterPlaces, mapDraftCoordinates, type Place, type PlaceCoordinates } from "$lib/places";
   import type { MapRequest, PlaceMapController } from "$lib/place-map.svelte";
+  import { birdHref, entryHref, type BirdList } from "$lib/birds";
+  import { groupContentPlaces, matchesPlaceFilter, readPlaceContents, sortPlaces, type JournalPlaceEntry, type PlaceFilter, type PlaceSort } from "$lib/places-overview";
   import { formatJournalDate } from "$lib/journal-reading";
   import * as m from "$lib/paraglide/messages.js";
 
@@ -12,10 +14,28 @@
   let generation = $state<number | null>(null);
   let places = $state<Place[]>([]);
   let query = $state("");
-  let selected = $state<Place | null>(null);
+  let filter = $state<PlaceFilter>("all");
+  let sort = $state<PlaceSort>("name");
+  type MapPlace = Place & { source?: "ebird" };
+  let selected = $state<MapPlace | null>(null);
+  let journalEntries = $state<JournalPlaceEntry[]>([]);
+  let visits = $state<BirdList[]>([]);
+  let contentsFailed = $state(false);
+  let contentsRevision = 0;
+  let contentHeading = $state<HTMLHeadingElement>();
+  const overview = $derived(request.mode === "orientation");
+  const contentPlaces = $derived(groupContentPlaces(journalEntries, visits, locale));
+  const sourcePlaces = $derived(contentPlaces.filter(place => place.source));
+  const selectedContent = $derived(contentPlaces.find(place => place.id === selected?.id));
+  const contentIds = $derived(new Set(contentPlaces.map(place => place.id)));
+  const mapPlaces: MapPlace[] = $derived(overview
+    ? [...places.filter(place => contentIds.has(place.id)), ...sourcePlaces].filter(place => matchesPlaceFilter(place, filter))
+    : places);
   let initialSelection = $state<Place | null>(null);
   let name = $state("");
   let form = $state(false);
+  const showDraftPoint = $derived(!overview || form || !selected ||
+    (matchesPlaceFilter(selected, filter) && !contentIds.has(selected.id)));
   let editing = $state<Place | null>(null);
   let baseline = $state("");
   let discardOpen = $state(false);
@@ -105,7 +125,11 @@
   let busy = $state(false);
   let error = $state("");
   let notice = $state(false);
-  const results = $derived(filterPlaces(places, query, locale));
+  const matching = $derived(filterPlaces<MapPlace>(
+    overview ? [...places, ...sourcePlaces].filter(place => matchesPlaceFilter(place, filter)) : places,
+    query, locale,
+  ));
+  const results = $derived(overview ? sortPlaces(matching, sort, locale) : matching);
   const eligible = (place: Place) => !(request.mode === "default" || request.mode === "observation") || (place.latitude !== null && place.longitude !== null && mapDraftCoordinates(String(place.latitude), String(place.longitude)) !== null);
   let center = $state<PlaceCoordinates | null>(null);
   let loaded = $state(false);
@@ -114,7 +138,13 @@
   let longitude = $state("");
   let panel = $state<HTMLElement>();
   let disposed = false;
-  onDestroy(() => { disposed = true; usageSequence++; releaseGuard?.(); });
+  onDestroy(() => { disposed = true; usageSequence++; contentsRevision++; releaseGuard?.(); });
+  const reloadContents = () => { if (generation !== null) void loadContents(generation); };
+  const moduleChanged = () => {
+    visits = [];
+    if (selected?.source) selected = null;
+    reloadContents();
+  };
   onMount(() => {
     releaseGuard = controller?.setCloseGuard(() => {
       if (busy || blockedOpen) return false;
@@ -124,7 +154,34 @@
     center = request.center ?? null;
     panel?.focus();
     void loadCenter();
+    if (!overview) return;
+    window.addEventListener("mno:journal-changed", reloadContents);
+    window.addEventListener("mno:bird-module-changed", moduleChanged);
+    return () => {
+      window.removeEventListener("mno:journal-changed", reloadContents);
+      window.removeEventListener("mno:bird-module-changed", moduleChanged);
+    };
   });
+  async function loadContents(gen: number) {
+    const ticket = ++contentsRevision;
+    try {
+      const contents = await readPlaceContents(gen);
+      if (disposed || ticket !== contentsRevision || generation !== gen) return;
+      journalEntries = contents.entries;
+      visits = contents.visits;
+      contentsFailed = false;
+      if (selected?.source && !contents.visits.some(visit => visit.place.id === selected?.id)) {
+        selected = null;
+      }
+    } catch {
+      if (!disposed && ticket === contentsRevision && generation === gen) {
+        journalEntries = [];
+        visits = [];
+        if (selected?.source) selected = null;
+        contentsFailed = true;
+      }
+    }
+  }
   async function loadCenter() {
     try {
       const session = await invoke<{ generation: number }>("new_journal_session");
@@ -138,6 +195,19 @@
       const initialPoint = request.center ?? selected;
       if (initialPoint?.latitude != null && initialPoint?.longitude != null) {
         latitude = String(initialPoint.latitude); longitude = String(initialPoint.longitude);
+      }
+      if (overview) {
+        await loadContents(session.generation);
+        if (disposed) return;
+        if (!selected) selected = sourcePlaces.find(place => place.id === request.selectedId) ?? null;
+        if (selected) {
+          await tick();
+          if (disposed || !selected) return;
+          document.getElementById(`map-place-${selected.id}`)?.scrollIntoView({ block: "nearest" });
+          if (selected.latitude !== null && selected.longitude !== null) {
+            contentHeading?.scrollIntoView({ block: "nearest" });
+          }
+        }
       }
       const setting = await readWeatherDefaultPlace(session.generation);
       const current = await invoke<{ generation: number }>("new_journal_session");
@@ -172,7 +242,7 @@
     });
   }
   function startEdit() {
-    if (!selected) return;
+    if (!selected || selected.source) return;
     const place = selected;
     protect(() => { editing = place; form = true; name = place.name;
       latitude = place.latitude === null ? "" : String(place.latitude);
@@ -254,13 +324,26 @@
     } catch { if (!disposed) error = registered ? "link" : "save"; }
   }
   function close() { protect(onclose); }
-  function pick(place: Place) {
-    protect(() => { resetForm(); pickNow(place); });
+  async function clearMapSelection() {
+    if (busy || form || deleteTarget) return;
+    selected = null;
+    latitude = "";
+    longitude = "";
+    menu = false;
+    await tick();
+    if (!disposed) searchInput?.focus({ preventScroll: true });
   }
-  function pickNow(place: Place) {
-    selected = place; notice = false; menu = false; error = ""; feedback = ""; deleteTarget = null;
-    latitude = place.latitude === null ? "" : String(place.latitude);
-    longitude = place.longitude === null ? "" : String(place.longitude);
+  function pick(place: MapPlace) {
+    protect(() => {
+      resetForm();
+      pickNow(place);
+      if (overview) void tick().then(() => contentHeading?.focus());
+    });
+  }
+  function pickNow(place: MapPlace) {
+    selected = overview ? { ...place } : place; notice = false; menu = false; error = ""; feedback = ""; deleteTarget = null;
+    latitude = place.source || place.latitude === null ? "" : String(place.latitude);
+    longitude = place.source || place.longitude === null ? "" : String(place.longitude);
   }
   function searchKeys(event: KeyboardEvent) {
     const choices = results;
@@ -282,37 +365,112 @@
   }
 </script>
 
+    {#snippet placeActions()}
+      <button type="button" disabled={busy || generation === null} onclick={startEdit}>{m.place_registry_edit({}, { locale })}</button>
+      <button bind:this={deleteButton} type="button" disabled={busy || generation === null} onclick={() => { deleteTarget = selected; error = ""; }}>{m.place_registry_delete({}, { locale })}</button>
+    {/snippet}
+
+{#snippet history<T extends { id: string }>(items: T[], row: import("svelte").Snippet<[T]>)}
+  <ul class="content-links">
+    {#each items.slice(0, 5) as item (item.id)}<li>{@render row(item)}</li>{/each}
+  </ul>
+  {#if items.length > 5}
+    <details>
+      <summary><span class="focus-label">{m.places_show_all({ count: items.length }, { locale })}</span></summary>
+      <ul class="content-links">
+        {#each items.slice(5) as item (item.id)}<li>{@render row(item)}</li>{/each}
+      </ul>
+    </details>
+  {/if}
+{/snippet}
+
+{#snippet entryLink(entry: JournalPlaceEntry["entry"])}
+  <a href={entryHref(entry.id)}>
+    <span class="focus-label">{entry.title.trim() || m.search_untitled({}, { locale })}<small>{formatJournalDate(entry.entryDate, locale)}</small></span>
+  </a>
+{/snippet}
+
+{#snippet visitLink(visit: BirdList)}
+  <a href={birdHref(null, visit.id)}><time class="focus-label" datetime={visit.visitDate}>{formatJournalDate(visit.visitDate, locale)}</time></a>
+{/snippet}
+
 <svelte:window onpointerdown={(event) => { if (event.button === 0 && menu && !menuElement?.contains(event.target as Node)) menu = false; }} />
 
 <div id="navigation-map" class="map-panel" bind:this={panel} tabindex="-1" role="dialog" aria-label={m.map_panel_title({}, { locale })}
   onkeydown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (menu) { menu = false; searchInput?.focus(); } else if (discardOpen) { discardOpen = false; } else if (deleteTarget) { if (!busy) deleteTarget = null; } else if (form && !busy) { protect(() => { resetForm(); searchInput?.focus(); }); } else close(); } }}>
-  <header inert={blockedOpen}><h2>{m.map_panel_title({}, { locale })} · {(request.mode === "journal" || request.mode === "observation") ? m.place_choose({}, { locale }) : request.mode === "default" ? m.weather_default_title({}, { locale }) : m.map_orientation({}, { locale })}</h2><button type="button" disabled={busy} onclick={close} aria-label={m.nav_close_panel({}, { locale })}>×</button></header>
+  <header inert={blockedOpen}><h2>{m.map_panel_title({}, { locale })} · {(request.mode === "journal" || request.mode === "observation") ? m.place_choose({}, { locale }) : request.mode === "default" ? m.weather_default_title({}, { locale }) : m.places_overview_title({}, { locale })}</h2>
+    <button type="button" disabled={busy} onclick={close} aria-label={m.nav_close_panel({}, { locale })}>×</button></header>
+  {#if request.mode === "journal"}<p class="picker-hint">{m.places_picker_hint({}, { locale })}</p>{/if}
   {#if failed}<p role="status">{m.map_panel_read_failed({}, { locale })}</p>{/if}
   <div class="workspace" inert={blockedOpen}>
   <aside aria-label={m.place_saved({}, { locale })}>
+    <div class="browse-places">
     <label class="search">{m.place_search({}, { locale })}<input bind:this={searchInput} bind:value={query} disabled={busy} oninput={() => activeIndex = -1} onkeydown={searchKeys} aria-controls="map-place-results" /></label>
-    <div class="results" id="map-place-results">{#each results as place (place.id)}
+    {#if overview}
+      <div class="browse-controls">
+        <label>{m.places_filter({}, { locale })}
+          <span class="select-frame">
+            <select bind:value={filter} onchange={() => { activeIndex = -1; }} disabled={busy}>
+              <option value="all">{m.places_all({}, { locale })}</option>
+              <option value="personal">{m.places_saved({}, { locale })}</option>
+              <option value="ebird">eBird</option>
+            </select>
+          </span>
+        </label>
+        <label>{m.places_sort({}, { locale })}
+          <span class="select-frame">
+            <select bind:value={sort} onchange={() => { activeIndex = -1; }} disabled={busy}>
+              <option value="name">{m.places_sort_name({}, { locale })}</option>
+              <option value="latitude">{m.places_sort_latitude({}, { locale })}</option>
+            </select>
+          </span>
+        </label>
+      </div>
+      <p class="result-count" aria-live="polite">{results.length === 1 ? m.places_one_result({}, { locale }) : m.places_result_count({ count: results.length }, { locale })}</p>
+    {/if}
+    <div class="results" class:compact={overview} id="map-place-results">{#each results as place (place.id)}
       <button id={`map-place-${place.id}`} class:keyboard-active={results[activeIndex]?.id === place.id} type="button" disabled={busy} aria-pressed={selected?.id === place.id} onclick={() => pick(place)}>
-        {place.name}{selected?.id === place.id ? " ✓" : ""}<small>{place.latitude !== null ? `${place.latitude}, ${place.longitude}` : m.place_no_coordinates({}, { locale })}</small>
+        {place.name}{selected?.id === place.id ? " ✓" : ""}
+        {#if !overview || place.latitude == null || place.longitude == null}<small>{place.latitude !== null ? `${place.latitude}, ${place.longitude}` : m.place_no_coordinates({}, { locale })}</small>{/if}
+        {#if place.source}<small>{m.observation_source_location_label({}, { locale })}</small>{/if}
         {#if request.currentId === place.id}<small>{m.map_current_journal_place({}, { locale })}</small>{/if}
       </button>
     {:else}<p>{m.place_no_matches({}, { locale })}</p>{/each}</div>
-    {#if selected}<p>{m.map_selected_place({}, { locale })}: {selected.name}</p>
+    </div>
+    <div class="place-detail">
+    {#if selected}
+      <div class="selected-place">
+        <h3 bind:this={contentHeading} tabindex="-1">{selected.name}</h3>
+        {#if overview && !selected.source && !form}
+          {@render placeActions()}
+        {/if}
+      </div>
     {:else if latitude && longitude}<p>{m.map_local_point({}, { locale })}: {latitude}, {longitude}</p>{/if}
-    {#if !form}
+    {#if !form && (!overview || (!deleteTarget && (selected || (latitude && longitude))))}
       <div class="primary-actions">
         {#if request.mode !== "orientation"}<button class="primary" type="button" disabled={busy || generation === null || !selected || !eligible(selected)} onclick={confirm}>{m.map_use_place({}, { locale })}</button>{/if}
-        <button type="button" disabled={busy} onclick={close}>{m.place_cancel({}, { locale })}</button>
+        {#if !overview}
+          <button type="button" disabled={busy} onclick={close}>{m.place_cancel({}, { locale })}</button>
+        {:else}
+          <button class="clear-place" type="button" disabled={busy} onclick={clearMapSelection}>
+            {selected ? m.places_clear_selection({}, { locale }) : m.places_clear_marker({}, { locale })}
+          </button>
+        {/if}
       </div>
     {/if}
     <section class="action-group" aria-label={m.place_manage_heading({}, { locale })}>
     <h3>{m.place_manage_heading({}, { locale })}</h3>
-    {#if latitude && longitude && !menu && !form}<button type="button" disabled={busy} onclick={() => startCreate()}>{m.map_create_here({}, { locale })}</button>{/if}
-    {#if !form}<button type="button" disabled={busy || generation === null} onclick={() => startCreate(false)}>{m.place_new({}, { locale })}</button>{/if}
+    {#if !form}
+      <div class="place-creation">
+        <button class="new-place" type="button" disabled={busy || generation === null} onclick={() => startCreate(false)}>{m.place_new({}, { locale })}</button>
+        {#if latitude && longitude && !menu}
+          <button class="create-place-here" type="button" disabled={busy || generation === null} onclick={() => startCreate()}>{m.map_create_here({}, { locale })}</button>
+        {/if}
+      </div>
+    {/if}
     {#if selected && !eligible(selected) && !form}<p>{m.weather_default_coordinates({}, { locale })}</p>{/if}
-    {#if selected && !form}
-      <button type="button" disabled={busy || generation === null} onclick={startEdit}>{m.place_registry_edit({}, { locale })}</button>
-      <button bind:this={deleteButton} type="button" disabled={busy || generation === null} onclick={() => { deleteTarget = selected; error = ""; }}>{m.place_registry_delete({}, { locale })}</button>
+    {#if !overview && selected && !selected.source && !form}
+      {@render placeActions()}
     {/if}
     {#if form}
       <form onsubmit={(event) => { event.preventDefault(); void registerPlace(!editing && request.mode !== "orientation"); }}>
@@ -324,6 +482,34 @@
       </form>
     {/if}
     </section>
+    {#if overview && !form}
+      {#if contentsFailed}<p role="alert">{m.places_failed({}, { locale })}</p>{/if}
+      {#if selectedContent}
+        {#key selectedContent.id}
+          <section class="action-group" aria-label={m.places_list({}, { locale })}>
+            {#if selectedContent.entries.length}
+              <h3>{m.observation_calendar_journal({}, { locale })} ({selectedContent.entries.length})</h3>
+              {@render history(selectedContent.entries, entryLink)}
+            {/if}
+            {#if selectedContent.visits.length}
+              <h3>{m.bird_overview({}, { locale })} ({selectedContent.visits.length})</h3>
+              {@render history(selectedContent.visits, visitLink)}
+            {/if}
+            {#if selectedContent.source}
+              <details class="source-details">
+                <summary><span class="focus-label">{m.ebird_source_details({}, { locale })}</span></summary>
+                <p>{m.places_source_id({}, { locale })}: {selectedContent.id.slice("ebird:".length)}</p>
+                <ul class="content-links">
+                  {#each selectedContent.visits as visit (visit.id)}
+                    {#if visit.source}<li><a href={birdHref(null, visit.id)}><span class="focus-label">{visit.source.submissionId}</span></a></li>{/if}
+                  {/each}
+                </ul>
+              </details>
+            {/if}
+          </section>
+        {/key}
+      {/if}
+    {/if}
     {#if discardOpen}<section class="decision" aria-label={m.place_discard_title({}, { locale })}>
       <p>{m.place_registry_discard({}, { locale })}</p>
       <button type="button" onclick={() => { discardOpen = false; discardAction = null; }}>{m.place_continue({}, { locale })}</button>
@@ -344,9 +530,20 @@
         <button type="button" disabled={busy} onclick={remove}>{m.place_remove({}, { locale })}</button>
       </section>
     {/if}
+    </div>
   </aside>
   <div class="map-content" inert={busy}>
-    {#if loaded}<PlaceMap {latitude} {longitude} {places} selectedPlaceId={selected?.id ?? null} onSelectPlace={pick} focusCenter={selected && selected.latitude !== null && selected.longitude !== null ? (selected === initialSelection && request.center ? request.center : { latitude: selected.latitude, longitude: selected.longitude }) : null} journalCenter={request.center} defaultCenter={center} {locale} onCoordinates={mark} onCreateHere={contextPoint} />
+    {#if loaded}<PlaceMap latitude={showDraftPoint ? latitude : ""} longitude={showDraftPoint ? longitude : ""} places={mapPlaces} {overview} fitKey={filter} selectedPlaceId={selected?.id ?? null} onSelectPlace={pick} focusCenter={selected && selected.latitude !== null && selected.longitude !== null ? (selected === initialSelection && request.center ? request.center : { latitude: selected.latitude, longitude: selected.longitude }) : null} journalCenter={request.center} defaultCenter={center} {locale} onCoordinates={mark} onCreateHere={contextPoint} />
+      {#if overview && mapPlaces.some(place => place.latitude !== null && place.longitude !== null)}
+        <ul class="map-legend" aria-label={m.places_list({}, { locale })}>
+          {#if mapPlaces.some(place => !place.source && place.latitude !== null && place.longitude !== null)}
+            <li><span class="personal" aria-hidden="true"></span>{m.places_saved({}, { locale })}</li>
+          {/if}
+          {#if mapPlaces.some(place => place.source && place.latitude !== null && place.longitude !== null)}
+            <li><span class="source" aria-hidden="true"></span>{m.places_source({}, { locale })}</li>
+          {/if}
+        </ul>
+      {/if}
     {:else}<p role="status">{m.place_loading({}, { locale })}</p>{/if}
   </div>
   </div>
@@ -388,10 +585,56 @@
   button:focus-visible { outline: 2px solid #788e7b; outline-offset: 2px; }
   p { color: var(--text-muted, #686d63); font: 12px system-ui,sans-serif; }
   .workspace { display: flex; flex: 1; min-height: 0; gap: 16px; }
-  aside { width: 260px; flex: 0 0 auto; overflow: auto; min-height: 0; font: 13px system-ui,sans-serif; }
+  aside { --sidebar-focus-color: #788e7b; --sidebar-radius-small: 4px; --sidebar-radius-control: 6px; width: 260px; flex: 0 0 auto; overflow: auto; scroll-padding-block-start: 64px; min-height: 0; font: 13px system-ui,sans-serif; }
   .search { position: sticky; top: 0; z-index: 1; background: #f8f7f3; }
-  aside button { font: inherit; border: 1px solid #d9d8d1; border-radius: 4px; padding: 8px; margin: 4px 0; }
+  aside button { font: inherit; border: 1px solid #d9d8d1; border-radius: var(--sidebar-radius-small); padding: 8px; margin: 4px 0; }
   .action-group { border-top: 1px solid var(--border,#d9d8d1); margin-top: 12px; padding-top: 8px; }
+  .selected-place, .place-creation { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+  .selected-place { overflow-wrap: anywhere; }
+  .selected-place button, .place-creation button { min-height: 36px; margin: 0; padding: 6px 8px; }
+  .selected-place h3 { border-radius: var(--sidebar-radius-small); flex: 1 1 100px; margin: 4px 0; font: normal 17px/1.35 Georgia,serif; color: #435b47; }
+  .browse-controls { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+  .browse-controls label { flex: 1 1 96px; }
+  .select-frame { display: block; position: relative; border-radius: var(--sidebar-radius-control); }
+  .browse-controls select { border-radius: inherit; display: block; box-sizing: border-box; width: 100%; max-width: 100%; margin-top: 2px; padding: 6px 4px; font: inherit; color: inherit; }
+  .result-count { margin: 3px 0; }
+  .results.compact { height: auto; max-height: min(23dvh, 180px); }
+  .results.compact button { position: relative; isolation: isolate; margin: 2px 0; padding: 5px 7px; }
+  .results.compact small { margin: 1px 0; }
+  .place-detail { border-top: 1px solid #d9d8d1; margin-top: 8px; padding-top: 6px; }
+  details { margin: 6px 0 10px; }
+  summary { cursor: pointer; color: #435b47; }
+  .content-links { list-style: none; padding: 0; margin: 0 0 10px; }
+  .content-links a { display: block; padding: 5px 0; color: var(--accent, #435b47); overflow-wrap: anywhere; }
+  .content-links small { margin: 3px 0 0; color: var(--text-muted, #686d63); }
+  .focus-label { display: inline-block; box-sizing: border-box; max-width: 100%; padding: 3px 4px; border-radius: var(--sidebar-radius-small); }
+  aside :is(input, select, button, a, summary, .selected-place h3):focus-visible { outline: none; }
+  aside :is(input, button, .selected-place h3):focus-visible,
+  aside :is(a, summary):focus-visible > .focus-label {
+    box-shadow: inset 0 0 0 2px var(--sidebar-focus-color);
+  }
+  /* Keep the native select painted inside its matching focus frame. */
+  .select-frame:has(> select:focus-visible)::after {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border: 2px solid var(--sidebar-focus-color);
+    border-radius: calc(var(--sidebar-radius-control) - 1px);
+    pointer-events: none;
+  }
+  @media (forced-colors: active) {
+    aside :is(input, button, .selected-place h3):focus-visible,
+    aside :is(a, summary):focus-visible > .focus-label {
+      outline: 2px solid Highlight;
+      outline-offset: -3px;
+    }
+    .select-frame:has(> select:focus-visible)::after { border-color: Highlight; }
+  }
+  .map-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0; margin: 5px 0 0; list-style: none; font: 11px/1.5 system-ui, sans-serif; }
+  .map-legend li { display: flex; align-items: center; gap: 6px; }
+  .map-legend span { width: 9px; height: 9px; border: 1px solid; background: #faf9f6; }
+  .map-legend .personal { color: #607763; border-radius: 50%; }
+  .map-legend .source { color: #376b9b; transform: rotate(45deg); }
   .action-group h3 { font: 12px system-ui,sans-serif; color: var(--text-muted, #686d63); margin: 0 0 6px; }
   .primary-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
   aside .primary-actions .primary { background: var(--accent,#435b47); color: var(--surface,#faf9f6); border-color: var(--accent,#435b47); }
@@ -407,13 +650,23 @@
   .decision { border: 1px solid #d9d8d1; border-radius: 6px; padding: 8px; margin: 8px 0; }
   aside button:disabled { opacity: .45; }
   label, small { display: block; margin: 4px 0; }
-  input { appearance: none; box-sizing: border-box; display: block; width: 100%; min-width: 0; min-height: 40px; padding: 8px; background: #fffefa; border: 1px solid #d9d8d1; border-radius: 6px; box-shadow: none; color: inherit; font: inherit; }
-  input:focus, input:focus-visible { outline: 2px solid #788e7b; outline-offset: -2px; }
+  input { appearance: none; box-sizing: border-box; display: block; width: 100%; min-width: 0; min-height: 40px; padding: 8px; background: #fffefa; border: 1px solid #d9d8d1; border-radius: var(--sidebar-radius-control); box-shadow: none; color: inherit; font: inherit; }
   form, label { min-width: 0; }
   .results { height: min(30vh,240px); min-height: 0; overflow-y: auto; overscroll-behavior: contain; flex-shrink: 0; }
   .results button { display: block; width: 100%; text-align: left; }
   .results button[aria-pressed="true"] { background: #eef1eb; }
-  .results button.keyboard-active { outline: 2px solid #788e7b; outline-offset: -2px; }
+  .results:not(.compact) button.keyboard-active { outline: 2px solid #788e7b; outline-offset: -2px; }
+  .results.compact button[aria-pressed="true"] { background: transparent; }
+  .results.compact button[aria-pressed="true"]::before {
+    content: "";
+    position: absolute;
+    inset: 1px 4px;
+    z-index: -1;
+    border-radius: 4px;
+    background: #eef1eb;
+    pointer-events: none;
+  }
+  .results.compact button.keyboard-active:not(:focus-visible) { box-shadow: inset 3px 0 #788e7b; }
   .context-menu { position: fixed; z-index: 160; background: #f8f7f3; border: 1px solid #d9d8d1; border-radius: 6px; box-shadow: 0 4px 15px rgb(52 53 48 / 12%); }
   .context-menu button { font: 13px system-ui,sans-serif; padding: 10px 14px; }
   @media(max-width:650px) { .workspace { flex-direction: column-reverse; } aside { width: auto; max-height: 42vh; } .map-content { min-height: 160px; } }

@@ -206,6 +206,7 @@ pub fn run() {
             place_registry::update_place,
             place_registry::delete_place,
             place_registry::read_place_usage,
+            place_registry::read_journal_place_entries,
             place_registry::read_journal_place,
             place_registry::set_journal_place,
             place_registry::read_weather_default_place,

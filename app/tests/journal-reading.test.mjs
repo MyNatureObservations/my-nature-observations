@@ -46,6 +46,7 @@ const placesUrl = moduleUrl(resolveImports(ts.transpileModule(source('../src/lib
   compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext},
 }).outputText, {'$lib/journal-data':moduleUrl('export function createJournalReader(){return async()=>{throw new Error("SSR must not read places")}}'),'@tauri-apps/api/core':moduleUrl('export async function invoke(){throw new Error("SSR must not read or write places")}')}));
 const placeUrl = componentUrl('../src/lib/components/EntryPlace.svelte', {
+  "$lib/components/ShowPlaceOnMap.svelte": moduleUrl('export default function() {}'),
  '$lib/places':placesUrl,
  '$lib/place-map.svelte':moduleUrl('export const PLACE_MAP="mno:place-map"'),
  '$lib/components/PlaceMap.svelte':moduleUrl('export default function(){throw new Error("Read-only must not render map")}'),
