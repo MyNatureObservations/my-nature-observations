@@ -839,3 +839,16 @@ for asset identity, public checksum verification, earlier acceptance and its lim
 UX-005/UX-006 and deferred bird functionality remain follow-ups; the complete
 roadmap item is not closed. No application tests or builds were repeated for this
 documentation-only record.
+
+## macOS v0.3.0 public-download installation
+
+The owner confirmed that installation from the
+[public macOS v0.3.0 pre-release](https://github.com/MyNatureObservations/my-nature-observations/releases/tag/v0.3.0)
+preserved the existing journal, the imported eBird visit, its journal link and
+the saved bird-module and eBird connection preferences. This final installation
+check is separate from the earlier staged RC1 acceptance.
+
+Exact tested build: `6de2c589e4d2735ba2668e32a0715604b764f43e`.
+DMG SHA-256: `248d25b3a4579677f57dabae11c011f9ce98cbaeb38e329f992c8f4e8086f682`.
+See the [acceptance record](MNO_macOS_0.3.0_RC1_Acceptance.md#public-download-installation)
+for the public asset verification and earlier RC1 checks.

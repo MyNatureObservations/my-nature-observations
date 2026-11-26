@@ -20,3 +20,17 @@ The owner reported the staged macOS acceptance checks passed on 2026-11-26.
 These results are packaged RC1 acceptance using disposable test data and separate accounts. Earlier DEV and automated import evidence is recorded separately. [Confirmed import evidence](MNO_Ebird_Confirmed_Import.md).
 
 [Bilingual release notes](MNO_macOS_0.3.0_Release_Notes.md) · [Public v0.2.0 upgrade source](https://github.com/MyNatureObservations/my-nature-observations/releases/tag/v0.2.0)
+
+## Public-download installation
+
+The owner confirmed successful installation from the
+[public macOS v0.3.0 pre-release](https://github.com/MyNatureObservations/my-nature-observations/releases/tag/v0.3.0).
+The existing journal, the imported eBird visit, its journal link and the saved
+bird-module and eBird connection preferences were preserved. This final
+installation check is separate from the earlier staged RC1 acceptance above.
+
+The published tag resolves to the tested build commit
+`6de2c589e4d2735ba2668e32a0715604b764f43e`. The public
+`My-Nature-Observations-0.3.0-macos-arm64.dmg` matched its downloaded manifest
+and the accepted RC1 SHA-256
+`248d25b3a4579677f57dabae11c011f9ce98cbaeb38e329f992c8f4e8086f682`.
