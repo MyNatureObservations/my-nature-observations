@@ -768,6 +768,7 @@
   "ebird_date_unknown": "Date missing",
   "ebird_species_comment": "Comment from eBird",
   "ebird_visit_comment": "Visit comment",
+  "ebird_species_media": "Media for {species}",
   "ebird_media_link": "Media {number}",
   "ebird_visit_one": "{count} visit",
   "ebird_visit_many": "{count} visits",

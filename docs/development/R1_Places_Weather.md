@@ -178,8 +178,22 @@ på svenska och engelska vid 340 och 900 pixlars fönsterbredd. Kontrollen
 omfattade navigering genom hela samlingen, bildtexter, länkmål och
 återställt tangentbordsfokus efter Escape.
 
-Nästa lilla eBird-uppföljning gäller artkorten. Visa **Media ↗** vid arter
-med importerade Macaulay-referenser. En ensam referens öppnar originalet
-i webbläsaren. Flera referenser öppnar ett val med länkar till respektive
-original. Det här ändrar inte den lokala bildsamlingen eller befintliga
-Macaulay-länkar och förutsätter ingen inbäddad medievisning.
+### Medialänkar på importerade eBird-artkort
+
+Ett artkort med en giltig Macaulay-referens visar **Media ↗** och öppnar
+originalposten från hela kortet. Flera referenser visas som separata,
+numrerade länkar på en rad som kan rullas i sidled. Kort utan giltiga
+referenser har ingen mediaåtgärd. Länkarna använder den befintliga
+öppnaren för externa adresser.
+
+**macOS DEV.** Användaren bekräftade att tangentbordsfokus rullar fram
+länkarna på den gemensamma raden och att två länkar på samma kort
+öppnade sina respektive Macaulay-poster i systemets webbläsare.
+
+**Chrome med syntetiska data.** Det renderade testet kontrollerade noll,
+en och flera referenser, mus- och tangentbordsaktivering, rätt länkmål och
+en enda rad på svenska och engelska vid 340 och 900 pixlars bredd. Den
+externa öppnaren ersattes av en testdubbel för att kontrollera adresserna.
+
+**Övriga automatiska kontroller.** 18 fokuserade tester passerade.
+Svelte-kontrollen rapporterade inga fel eller varningar.

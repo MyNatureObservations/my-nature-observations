@@ -10,13 +10,13 @@ import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 import {svelte} from '@sveltejs/vite-plugin-svelte';
 const root=fileURLToPath(new URL('..',import.meta.url));
-test('rendered eBird import preserves source details, cancels safely and confirms once',async t=>{
+test('rendered eBird import and imported species media preserve source details and keyboard access',async t=>{
  const modules={
  'ebird-api':'window.nextCsv='+JSON.stringify(await readFile(join(root,'tests/fixtures/ebird/full.csv'),'utf8'))+';'+`export async function invoke(command,args){window.calls??=[];window.calls.push(command);if(command==='ebird_preview_available')return true;if(command==='ebird_import_epoch')return 1;if(command==='preview_ebird_export')return window.nextCsv;if(command==='new_journal_session')return {generation:1};if(command==='review_ebird_import')return {operationId:'synthetic-review',generation:1,changes:args.visits.map(v=>({submissionId:v.submission_id,kind:'new',fields:v.rows[0]}))};if(command==='confirm_ebird_import'){window.imported=true;if(window.loseReply)throw Error('lost reply');return 'committed';}if(command==='ebird_import_status')return window.imported?'committed':'unknown';if(command==='cancel_ebird_import')return null;if(command==='match_bird_paste_names')return args.names.map(name=>name==='Parus major'?[{id:'synthetic-tit',scientific:name,english:'Great Tit',swedish:'Talgoxe'}]:[]);throw Error(command);}`,
  'ebird-opener':`export async function openUrl(url){window.opened=url;}`,
  'module-navigation':`export function beforeNavigate(){} export async function goto(path){window.destination=path;}`,
  'module-page':`export const page={url:new URL('https://mno.invalid/observations/ebird-preview')};`,
- 'bird-main':`import {setLocale} from '${root}/src/lib/paraglide/runtime.js';setLocale('sv',{reload:false});import {language} from '${root}/src/lib/language.svelte.ts';language.current='sv';window.setTestLanguage=locale=>language.current=locale;import {mount} from 'svelte';import Preview from '${root}/src/lib/components/EbirdPreview.svelte';mount(Preview,{target:document.getElementById('app')});`
+ 'bird-main':`import {setLocale} from '${root}/src/lib/paraglide/runtime.js';setLocale('sv',{reload:false});import {language} from '${root}/src/lib/language.svelte.ts';language.current='sv';window.setTestLanguage=locale=>language.current=locale;import {mount,unmount} from 'svelte';let mediaDetail;import Detail from '${root}/src/lib/components/EbirdListDetail.svelte';window.mountMediaDetail=locale=>{const target=document.querySelector('#media-detail');if(mediaDetail)unmount(mediaDetail);const row=(name,ids)=>({fields:{'Common Name':name,'Scientific Name':'Synthetic taxon',Count:'2','ML Catalog Numbers':ids},additions:[]});mediaDetail=mount(Detail,{target,props:{locale,origin:'/observations',list:{place:{name:'Test place'},visitDate:'2026-11-01',source:{submissionId:'S123',fields:{},additions:[],unresolved:[],rows:[row('No media',''),row('One record','12345'),row('Several records','invalid 23456 34567 45678 56789 67890 78901 89012')]}}}});};import Preview from '${root}/src/lib/components/EbirdPreview.svelte';mount(Preview,{target:document.getElementById('app')});`
  };
  const server=await createServer({root,configFile:false,logLevel:'error',plugins:[{name:'ebird-preview-test',resolveId(id){if(id in modules)return '\0'+id;},load(id){if(id.startsWith('\0'))return modules[id.slice(1)];},configureServer(server){server.middlewares.use('/ebird-preview-test',(_request,response)=>{response.setHeader('Content-Type','text/html');response.end('<!doctype html><meta charset="utf-8"><div id="app"></div><script type="module" src="/@id/__x00__bird-main"></script>');});}},svelte({configFile:false})],resolve:{alias:[{find:'@tauri-apps/api/core',replacement:'ebird-api'},{find:'@tauri-apps/plugin-opener',replacement:'ebird-opener'},{find:'$app/navigation',replacement:'module-navigation'},{find:'$app/state',replacement:'module-page'},{find:'$lib',replacement:root+'/src/lib'}]},server:{host:'127.0.0.1',port:0,fs:{allow:[root]}}});
  t.after(()=>server.close());await server.listen();
@@ -80,4 +80,44 @@ test('rendered eBird import preserves source details, cancels safely and confirm
  await wait('document.querySelector("[role=alert]")?.textContent.includes("enskild checklista")');
  await evaluate("window.setTestLanguage('en')");await wait('document.querySelector("[role=alert]").textContent.includes("single-checklist")');
  assert.deepEqual(await evaluate('[...new Set(window.calls)].sort()'),['ebird_preview_available','match_bird_paste_names','ebird_import_epoch','preview_ebird_export','new_journal_session','review_ebird_import','confirm_ebird_import','ebird_import_status','cancel_ebird_import'].sort());
+ await evaluate(`document.body.insertAdjacentHTML('beforeend','<section id="media-detail"></section>');document.querySelector('#app').hidden=true`);
+ const card = name => `[...document.querySelectorAll('#media-detail li')].find(row=>row.querySelector('strong').textContent===${JSON.stringify(name)})`;
+ const key = async (key,code,windowsVirtualKeyCode) => {
+  for(const type of ['keyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key,code,windowsVirtualKeyCode,...(key==='Enter'&&type==='keyDown'?{text:'\r'}:{})});
+ };
+ for(const [locale,width] of [['sv',340],['sv',900],['en',340],['en',900]]){
+  await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+  await evaluate(`window.mountMediaDetail('${locale}');window.opened=null`);
+  await wait('document.querySelectorAll("#media-detail li").length===3');
+  assert.equal(await evaluate(`(${card('No media')}).querySelector('button')===null`),true);
+  await click(`(${card('One record')}).querySelector('strong')`);
+  await wait('window.opened==="https://macaulaylibrary.org/asset/12345"');
+  const one=`(${card('One record')}).querySelector('button')`;
+  const multi=`(${card('Several records')})`;
+  const line=`${multi}.querySelector('.media-line')`;
+  const links=`${line}.querySelectorAll('a')`;
+  assert.equal(await evaluate(`${multi}.querySelector('button')===null`),true);
+  assert.deepEqual(await evaluate(`[...${links}].map(a=>a.textContent.trim())`),Array.from({length:7},(_,i)=>`Media ${i+1} ↗`));
+  assert.equal(await evaluate(`new Set([...${links}].map(a=>a.offsetTop)).size`),1);
+  assert.equal(await evaluate(`${line}.scrollWidth>${line}.clientWidth`),width===340);
+  await evaluate('window.opened=null');
+  await click(`${multi}.querySelector('strong')`);
+  assert.equal(await evaluate('window.opened'),null);
+  await click(`${links}[1]`);
+  await wait('window.opened==="https://macaulaylibrary.org/asset/34567"');
+  await evaluate(`window.opened=null;${multi}.closest('ul').previousElementSibling.focus()`);
+  await key('Tab','Tab',9);
+  assert.equal(await evaluate(`document.activeElement===${one}`),true);
+  assert.equal(await evaluate(`getComputedStyle(${one},'::after').outlineStyle`),'solid');
+  await key('Enter','Enter',13);
+  await wait('window.opened==="https://macaulaylibrary.org/asset/12345"');
+  for(let i=0;i<7;i++){
+   await key('Tab','Tab',9);
+   assert.equal(await evaluate(`document.activeElement===${links}[${i}]`),true);
+  }
+  assert.equal(await evaluate(`getComputedStyle(${links}[6]).outlineStyle`),'solid');
+  await wait(`${links}[6].getBoundingClientRect().right<=${line}.getBoundingClientRect().right+1`);
+  await key('Enter','Enter',13);
+  await wait('window.opened==="https://macaulaylibrary.org/asset/89012"');
+ }
 });
