@@ -768,6 +768,7 @@
   "ebird_date_unknown": "Datum saknas",
   "ebird_species_comment": "Kommentar från eBird",
   "ebird_visit_comment": "Kommentar om besöket",
+  "ebird_species_media": "Media för {species}",
   "ebird_media_link": "Media {number}",
   "ebird_visit_one": "{count} besök",
   "ebird_visit_many": "{count} besök",
