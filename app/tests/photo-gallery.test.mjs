@@ -33,3 +33,46 @@ test('journal thumbnails are buttons outside visit links and detail layout scope
  const l=list('visit','2026-11-17');let text=source('../src/lib/components/BirdJournalLists.svelte').replace('available=$state(false)','available=$state(true)').replace('$state<BirdList[]>([])',`$state<BirdList[]>(${JSON.stringify([l])})`);const {default:preview}=await import(previewUrl(text));const html=render(preview,{props:{entryId:'origin',generation:7,locale:'en'}}).body;assert.match(html,/bird-photo-thumbnails/);assert.match(html,/aria-haspopup="dialog"/);assert.ok(html.indexOf('</a>')<html.indexOf('aria-haspopup="dialog"'));
  const {default:detail}=await import(detailUrl());const body=render(detail,{props:{list:l,origin:'/journal/entries/origin',locale:'en',preferences:names.DEFAULT_BIRD_NAMES,onPreferencesChange:()=>{}}}).body;assert.match(body,/with-photo/);assert.match(body,/data-photo-scope/);assert.match(body,/species-text/);
 });
+
+test("place photos use exact assignments, preserve captions and ignore repeated journal links", async () => {
+ const entries=[{id:"entry",title:"Journal"},{id:"moved",title:"Wrong place"}];
+ const attached=list("linked","2026-11-18");
+ attached.journalEntryIds=["entry","other"];
+ const standalone=list("standalone","2026-11-17");
+ const wrongPlace={...list("wrong","2026-11-17"),place:{...standalone.place,id:"another-place"}};
+ const imported={...list("imported","2026-11-17"),source:{}};
+ const assetId=attached.rows[0].photo.asset_id;
+ const contentJson=JSON.stringify({type:"doc",content:[
+  {type:"journalImage",attrs:{nodeId:"first",assetId,caption:"First caption",alt:"Journal alt"}},
+  {type:"journalImage",attrs:{nodeId:"second",assetId,caption:"Another caption"}},
+ ]});
+ let enabled=true,generation=7;
+ const calls=[];
+ const ctx=vm.createContext({
+  journalPhotoRefs:gallery.journalPhotoRefs,observationPhotos:gallery.observationPhotos,
+  birdHref:(_entry,id)=>`/observations/${id}`,entryHref:id=>`/journal/entries/${id}`,
+  photographSource:asset=>`data:${asset.mime};base64,${asset.preview}`,
+  readPhotograph:async(_invoke,id,_generation,assetId)=>{calls.push([id,assetId]);return photo(assetId);},
+  readJournalPlace:async id=>({place:{id:id==="moved"?"different":"place"}}),
+  createJournalReader:()=>async()=>({data:{contentJson}}),
+  invoke:async command=>command==="bird_observations_available"?enabled:{generation},
+ });
+ const code=source("../src/lib/place-photos.ts").replace(/^import .*;\n/gm,"").replace(/^export /gm,"");
+ vm.runInContext(transpile(code),ctx);
+ const load=vm.runInContext("loadPlacePhotos",ctx);
+ const visits=[attached,standalone,attached,wrongPlace,imported];
+ const result=await load({id:"place",entries,visits},7,"en",()=>true);
+ assert.deepEqual(calls,[["entry",assetId]]);
+ assert.deepEqual(Array.from(result.items,item=>item.parentHref),["/journal/entries/entry","/observations/linked","/observations/standalone"]);
+ assert.equal(result.items[0].caption,"First caption\nAnother caption");
+ assert.equal(result.items[0].alt,"Journal alt");
+ assert.equal(result.items[1].caption,"Bird caption");
+ assert.equal(new Set(Array.from(result.items,item=>item.key)).size,3);
+ assert.equal((await load({id:"place",entries:[],visits},7,"sv",()=>true)).items.length,2);
+ assert.equal((await load({id:"place",entries,visits:[]},7,"en",()=>true)).items.length,1);
+ assert.equal((await load({id:"place",entries:[],visits:[]},7,"en",()=>true)).items.length,0);
+ enabled=false;
+ assert.equal((await load({id:"place",entries,visits},7,"en",()=>true)).items.length,1);
+ generation=8;
+ await assert.rejects(load({id:"place",entries,visits},7,"en",()=>true),/journal_generation_conflict/);
+});
